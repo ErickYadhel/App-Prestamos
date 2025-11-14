@@ -1,0 +1,11 @@
+// Exportar todas las pantallas para fácil importación
+export { default as LoginScreen } from './Auth/LoginScreen';
+export { default as LoadingScreen } from './Auth/LoadingScreen';
+export { default as DashboardScreen } from './Dashboard/DashboardScreen';
+export { default as ClientesScreen } from './Clientes/ClientesScreen';
+export { default as PrestamosScreen } from './Prestamos/PrestamosScreen';
+export { default as PagosScreen } from './Pagos/PagosScreen';
+export { default as SolicitudesScreen } from './Solicitudes/SolicitudesScreen';
+export { default as GarantesScreen } from './Garantes/GarantesScreen';
+export { default as NotificacionesScreen } from './Notificaciones/NotificacionesScreen';
+export { default as ConfiguracionScreen } from './Configuracion/ConfiguracionScreen';

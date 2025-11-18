@@ -267,9 +267,7 @@ router.post('/generar-manual', async (req, res) => {
 });
 
 
-
-// Exportar para uso interno (cron/scheduler)
-module.exports.generarRecordatoriosAutomaticos = generarRecordatoriosAutomaticos;
-
-// ✅ Exportar el router principal para Express
-module.exports = router;
+module.exports = {
+  router,
+  generarRecordatoriosAutomaticos
+};

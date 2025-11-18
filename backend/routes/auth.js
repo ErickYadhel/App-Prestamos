@@ -20,7 +20,7 @@ router.post('/register', async (req, res) => {
       id: userRecord.uid,
       email,
       nombre,
-      rol: rol || User.roles.CONSULTOR,
+      rol: rol || 'consultor',  // ← FIX REALIZADO AQUÍ
       activo: true,
       fechaCreacion: new Date()
     };

@@ -43,7 +43,10 @@ const dashboardRoutes = require('./routes/dashboard');
 const usuarioRoutes = require('./routes/usuario');
 
 // Importar módulo de notificaciones
-const { router: notificacionesRoutes, generarRecordatoriosAutomaticos } = require('./routes/notificaciones');
+const { 
+  router: notificacionesRoutes, 
+  generarRecordatoriosAutomaticos 
+} = require('./routes/notificaciones');
 app.use('/api/notificaciones', notificacionesRoutes);
 
 // Usar rutas
@@ -55,7 +58,6 @@ app.use('/api/solicitudes', solicitudesRoutes);
 app.use('/api/garantes', garantesRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/usuarios', usuarioRoutes);
-app.use('/api/notificaciones', notificacionesRoutes);
 
 // ===========================
 // 🔧 CONFIGURACIÓN DE ENVÍO AUTOMÁTICO

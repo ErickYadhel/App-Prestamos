@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   PlusIcon, 
   MagnifyingGlassIcon,
@@ -13,9 +14,266 @@ import {
   ExclamationTriangleIcon,
   CheckCircleIcon,
   XCircleIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  SparklesIcon,
+  RocketLaunchIcon,
+  ArrowPathIcon,
+  XMarkIcon,
+  FunnelIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  ShieldCheckIcon,
+  BriefcaseIcon,
+  HomeIcon,
+  DocumentTextIcon
 } from '@heroicons/react/24/outline';
 import api from '../services/api';
+import { useTheme } from '../context/ThemeContext';
+
+// ============================================
+// COMPONENTE DE BORDE LUMINOSO
+// ============================================
+const BorderGlow = ({ children, isHovered }) => (
+  <div className="relative group">
+    <div className={`absolute -inset-0.5 bg-gradient-to-r from-red-600 via-red-500 to-red-600 rounded-xl blur opacity-0 transition-all duration-500 ${
+      isHovered ? 'opacity-75' : 'group-hover:opacity-50'
+    }`} />
+    <div className={`absolute -inset-0.5 bg-gradient-to-r from-red-600 via-red-500 to-red-600 rounded-xl blur-lg opacity-0 transition-all duration-700 ${
+      isHovered ? 'opacity-50' : 'group-hover:opacity-30'
+    }`} />
+    <div className="relative">
+      {children}
+    </div>
+  </div>
+);
+
+// ============================================
+// COMPONENTE DE TARJETA CON EFECTO GLASSMORPHISM
+// ============================================
+const GlassCard = ({ children, className = '' }) => {
+  const { theme } = useTheme();
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className={`bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-xl shadow-xl border border-red-600/20 hover:border-red-600/40 transition-all duration-300 ${className}`}
+    >
+      {children}
+    </motion.div>
+  );
+};
+
+// ============================================
+// COMPONENTE DE SKELETON LOADER
+// ============================================
+const GarantesSkeleton = () => {
+  const { theme } = useTheme();
+  
+  return (
+    <div className="space-y-6">
+      {/* Header Skeleton */}
+      <div className="flex justify-between items-center">
+        <div>
+          <div className={`h-8 w-48 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
+          <div className={`h-4 w-64 rounded-lg mt-2 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
+        </div>
+        <div className={`h-10 w-36 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
+      </div>
+
+      {/* Stats Skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className={`h-24 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
+        ))}
+      </div>
+
+      {/* Table Skeleton */}
+      <div className={`h-96 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
+    </div>
+  );
+};
+
+// ============================================
+// COMPONENTE DE STATS CARD
+// ============================================
+const StatsCard = ({ icon: Icon, label, value, subValue, gradient }) => {
+  const { theme } = useTheme();
+  const [isHovered, setIsHovered] = useState(false);
+
+  const gradientColors = {
+    blue: 'from-blue-600 to-blue-800',
+    green: 'from-green-600 to-green-800',
+    purple: 'from-purple-600 to-purple-800',
+    yellow: 'from-yellow-600 to-yellow-800',
+    red: 'from-red-600 to-red-800'
+  };
+
+  return (
+    <BorderGlow isHovered={isHovered}>
+      <motion.div
+        onHoverStart={() => setIsHovered(true)}
+        onHoverEnd={() => setIsHovered(false)}
+        className={`relative overflow-hidden rounded-xl p-5 ${
+          theme === 'dark' 
+            ? 'bg-gray-800/80 border-gray-700' 
+            : 'bg-white border-gray-200'
+        } border-2 hover:border-red-600/40 transition-all duration-300`}
+      >
+        <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${gradientColors[gradient]} opacity-10 rounded-full blur-3xl`} />
+        
+        <div className="relative flex items-start justify-between">
+          <div>
+            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+              {label}
+            </p>
+            <p className={`text-2xl font-bold mt-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+              {value}
+            </p>
+            {subValue && (
+              <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'} mt-1`}>
+                {subValue}
+              </p>
+            )}
+          </div>
+          <div className={`p-3 bg-gradient-to-br ${gradientColors[gradient]} rounded-xl shadow-lg`}>
+            <Icon className="h-6 w-6 text-white" />
+          </div>
+        </div>
+      </motion.div>
+    </BorderGlow>
+  );
+};
+
+// ============================================
+// COMPONENTE DE FILTROS AVANZADOS
+// ============================================
+const AdvancedFilters = ({ isOpen, onClose, filtros, onFilterChange }) => {
+  const { theme } = useTheme();
+
+  if (!isOpen) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="mb-6"
+    >
+      <GlassCard>
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+              Filtros Avanzados
+            </h3>
+            <button
+              onClick={onClose}
+              className={`p-2 rounded-lg transition-colors ${
+                theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+              }`}
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                Tipo de Garante
+              </label>
+              <select
+                className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                  theme === 'dark'
+                    ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                    : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                }`}
+              >
+                <option value="">Todos</option>
+                <option value="personal">Personal</option>
+                <option value="comercial">Comercial</option>
+              </select>
+            </div>
+
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                Capacidad Mínima
+              </label>
+              <input
+                type="number"
+                placeholder="0"
+                className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                  theme === 'dark'
+                    ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                    : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                }`}
+              />
+            </div>
+
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                Relación
+              </label>
+              <select
+                className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                  theme === 'dark'
+                    ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                    : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                }`}
+              >
+                <option value="">Todas</option>
+                <option value="Familiar">Familiar</option>
+                <option value="Amigo">Amigo</option>
+                <option value="Colega">Colega</option>
+                <option value="Socio">Socio</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-3 mt-4">
+            <button
+              onClick={onClose}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                theme === 'dark'
+                  ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all"
+            >
+              Aplicar Filtros
+            </button>
+          </div>
+        </div>
+      </GlassCard>
+    </motion.div>
+  );
+};
+
+// ============================================
+// COMPONENTE DE TARJETA DE INFORMACIÓN
+// ============================================
+const InfoCard = ({ icon: Icon, label, value, color }) => {
+  const { theme } = useTheme();
+  
+  return (
+    <div className={`flex items-center space-x-3 p-3 rounded-lg ${
+      theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'
+    }`}>
+      <div className={`p-2 rounded-lg ${color}`}>
+        <Icon className="h-4 w-4 text-white" />
+      </div>
+      <div>
+        <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{label}</p>
+        <p className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{value}</p>
+      </div>
+    </div>
+  );
+};
 
 const Garantes = () => {
   const [garantes, setGarantes] = useState([]);
@@ -25,15 +283,20 @@ const Garantes = () => {
   const [selectedClienteFilter, setSelectedClienteFilter] = useState('todos');
   const [filtroActivo, setFiltroActivo] = useState('todos');
   const [showForm, setShowForm] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [selectedGarante, setSelectedGarante] = useState(null);
   const [editingGarante, setEditingGarante] = useState(null);
   const [error, setError] = useState('');
+  const [hoveredRow, setHoveredRow] = useState(null);
   const [stats, setStats] = useState({
     total: 0,
     activos: 0,
     conPrestamos: 0,
     capacidadTotal: 0
   });
+
+  const { theme } = useTheme();
 
   useEffect(() => {
     fetchGarantes();
@@ -375,7 +638,7 @@ const Garantes = () => {
     }).format(amount);
   };
 
-  // Componente Formulario de Garante
+  // Componente Formulario de Garante (MEJORADO)
   const GaranteForm = () => {
     const [formData, setFormData] = useState({
       clienteID: '',
@@ -431,7 +694,6 @@ const Garantes = () => {
         return;
       }
 
-      // Obtener nombre del cliente seleccionado
       const clienteSeleccionado = clientes.find(c => c.id === formData.clienteID);
       const garanteData = {
         ...formData,
@@ -452,580 +714,53 @@ const Garantes = () => {
 
     const relacionesCliente = [
       'Familiar', 'Amigo', 'Colega', 'Vecino', 'Socio', 
-      'Conocido', 'Hermano', 'Padre', 'Madre', 'Esposo', 
-      'Esposa', 'Primo', 'Tío', 'Otro'
+      'Hermano', 'Padre', 'Madre', 'Esposo', 'Esposa', 
+      'Primo', 'Tío', 'Otro'
     ];
 
     return (
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">
-            {editingGarante ? 'Editar Garante' : 'Nuevo Garante'}
-          </h3>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Cliente Principal */}
-          <div>
-            <h4 className="text-lg font-medium text-gray-900 mb-4">Cliente Principal</h4>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Seleccionar Cliente *
-              </label>
-              <select
-                value={formData.clienteID}
-                onChange={(e) => setFormData(prev => ({ ...prev, clienteID: e.target.value }))}
-                className="input-primary"
-                required
-              >
-                <option value="">Seleccionar cliente</option>
-                {clientes.map(cliente => (
-                  <option key={cliente.id} value={cliente.id}>
-                    {cliente.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Información Personal del Garante */}
-          <div>
-            <h4 className="text-lg font-medium text-gray-900 mb-4">Información Personal del Garante</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 20 }}
+        className="mb-6"
+      >
+        <GlassCard>
+          <div className="p-6">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="p-3 bg-gradient-to-br from-red-600 to-red-800 rounded-xl shadow-lg">
+                <UserGroupIcon className="h-6 w-6 text-white" />
+              </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nombre Completo *
-                </label>
-                <input
-                  type="text"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData(prev => ({ ...prev, nombre: e.target.value }))}
-                  className="input-primary"
-                  placeholder="Ej: Roberto Pérez"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cédula *
-                </label>
-                <input
-                  type="text"
-                  value={formData.cedula}
-                  onChange={(e) => setFormData(prev => ({ ...prev, cedula: e.target.value }))}
-                  className="input-primary"
-                  placeholder="Ej: 001-1234567-8"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Edad
-                </label>
-                <input
-                  type="number"
-                  value={formData.edad}
-                  onChange={(e) => setFormData(prev => ({ ...prev, edad: e.target.value }))}
-                  className="input-primary"
-                  placeholder="Ej: 35"
-                  min="18"
-                  max="100"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Celular *
-                </label>
-                <input
-                  type="tel"
-                  value={formData.celular}
-                  onChange={(e) => setFormData(prev => ({ ...prev, celular: e.target.value }))}
-                  className="input-primary"
-                  placeholder="Ej: 809-123-4567"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                  className="input-primary"
-                  placeholder="Ej: garante@email.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tipo de Garante
-                </label>
-                <select
-                  value={formData.tipoGarante}
-                  onChange={(e) => setFormData(prev => ({ ...prev, tipoGarante: e.target.value }))}
-                  className="input-primary"
-                >
-                  <option value="personal">Personal</option>
-                  <option value="comercial">Comercial</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Relación con el Cliente
-                </label>
-                <select
-                  value={formData.relacionCliente}
-                  onChange={(e) => setFormData(prev => ({ ...prev, relacionCliente: e.target.value }))}
-                  className="input-primary"
-                >
-                  <option value="">Seleccionar relación</option>
-                  {relacionesCliente.map(relacion => (
-                    <option key={relacion} value={relacion}>{relacion}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Información Laboral */}
-          <div>
-            <h4 className="text-lg font-medium text-gray-900 mb-4">Información Laboral</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Lugar de Trabajo
-                </label>
-                <input
-                  type="text"
-                  value={formData.trabajo}
-                  onChange={(e) => setFormData(prev => ({ ...prev, trabajo: e.target.value }))}
-                  className="input-primary"
-                  placeholder="Ej: Empresa XYZ"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Puesto
-                </label>
-                <input
-                  type="text"
-                  value={formData.puesto}
-                  onChange={(e) => setFormData(prev => ({ ...prev, puesto: e.target.value }))}
-                  className="input-primary"
-                  placeholder="Ej: Gerente"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Sueldo Mensual (DOP)
-                </label>
-                <input
-                  type="number"
-                  value={formData.sueldo}
-                  onChange={(e) => setFormData(prev => ({ ...prev, sueldo: e.target.value }))}
-                  className="input-primary"
-                  placeholder="Ej: 35000"
-                />
-                {formData.sueldo && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Capacidad estimada: {formatCurrency((parseFloat(formData.sueldo) || 0) * 0.4 * 12)} anual
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Dirección */}
-          <div>
-            <h4 className="text-lg font-medium text-gray-900 mb-4">Dirección</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Dirección Completa
-                </label>
-                <input
-                  type="text"
-                  value={formData.direccion}
-                  onChange={(e) => setFormData(prev => ({ ...prev, direccion: e.target.value }))}
-                  className="input-primary"
-                  placeholder="Ej: Calle Principal #123"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Sector
-                </label>
-                <input
-                  type="text"
-                  value={formData.sector}
-                  onChange={(e) => setFormData(prev => ({ ...prev, sector: e.target.value }))}
-                  className="input-primary"
-                  placeholder="Ej: Sector Norte"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Provincia
-                </label>
-                <select
-                  value={formData.provincia}
-                  onChange={(e) => setFormData(prev => ({ ...prev, provincia: e.target.value }))}
-                  className="input-primary"
-                >
-                  <option value="">Seleccionar provincia</option>
-                  {provinciasRD.map(provincia => (
-                    <option key={provincia} value={provincia}>
-                      {provincia}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  País
-                </label>
-                <input
-                  type="text"
-                  value={formData.pais}
-                  onChange={(e) => setFormData(prev => ({ ...prev, pais: e.target.value }))}
-                  className="input-primary"
-                  disabled
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Observaciones */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Observaciones
-            </label>
-            <textarea
-              value={formData.observaciones}
-              onChange={(e) => setFormData(prev => ({ ...prev, observaciones: e.target.value }))}
-              className="input-primary"
-              placeholder="Observaciones adicionales sobre el garante..."
-              rows="3"
-            />
-          </div>
-
-          {/* Estado */}
-          <div>
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={formData.activo}
-                onChange={(e) => setFormData(prev => ({ ...prev, activo: e.target.checked }))}
-                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              <span className="ml-2 text-sm text-gray-700">Garante activo</span>
-            </label>
-          </div>
-
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={handleCloseForm}
-              className="btn-secondary"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="btn-primary"
-            >
-              {editingGarante ? 'Actualizar Garante' : 'Crear Garante'}
-            </button>
-          </div>
-        </form>
-      </div>
-    );
-  };
-
-  // Componente Detalles del Garante
-  const GaranteDetails = () => {
-    if (!selectedGarante) return null;
-
-    const InfoRow = ({ label, value, icon: Icon, highlight = false }) => (
-      <div className={`flex items-start space-x-3 py-3 border-b border-gray-100 ${highlight ? 'bg-blue-50 rounded-lg p-3' : ''}`}>
-        <Icon className={`h-5 w-5 mt-0.5 flex-shrink-0 ${highlight ? 'text-blue-600' : 'text-gray-400'}`} />
-        <div className="flex-1 min-w-0">
-          <p className={`text-sm font-medium ${highlight ? 'text-blue-900' : 'text-gray-500'}`}>{label}</p>
-          <p className={`text-sm mt-1 ${highlight ? 'text-blue-800 font-semibold' : 'text-gray-900'}`}>
-            {value || 'No especificado'}
-          </p>
-        </div>
-      </div>
-    );
-
-    const capacidadEndeudamiento = selectedGarante.capacidadEndeudamiento || 
-                                 (selectedGarante.sueldo ? (selectedGarante.sueldo * 0.4 * 12) : 0);
-
-    return (
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-medium text-gray-900">Detalles del Garante</h3>
-          <button
-            onClick={handleCloseView}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
-        </div>
-        <div className="p-6">
-          {/* Información del Cliente Principal */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <div className="flex items-center space-x-3">
-              <UserIcon className="h-5 w-5 text-blue-600" />
-              <div>
-                <h4 className="text-sm font-medium text-blue-900">Cliente Principal</h4>
-                <p className="text-sm text-blue-700">{selectedGarante.clienteNombre}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Información Personal */}
-            <div>
-              <h5 className="text-sm font-medium text-gray-500 mb-3">Información Personal</h5>
-              <div className="space-y-1">
-                <InfoRow label="Nombre" value={selectedGarante.nombre} icon={UserIcon} />
-                <InfoRow label="Cédula" value={selectedGarante.cedula} icon={BuildingOfficeIcon} />
-                <InfoRow label="Edad" value={`${selectedGarante.edad} años`} icon={UserIcon} />
-                <InfoRow label="Celular" value={selectedGarante.celular} icon={PhoneIcon} />
-                <InfoRow label="Email" value={selectedGarante.email} icon={MapPinIcon} />
-                <InfoRow label="Tipo de Garante" value={selectedGarante.tipoGarante === 'comercial' ? 'Comercial' : 'Personal'} icon={UserGroupIcon} />
-                <InfoRow label="Relación" value={selectedGarante.relacionCliente} icon={UserIcon} />
-              </div>
-            </div>
-
-            {/* Información Laboral y Financiera */}
-            <div>
-              <h5 className="text-sm font-medium text-gray-500 mb-3">Información Laboral</h5>
-              <div className="space-y-1 mb-6">
-                <InfoRow label="Lugar de Trabajo" value={selectedGarante.trabajo} icon={BuildingOfficeIcon} />
-                <InfoRow label="Puesto" value={selectedGarante.puesto} icon={UserIcon} />
-                <InfoRow label="Sueldo" value={selectedGarante.sueldo ? `RD$ ${selectedGarante.sueldo.toLocaleString()}` : ''} icon={BuildingOfficeIcon} />
-                <InfoRow 
-                  label="Capacidad de Endeudamiento" 
-                  value={formatCurrency(capacidadEndeudamiento)} 
-                  icon={ChartBarIcon} 
-                  highlight 
-                />
-              </div>
-
-              <h5 className="text-sm font-medium text-gray-500 mb-3">Dirección</h5>
-              <div className="space-y-1">
-                <InfoRow label="Dirección" value={selectedGarante.direccion} icon={MapPinIcon} />
-                <InfoRow label="Sector" value={selectedGarante.sector} icon={MapPinIcon} />
-                <InfoRow label="Provincia" value={selectedGarante.provincia} icon={MapPinIcon} />
-                <InfoRow label="País" value={selectedGarante.pais} icon={MapPinIcon} />
-              </div>
-            </div>
-          </div>
-
-          {/* Información de Garantías */}
-          <div className="mt-6">
-            <h5 className="text-sm font-medium text-gray-500 mb-3">Información de Garantías</h5>
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-900">{selectedGarante.prestamosActivos || 0}</div>
-                  <div className="text-sm text-gray-600">Préstamos Activos</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-900">{selectedGarante.prestamosGarantizados?.length || 0}</div>
-                  <div className="text-sm text-gray-600">Total Garantizados</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">
-                    {selectedGarante.activo ? 'Activo' : 'Inactivo'}
-                  </div>
-                  <div className="text-sm text-gray-600">Estado</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Observaciones */}
-          {selectedGarante.observaciones && (
-            <div className="mt-6">
-              <h5 className="text-sm font-medium text-gray-500 mb-3">Observaciones</h5>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-yellow-800">{selectedGarante.observaciones}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Estado y Acciones */}
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <div className="flex justify-between items-center">
-              <div>
-                <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${
-                  selectedGarante.activo 
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-red-100 text-red-800'
-                }`}>
-                  {selectedGarante.activo ? 'Activo' : 'Inactivo'}
-                </span>
-                <p className="text-sm text-gray-600 mt-1">
-                  Fecha de registro: {new Date(selectedGarante.fechaCreacion).toLocaleDateString()}
+                <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  {editingGarante ? 'Editar Garante' : 'Nuevo Garante'}
+                </h3>
+                <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Complete la información del garante
                 </p>
               </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => {
-                    handleCloseView();
-                    handleEditGarante(selectedGarante);
-                  }}
-                  className="btn-primary"
-                >
-                  Editar Garante
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-    return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Garantes</h1>
-          <p className="text-gray-600">Gestiona los garantes de los préstamos</p>
-        </div>
-        <button
-          onClick={handleCreateGarante}
-          className="btn-primary flex items-center space-x-2"
-        >
-          <PlusIcon className="h-5 w-5" />
-          <span>Nuevo Garante</span>
-        </button>
-      </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
-
-      {/* Formulario */}
-      {showForm && <GaranteForm />}
-
-      {/* Vista de Detalles */}
-      {selectedGarante && <GaranteDetails />}
-
-      {/* Estadísticas */}
-      {!showForm && !selectedGarante && (
-        <>
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-white overflow-hidden shadow rounded-lg border border-gray-200">
-              <div className="p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0 p-3 rounded-lg bg-blue-500">
-                    <UserGroupIcon className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="ml-4 flex-1">
-                    <p className="text-sm font-medium text-gray-600">Total Garantes</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-                  </div>
-                </div>
-              </div>
             </div>
 
-            <div className="bg-white overflow-hidden shadow rounded-lg border border-gray-200">
-              <div className="p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0 p-3 rounded-lg bg-green-500">
-                    <CheckCircleIcon className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="ml-4 flex-1">
-                    <p className="text-sm font-medium text-gray-600">Garantes Activos</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.activos}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg border border-gray-200">
-              <div className="p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0 p-3 rounded-lg bg-purple-500">
-                    <ChartBarIcon className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="ml-4 flex-1">
-                    <p className="text-sm font-medium text-gray-600">Con Préstamos</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.conPrestamos}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg border border-gray-200">
-              <div className="p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0 p-3 rounded-lg bg-yellow-500">
-                    <BuildingOfficeIcon className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="ml-4 flex-1">
-                    <p className="text-sm font-medium text-gray-600">Capacidad Total</p>
-                    <p className="text-lg font-bold text-gray-900">
-                      {formatCurrency(stats.capacidadTotal)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Filtros y Búsqueda */}
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Buscar Garante
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Nombre, cédula o cliente..."
-                    className="input-primary pl-10"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Filtrar por Cliente
-                </label>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Cliente Principal */}
+              <div className={`p-4 rounded-lg border-2 ${
+                theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <h4 className={`text-sm font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                  <UserIcon className="h-4 w-4 mr-2 text-red-600" />
+                  Cliente Principal
+                </h4>
                 <select
-                  value={selectedClienteFilter}
-                  onChange={(e) => setSelectedClienteFilter(e.target.value)}
-                  className="input-primary"
+                  value={formData.clienteID}
+                  onChange={(e) => setFormData(prev => ({ ...prev, clienteID: e.target.value }))}
+                  className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                    theme === 'dark'
+                      ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                      : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                  }`}
+                  required
                 >
-                  <option value="todos">Todos los clientes</option>
+                  <option value="">Seleccionar cliente</option>
                   {clientes.map(cliente => (
                     <option key={cliente.id} value={cliente.id}>
                       {cliente.nombre}
@@ -1034,92 +769,978 @@ const Garantes = () => {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Estado
+              {/* Información Personal */}
+              <div className={`p-4 rounded-lg border-2 ${
+                theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <h4 className={`text-sm font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                  <UserIcon className="h-4 w-4 mr-2 text-red-600" />
+                  Información Personal del Garante
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Nombre Completo *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.nombre}
+                      onChange={(e) => setFormData(prev => ({ ...prev, nombre: e.target.value }))}
+                      className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                      }`}
+                      placeholder="Ej: Roberto Pérez"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Cédula *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.cedula}
+                      onChange={(e) => setFormData(prev => ({ ...prev, cedula: e.target.value }))}
+                      className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                      }`}
+                      placeholder="001-1234567-8"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Edad
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.edad}
+                      onChange={(e) => setFormData(prev => ({ ...prev, edad: e.target.value }))}
+                      className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                      }`}
+                      placeholder="35"
+                      min="18"
+                      max="100"
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Celular *
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.celular}
+                      onChange={(e) => setFormData(prev => ({ ...prev, celular: e.target.value }))}
+                      className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                      }`}
+                      placeholder="809-123-4567"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                      className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                      }`}
+                      placeholder="garante@email.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Tipo de Garante
+                    </label>
+                    <select
+                      value={formData.tipoGarante}
+                      onChange={(e) => setFormData(prev => ({ ...prev, tipoGarante: e.target.value }))}
+                      className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                      }`}
+                    >
+                      <option value="personal">Personal</option>
+                      <option value="comercial">Comercial</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Relación con el Cliente
+                    </label>
+                    <select
+                      value={formData.relacionCliente}
+                      onChange={(e) => setFormData(prev => ({ ...prev, relacionCliente: e.target.value }))}
+                      className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                      }`}
+                    >
+                      <option value="">Seleccionar relación</option>
+                      {relacionesCliente.map(relacion => (
+                        <option key={relacion} value={relacion}>{relacion}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Información Laboral */}
+              <div className={`p-4 rounded-lg border-2 ${
+                theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <h4 className={`text-sm font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                  <BriefcaseIcon className="h-4 w-4 mr-2 text-red-600" />
+                  Información Laboral
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Lugar de Trabajo
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.trabajo}
+                      onChange={(e) => setFormData(prev => ({ ...prev, trabajo: e.target.value }))}
+                      className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                      }`}
+                      placeholder="Empresa XYZ"
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Puesto
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.puesto}
+                      onChange={(e) => setFormData(prev => ({ ...prev, puesto: e.target.value }))}
+                      className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                      }`}
+                      placeholder="Gerente"
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Sueldo Mensual (DOP)
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.sueldo}
+                      onChange={(e) => setFormData(prev => ({ ...prev, sueldo: e.target.value }))}
+                      className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                      }`}
+                      placeholder="35000"
+                    />
+                    {formData.sueldo && (
+                      <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Capacidad estimada: {formatCurrency((parseFloat(formData.sueldo) || 0) * 0.4 * 12)} anual
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Dirección */}
+              <div className={`p-4 rounded-lg border-2 ${
+                theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <h4 className={`text-sm font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                  <HomeIcon className="h-4 w-4 mr-2 text-red-600" />
+                  Dirección
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Dirección Completa
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.direccion}
+                      onChange={(e) => setFormData(prev => ({ ...prev, direccion: e.target.value }))}
+                      className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                      }`}
+                      placeholder="Calle Principal #123"
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Sector
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.sector}
+                      onChange={(e) => setFormData(prev => ({ ...prev, sector: e.target.value }))}
+                      className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                      }`}
+                      placeholder="Sector Norte"
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Provincia
+                    </label>
+                    <select
+                      value={formData.provincia}
+                      onChange={(e) => setFormData(prev => ({ ...prev, provincia: e.target.value }))}
+                      className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                      }`}
+                    >
+                      <option value="">Seleccionar provincia</option>
+                      {provinciasRD.map(provincia => (
+                        <option key={provincia} value={provincia}>{provincia}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      País
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.pais}
+                      className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                      }`}
+                      disabled
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Observaciones */}
+              <div className={`p-4 rounded-lg border-2 ${
+                theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <label className={`block text-sm font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Observaciones
                 </label>
-                <select
-                  value={filtroActivo}
-                  onChange={(e) => setFiltroActivo(e.target.value)}
-                  className="input-primary"
+                <textarea
+                  value={formData.observaciones}
+                  onChange={(e) => setFormData(prev => ({ ...prev, observaciones: e.target.value }))}
+                  rows="3"
+                  className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                    theme === 'dark'
+                      ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                      : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                  }`}
+                  placeholder="Observaciones adicionales sobre el garante..."
+                />
+              </div>
+
+              {/* Estado */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={formData.activo}
+                  onChange={(e) => setFormData(prev => ({ ...prev, activo: e.target.checked }))}
+                  className="w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
+                />
+                <span className={`ml-2 text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Garante activo
+                </span>
+              </div>
+
+              {/* Botones */}
+              <div className="flex justify-end space-x-3 pt-4">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  type="button"
+                  onClick={handleCloseForm}
+                  className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                    theme === 'dark'
+                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
                 >
-                  <option value="todos">Todos</option>
-                  <option value="activos">Solo activos</option>
-                  <option value="inactivos">Solo inactivos</option>
-                </select>
+                  Cancelar
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  type="submit"
+                  className="px-6 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all"
+                >
+                  {editingGarante ? 'Actualizar Garante' : 'Crear Garante'}
+                </motion.button>
+              </div>
+            </form>
+          </div>
+        </GlassCard>
+      </motion.div>
+    );
+  };
+
+  // Componente Detalles del Garante (MEJORADO)
+  const GaranteDetails = () => {
+    if (!selectedGarante) return null;
+
+    const capacidadEndeudamiento = selectedGarante.capacidadEndeudamiento || 
+                                 (selectedGarante.sueldo ? (selectedGarante.sueldo * 0.4 * 12) : 0);
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="mb-6"
+      >
+        <GlassCard>
+          <div className="p-6">
+            <div className="flex justify-between items-start mb-6">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-gradient-to-br from-red-600 to-red-800 rounded-xl shadow-lg">
+                  <UserGroupIcon className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h3 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    {selectedGarante.nombre}
+                  </h3>
+                  <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {selectedGarante.cedula}
+                  </p>
+                </div>
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={handleCloseView}
+                className={`p-2 rounded-lg transition-colors ${
+                  theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                }`}
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </motion.button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Columna Izquierda - Información Principal */}
+              <div className="lg:col-span-2 space-y-4">
+                {/* Cliente Principal */}
+                <div className={`p-4 rounded-lg border-2 ${
+                  theme === 'dark' ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'
+                }`}>
+                  <h4 className={`text-sm font-semibold mb-3 flex items-center ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                    <UserIcon className="h-4 w-4 mr-2 text-red-600" />
+                    Cliente Principal
+                  </h4>
+                  <p className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    {selectedGarante.clienteNombre}
+                  </p>
+                  <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Relación: {selectedGarante.relacionCliente || 'No especificada'}
+                  </p>
+                </div>
+
+                {/* Información Personal */}
+                <div className={`p-4 rounded-lg border-2 ${
+                  theme === 'dark' ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'
+                }`}>
+                  <h4 className={`text-sm font-semibold mb-3 flex items-center ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                    <UserIcon className="h-4 w-4 mr-2 text-red-600" />
+                    Información Personal
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <InfoCard
+                      icon={UserIcon}
+                      label="Edad"
+                      value={`${selectedGarante.edad || 'N/A'} años`}
+                      color="bg-blue-600"
+                    />
+                    <InfoCard
+                      icon={PhoneIcon}
+                      label="Celular"
+                      value={selectedGarante.celular || 'N/A'}
+                      color="bg-green-600"
+                    />
+                    <InfoCard
+                      icon={DocumentTextIcon}
+                      label="Email"
+                      value={selectedGarante.email || 'N/A'}
+                      color="bg-purple-600"
+                    />
+                    <InfoCard
+                      icon={BriefcaseIcon}
+                      label="Tipo"
+                      value={selectedGarante.tipoGarante === 'comercial' ? 'Comercial' : 'Personal'}
+                      color="bg-yellow-600"
+                    />
+                  </div>
+                </div>
+
+                {/* Información Laboral */}
+                <div className={`p-4 rounded-lg border-2 ${
+                  theme === 'dark' ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'
+                }`}>
+                  <h4 className={`text-sm font-semibold mb-3 flex items-center ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                    <BriefcaseIcon className="h-4 w-4 mr-2 text-red-600" />
+                    Información Laboral
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <InfoCard
+                      icon={BuildingOfficeIcon}
+                      label="Trabajo"
+                      value={selectedGarante.trabajo || 'N/A'}
+                      color="bg-indigo-600"
+                    />
+                    <InfoCard
+                      icon={UserIcon}
+                      label="Puesto"
+                      value={selectedGarante.puesto || 'N/A'}
+                      color="bg-pink-600"
+                    />
+                    <InfoCard
+                      icon={ChartBarIcon}
+                      label="Sueldo"
+                      value={selectedGarante.sueldo ? `RD$ ${selectedGarante.sueldo.toLocaleString()}` : 'N/A'}
+                      color="bg-teal-600"
+                    />
+                    <InfoCard
+                      icon={ShieldCheckIcon}
+                      label="Capacidad"
+                      value={formatCurrency(capacidadEndeudamiento)}
+                      color="bg-orange-600"
+                    />
+                  </div>
+                </div>
+
+                {/* Dirección */}
+                <div className={`p-4 rounded-lg border-2 ${
+                  theme === 'dark' ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'
+                }`}>
+                  <h4 className={`text-sm font-semibold mb-3 flex items-center ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                    <HomeIcon className="h-4 w-4 mr-2 text-red-600" />
+                    Dirección
+                  </h4>
+                  <div className="space-y-2">
+                    <p className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      {selectedGarante.direccion || 'N/A'}
+                    </p>
+                    <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                      {selectedGarante.sector}, {selectedGarante.provincia}, {selectedGarante.pais}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Observaciones */}
+                {selectedGarante.observaciones && (
+                  <div className={`p-4 rounded-lg border-2 ${
+                    theme === 'dark' ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'
+                  }`}>
+                    <h4 className={`text-sm font-semibold mb-2 flex items-center ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      <DocumentTextIcon className="h-4 w-4 mr-2 text-red-600" />
+                      Observaciones
+                    </h4>
+                    <p className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      {selectedGarante.observaciones}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Columna Derecha - Estadísticas */}
+              <div className="space-y-4">
+                {/* Estado */}
+                <div className={`p-4 rounded-lg border-2 ${
+                  selectedGarante.activo
+                    ? theme === 'dark' ? 'border-green-700 bg-green-900/20' : 'border-green-200 bg-green-50'
+                    : theme === 'dark' ? 'border-red-700 bg-red-900/20' : 'border-red-200 bg-red-50'
+                }`}>
+                  <h4 className={`text-sm font-semibold mb-3 flex items-center ${
+                    selectedGarante.activo
+                      ? theme === 'dark' ? 'text-green-400' : 'text-green-700'
+                      : theme === 'dark' ? 'text-red-400' : 'text-red-700'
+                  }`}>
+                    <ShieldCheckIcon className="h-4 w-4 mr-2" />
+                    Estado
+                  </h4>
+                  <p className={`text-2xl font-bold ${
+                    selectedGarante.activo
+                      ? theme === 'dark' ? 'text-green-400' : 'text-green-700'
+                      : theme === 'dark' ? 'text-red-400' : 'text-red-700'
+                  }`}>
+                    {selectedGarante.activo ? 'Activo' : 'Inactivo'}
+                  </p>
+                  <p className={`text-xs mt-2 ${
+                    selectedGarante.activo
+                      ? theme === 'dark' ? 'text-green-500' : 'text-green-600'
+                      : theme === 'dark' ? 'text-red-500' : 'text-red-600'
+                  }`}>
+                    Fecha de registro: {new Date(selectedGarante.fechaCreacion).toLocaleDateString()}
+                  </p>
+                </div>
+
+                {/* Préstamos Garantizados */}
+                <div className={`p-4 rounded-lg border-2 ${
+                  theme === 'dark' ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'
+                }`}>
+                  <h4 className={`text-sm font-semibold mb-3 flex items-center ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                    <ChartBarIcon className="h-4 w-4 mr-2 text-red-600" />
+                    Préstamos Garantizados
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Activos:</span>
+                      <span className={`text-lg font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                        {selectedGarante.prestamosActivos || 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Total:</span>
+                      <span className={`text-lg font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                        {selectedGarante.prestamosGarantizados?.length || 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botones de Acción */}
+                <div className="space-y-2">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      handleCloseView();
+                      handleEditGarante(selectedGarante);
+                    }}
+                    className="w-full py-3 bg-gradient-to-r from-yellow-600 to-yellow-700 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center space-x-2"
+                  >
+                    <PencilIcon className="h-5 w-5" />
+                    <span>Editar Garante</span>
+                  </motion.button>
+
+                  {selectedGarante.activo ? (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleActivateGarante(selectedGarante.id, false)}
+                      className="w-full py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center space-x-2"
+                    >
+                      <XCircleIcon className="h-5 w-5" />
+                      <span>Desactivar Garante</span>
+                    </motion.button>
+                  ) : (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleActivateGarante(selectedGarante.id, true)}
+                      className="w-full py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center space-x-2"
+                    >
+                      <CheckCircleIcon className="h-5 w-5" />
+                      <span>Activar Garante</span>
+                    </motion.button>
+                  )}
+
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => handleDeleteGarante(selectedGarante.id)}
+                    className="w-full py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center space-x-2"
+                  >
+                    <TrashIcon className="h-5 w-5" />
+                    <span>Eliminar Garante</span>
+                  </motion.button>
+                </div>
               </div>
             </div>
           </div>
+        </GlassCard>
+      </motion.div>
+    );
+  };
+
+  if (loading) {
+    return <GarantesSkeleton />;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header Mejorado */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden"
+      >
+        <div className="absolute inset-0 bg-gradient-to-r from-red-600/20 to-red-800/20 rounded-2xl blur-3xl"></div>
+        <div className={`relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl shadow-2xl p-6 border border-red-600/20`}>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-gradient-to-br from-red-600 to-red-800 rounded-xl shadow-lg">
+                <SparklesIcon className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className={`text-2xl sm:text-3xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  Garantes
+                </h1>
+                <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Gestiona los garantes de los préstamos
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2 w-full sm:w-auto">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowFilters(!showFilters)}
+                className={`p-3 rounded-lg transition-all ${
+                  showFilters
+                    ? 'bg-red-600 text-white'
+                    : theme === 'dark'
+                    ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+                title="Filtros avanzados"
+              >
+                <FunnelIcon className="h-5 w-5" />
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowSearch(!showSearch)}
+                className={`p-3 rounded-lg transition-all ${
+                  showSearch
+                    ? 'bg-red-600 text-white'
+                    : theme === 'dark'
+                    ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+                title="Buscar garantes"
+              >
+                <MagnifyingGlassIcon className="h-5 w-5" />
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleCreateGarante}
+                className="p-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg shadow-lg hover:shadow-xl transition-all"
+                title="Nuevo garante"
+              >
+                <PlusIcon className="h-5 w-5" />
+              </motion.button>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Mensaje de Error */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className={`p-4 rounded-xl border-2 flex items-start space-x-3 ${
+              theme === 'dark'
+                ? 'bg-red-900/30 border-red-700 text-red-400'
+                : 'bg-red-50 border-red-200 text-red-700'
+            }`}
+          >
+            <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0 mt-0.5" />
+            <p className="text-sm">{error}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Formulario */}
+      <AnimatePresence>
+        {showForm && <GaranteForm />}
+      </AnimatePresence>
+
+      {/* Vista de Detalles */}
+      <AnimatePresence>
+        {selectedGarante && <GaranteDetails />}
+      </AnimatePresence>
+
+      {/* Filtros Avanzados */}
+      <AnimatePresence>
+        {showFilters && (
+          <AdvancedFilters
+            isOpen={showFilters}
+            onClose={() => setShowFilters(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Search Bar */}
+      <AnimatePresence>
+        {showSearch && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+          >
+            <GlassCard>
+              <div className="p-4">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <MagnifyingGlassIcon className={`h-5 w-5 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Buscar por nombre, cédula o cliente..."
+                    className={`w-full pl-10 pr-10 py-3 rounded-lg border-2 outline-none transition-all ${
+                      theme === 'dark'
+                        ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                        : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                    }`}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    autoFocus
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    >
+                      <XMarkIcon className={`h-5 w-5 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} hover:text-red-600 transition-colors`} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </GlassCard>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Solo mostrar el contenido principal si no hay formulario ni detalles */}
+      {!showForm && !selectedGarante && (
+        <>
+          {/* Stats Cards Mejoradas */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatsCard
+              icon={UserGroupIcon}
+              label="Total Garantes"
+              value={stats.total}
+              subValue="Registrados"
+              gradient="blue"
+            />
+
+            <StatsCard
+              icon={CheckCircleIcon}
+              label="Garantes Activos"
+              value={stats.activos}
+              subValue={`${stats.total > 0 ? ((stats.activos / stats.total) * 100).toFixed(1) : 0}% del total`}
+              gradient="green"
+            />
+
+            <StatsCard
+              icon={ChartBarIcon}
+              label="Con Préstamos"
+              value={stats.conPrestamos}
+              subValue="Garantizando activamente"
+              gradient="purple"
+            />
+
+            <StatsCard
+              icon={BuildingOfficeIcon}
+              label="Capacidad Total"
+              value={formatCurrency(stats.capacidadTotal)}
+              subValue="Endeudamiento anual"
+              gradient="yellow"
+            />
+          </div>
+
+          {/* Filtros Rápidos */}
+          <GlassCard>
+            <div className="p-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Filtrar por Cliente
+                  </label>
+                  <select
+                    value={selectedClienteFilter}
+                    onChange={(e) => setSelectedClienteFilter(e.target.value)}
+                    className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                      theme === 'dark'
+                        ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                        : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                    }`}
+                  >
+                    <option value="todos">Todos los clientes</option>
+                    {clientes.map(cliente => (
+                      <option key={cliente.id} value={cliente.id}>
+                        {cliente.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Estado
+                  </label>
+                  <select
+                    value={filtroActivo}
+                    onChange={(e) => setFiltroActivo(e.target.value)}
+                    className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                      theme === 'dark'
+                        ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                        : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                    }`}
+                  >
+                    <option value="todos">Todos</option>
+                    <option value="activos">Solo activos</option>
+                    <option value="inactivos">Solo inactivos</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Resultados
+                  </label>
+                  <div className={`px-4 py-2 rounded-lg border-2 ${
+                    theme === 'dark'
+                      ? 'bg-gray-800 border-gray-700 text-white'
+                      : 'bg-gray-50 border-gray-200 text-gray-900'
+                  }`}>
+                    {filteredGarantes.length} garantes encontrados
+                  </div>
+                </div>
+              </div>
+            </div>
+          </GlassCard>
 
           {/* Tabla de Garantes */}
-          <div className="bg-white shadow rounded-lg">
-            {loading ? (
-              <div className="flex items-center justify-center p-8">
-                <div className="text-gray-600">Cargando garantes...</div>
-              </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Garante
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Cliente Principal
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Contacto
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Capacidad
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Préstamos Activos
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Estado
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Acciones
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredGarantes.map((garante) => (
-                        <tr key={garante.id} className="hover:bg-gray-50">
+          <GlassCard>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className={theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}>
+                  <tr>
+                    {['Garante', 'Cliente Principal', 'Contacto', 'Capacidad', 'Préstamos', 'Estado', 'Acciones'].map((header, index) => (
+                      <th
+                        key={index}
+                        className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                      >
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className={`divide-y divide-gray-200 dark:divide-gray-700 ${
+                  theme === 'dark' ? 'bg-gray-800/50' : 'bg-white'
+                }`}>
+                  <AnimatePresence>
+                    {filteredGarantes.map((garante) => {
+                      const isHovered = hoveredRow === garante.id;
+                      const capacidad = garante.capacidadEndeudamiento || (garante.sueldo ? garante.sueldo * 0.4 * 12 : 0);
+                      
+                      return (
+                        <motion.tr
+                          key={garante.id}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          onHoverStart={() => setHoveredRow(garante.id)}
+                          onHoverEnd={() => setHoveredRow(null)}
+                          className={`cursor-pointer transition-all duration-300 ${
+                            isHovered
+                              ? theme === 'dark'
+                                ? 'bg-gray-700/50'
+                                : 'bg-gray-100'
+                              : ''
+                          }`}
+                          onClick={() => handleViewGarante(garante)}
+                        >
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {garante.nombre}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {garante.cedula}
-                              </div>
-                              <div className="text-xs text-gray-400">
-                                {garante.tipoGarante === 'comercial' ? 'Comercial' : 'Personal'}
-                              </div>
+                            <div className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                              {garante.nombre}
+                            </div>
+                            <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                              {garante.cedula}
+                            </div>
+                            <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                              {garante.tipoGarante === 'comercial' ? '🏢 Comercial' : '👤 Personal'}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{garante.clienteNombre}</div>
-                            <div className="text-sm text-gray-500">
-                              {garante.relacionCliente}
+                            <div className={`text-sm ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                              {garante.clienteNombre}
+                            </div>
+                            <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                              {garante.relacionCliente || 'Relación no especificada'}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{garante.celular}</div>
-                            <div className="text-sm text-gray-500">{garante.email}</div>
+                            <div className={`text-sm ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                              {garante.celular}
+                            </div>
+                            <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                              {garante.email || 'Sin email'}
+                            </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatCurrency(garante.capacidadEndeudamiento)}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className={`text-sm font-semibold ${
+                              capacidad > 200000 
+                                ? 'text-green-600 dark:text-green-400' 
+                                : capacidad > 100000 
+                                ? 'text-yellow-600 dark:text-yellow-400' 
+                                : 'text-orange-600 dark:text-orange-400'
+                            }`}>
+                              {formatCurrency(capacidad)}
+                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                               (garante.prestamosActivos || 0) > 0 
-                                ? 'bg-purple-100 text-purple-800'
-                                : 'bg-gray-100 text-gray-800'
+                                ? theme === 'dark'
+                                  ? 'bg-purple-900/30 text-purple-400'
+                                  : 'bg-purple-100 text-purple-800'
+                                : theme === 'dark'
+                                  ? 'bg-gray-700 text-gray-400'
+                                  : 'bg-gray-100 text-gray-800'
                             }`}>
                               {garante.prestamosActivos || 0} activos
                             </span>
@@ -1127,122 +1748,200 @@ const Garantes = () => {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                               garante.activo 
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800'
+                                ? theme === 'dark'
+                                  ? 'bg-green-900/30 text-green-400'
+                                  : 'bg-green-100 text-green-800'
+                                : theme === 'dark'
+                                  ? 'bg-red-900/30 text-red-400'
+                                  : 'bg-red-100 text-red-800'
                             }`}>
                               {garante.activo ? 'Activo' : 'Inactivo'}
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <div className="flex justify-end space-x-2">
-                              <button
-                                onClick={() => handleViewGarante(garante)}
-                                className="text-blue-600 hover:text-blue-900"
+                            <div className="flex justify-end space-x-1">
+                              <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleViewGarante(garante);
+                                }}
+                                className={`p-2 rounded-lg transition-colors ${
+                                  theme === 'dark'
+                                    ? 'hover:bg-gray-700 text-blue-400'
+                                    : 'hover:bg-blue-50 text-blue-600'
+                                }`}
                                 title="Ver detalles"
                               >
-                                <EyeIcon className="h-5 w-5" />
-                              </button>
-                              <button
-                                onClick={() => handleEditGarante(garante)}
-                                className="text-yellow-600 hover:text-yellow-900"
+                                <EyeIcon className="h-4 w-4" />
+                              </motion.button>
+                              
+                              <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditGarante(garante);
+                                }}
+                                className={`p-2 rounded-lg transition-colors ${
+                                  theme === 'dark'
+                                    ? 'hover:bg-gray-700 text-yellow-400'
+                                    : 'hover:bg-yellow-50 text-yellow-600'
+                                }`}
                                 title="Editar"
                               >
-                                <PencilIcon className="h-5 w-5" />
-                              </button>
+                                <PencilIcon className="h-4 w-4" />
+                              </motion.button>
+                              
                               {garante.activo ? (
-                                <button
-                                  onClick={() => handleActivateGarante(garante.id, false)}
-                                  className="text-orange-600 hover:text-orange-900"
+                                <motion.button
+                                  whileHover={{ scale: 1.1 }}
+                                  whileTap={{ scale: 0.9 }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleActivateGarante(garante.id, false);
+                                  }}
+                                  className={`p-2 rounded-lg transition-colors ${
+                                    theme === 'dark'
+                                      ? 'hover:bg-gray-700 text-orange-400'
+                                      : 'hover:bg-orange-50 text-orange-600'
+                                  }`}
                                   title="Desactivar"
                                 >
-                                  <XCircleIcon className="h-5 w-5" />
-                                </button>
+                                  <XCircleIcon className="h-4 w-4" />
+                                </motion.button>
                               ) : (
-                                <button
-                                  onClick={() => handleActivateGarante(garante.id, true)}
-                                  className="text-green-600 hover:text-green-900"
+                                <motion.button
+                                  whileHover={{ scale: 1.1 }}
+                                  whileTap={{ scale: 0.9 }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleActivateGarante(garante.id, true);
+                                  }}
+                                  className={`p-2 rounded-lg transition-colors ${
+                                    theme === 'dark'
+                                      ? 'hover:bg-gray-700 text-green-400'
+                                      : 'hover:bg-green-50 text-green-600'
+                                  }`}
                                   title="Activar"
                                 >
-                                  <CheckCircleIcon className="h-5 w-5" />
-                                </button>
+                                  <CheckCircleIcon className="h-4 w-4" />
+                                </motion.button>
                               )}
-                              <button
-                                onClick={() => handleDeleteGarante(garante.id)}
-                                className="text-red-600 hover:text-red-900"
+                              
+                              <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteGarante(garante.id);
+                                }}
+                                className={`p-2 rounded-lg transition-colors ${
+                                  theme === 'dark'
+                                    ? 'hover:bg-gray-700 text-red-400'
+                                    : 'hover:bg-red-50 text-red-600'
+                                }`}
                                 title="Eliminar"
                               >
-                                <TrashIcon className="h-5 w-5" />
-                              </button>
+                                <TrashIcon className="h-4 w-4" />
+                              </motion.button>
                             </div>
                           </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                        </motion.tr>
+                      );
+                    })}
+                  </AnimatePresence>
+                </tbody>
+              </table>
 
-                {filteredGarantes.length === 0 && (
-                  <div className="text-center py-12">
-                    <UserGroupIcon className="mx-auto h-12 w-12 text-gray-400" />
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">No hay garantes</h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      {searchTerm || selectedClienteFilter !== 'todos' || filtroActivo !== 'todos'
-                        ? 'No se encontraron garantes con los filtros aplicados.'
-                        : 'Comienza agregando un nuevo garante.'}
-                    </p>
-                    <div className="mt-6">
-                      <button
-                        onClick={handleCreateGarante}
-                        className="btn-primary"
-                      >
-                        <PlusIcon className="h-4 w-4 mr-2" />
-                        Nuevo Garante
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+              {filteredGarantes.length === 0 && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-center py-12"
+                >
+                  <div className={`text-6xl mb-4 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-300'}`}>👥</div>
+                  <p className={`text-lg font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {searchTerm || selectedClienteFilter !== 'todos' || filtroActivo !== 'todos'
+                      ? 'No se encontraron garantes con los filtros aplicados.'
+                      : 'No hay garantes registrados.'}
+                  </p>
+                  {!searchTerm && selectedClienteFilter === 'todos' && filtroActivo === 'todos' && (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleCreateGarante}
+                      className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all inline-flex items-center space-x-2"
+                    >
+                      <PlusIcon className="h-5 w-5" />
+                      <span>Nuevo Garante</span>
+                    </motion.button>
+                  )}
+                </motion.div>
+              )}
+            </div>
+          </GlassCard>
 
           {/* Resumen de Clientes con Garantes */}
           {getClientesConGarantes().some(c => c.cantidadGarantes > 0) && (
-            <div className="bg-white shadow rounded-lg">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900">
-                  Resumen por Cliente
-                </h3>
-              </div>
+            <GlassCard>
               <div className="p-6">
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="p-2 bg-gradient-to-br from-purple-600 to-purple-800 rounded-lg shadow-lg">
+                    <UserGroupIcon className="h-5 w-5 text-white" />
+                  </div>
+                  <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    Resumen por Cliente
+                  </h3>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {getClientesConGarantes()
                     .filter(c => c.cantidadGarantes > 0)
                     .map(cliente => (
-                      <div key={cliente.id} className="border border-gray-200 rounded-lg p-4">
+                      <motion.div
+                        key={cliente.id}
+                        whileHover={{ scale: 1.02 }}
+                        className={`p-4 rounded-lg border-2 ${
+                          theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+                        }`}
+                      >
                         <div className="flex justify-between items-start">
                           <div>
-                            <h4 className="text-sm font-medium text-gray-900">{cliente.nombre}</h4>
-                            <p className="text-sm text-gray-500">
+                            <h4 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                              {cliente.nombre}
+                            </h4>
+                            <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
                               {cliente.cantidadGarantes} garante(s) activo(s)
                             </p>
                           </div>
-                          <span className="inline-flex px-2 py-1 text-xs font-semibold bg-blue-100 text-blue-800 rounded-full">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            theme === 'dark'
+                              ? 'bg-blue-900/30 text-blue-400'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
                             {cliente.prestamosActivos || 0} préstamos
                           </span>
                         </div>
-                        <div className="mt-3 space-y-2">
+                        
+                        <div className="mt-3 space-y-1">
                           {cliente.garantesActivos.map(garante => (
                             <div key={garante.id} className="flex justify-between items-center text-xs">
-                              <span className="text-gray-600">{garante.nombre}</span>
-                              <span className="text-gray-500">{garante.relacionCliente}</span>
+                              <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>
+                                {garante.nombre}
+                              </span>
+                              <span className={theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}>
+                                {garante.relacionCliente}
+                              </span>
                             </div>
                           ))}
                         </div>
-                      </div>
+                      </motion.div>
                     ))}
                 </div>
               </div>
-            </div>
+            </GlassCard>
           )}
         </>
       )}

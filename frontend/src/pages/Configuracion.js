@@ -1,78 +1,157 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CogIcon,
   BuildingStorefrontIcon,
-  UserIcon,
-  MapPinIcon,
-  PhoneIcon,
-  EnvelopeIcon,
-  PhotoIcon,
   CurrencyDollarIcon,
-  FolderIcon,
+  BellIcon,
   ShieldCheckIcon,
+  UserGroupIcon,
+  FolderIcon,
+  PaintBrushIcon,
+  XMarkIcon,
   CheckCircleIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  SparklesIcon,
+  ClockIcon,
+  RocketLaunchIcon
 } from '@heroicons/react/24/outline';
-import api from '../services/api';
+import { useTheme } from '../context/ThemeContext'; 
+import { useAuth } from '../context/AuthContext'; 
 
+// Importar las pestañas desde la carpeta Configuracion/
+import Empresa from './Configuracion/Empresa.js';
+import Finanzas from './Configuracion/Finanzas.js';
+import Notificaciones from './Configuracion/Notificaciones.js';
+import Seguridad from './Configuracion/Seguridad.js';
+import Apariencia from './Configuracion/Apariencia.js';
+import Roles from './Configuracion/Roles.js';
+import Backup from './Configuracion/Backup.js';
+
+// ============================================
+// COMPONENTE DE SKELETON LOADER
+// ============================================
+const ConfigSkeleton = () => (
+  <div className="space-y-6">
+    <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded w-1/4 animate-pulse"></div>
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {[1, 2, 3, 4].map(i => (
+        <div key={i} className="h-24 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse"></div>
+      ))}
+    </div>
+    <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse"></div>
+  </div>
+);
+
+// ============================================
+// COMPONENTE DE TARJETA CON EFECTO GLASSMORPHISM
+// ============================================
+const GlassCard = ({ children, className = '' }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.3 }}
+    className={`bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-xl shadow-xl border border-red-600/20 hover:border-red-600/40 transition-all duration-300 ${className}`}
+  >
+    {children}
+  </motion.div>
+);
+
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
 const Configuracion = () => {
   const [configuracion, setConfiguracion] = useState(null);
+  const [originalConfig, setOriginalConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [activeTab, setActiveTab] = useState('empresa');
+  const [showExitWarning, setShowExitWarning] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
+  
+  const { theme } = useTheme();
+  const { user } = useAuth();
 
-  useEffect(() => {
-    fetchConfiguracion();
-  }, []);
-
-  const fetchConfiguracion = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      // Por ahora usamos datos de ejemplo
-      const mockConfiguracion = {
-        empresaNombre: 'EYS Inversiones',
-        dueno: 'Erick Ysabel',
-        ubicacion: 'Santo Domingo, República Dominicana',
-        numero: '809-123-4567',
-        correo: 'info@eysinversiones.com',
-        logoUrl: '',
-        moneda: 'DOP',
-        capitalDisponible: 300000,
-        tipoCarga: 'manual',
-        monedasDisponibles: ['DOP', 'USD'],
-        backupFolder: '',
-        sesionTiempo: 60,
-        fechaHoraModificacion: new Date().toISOString(),
-        colores: {
-          primario: '#DC2626',
-          secundario: '#000000'
-        },
-        notificaciones: {
-          recordatoriosPago: true,
-          alertasMora: true,
-          confirmacionesPago: true,
-          notificacionesSolicitudes: true
-        },
-        seguridad: {
-          requiereVerificacionEmail: false,
-          intentosLoginMaximos: 5,
-          longitudMinimaPassword: 6
-        }
-      };
-      setConfiguracion(mockConfiguracion);
-    } catch (error) {
-      console.error('Error fetching configuration:', error);
-      setError('Error al cargar la configuración');
-    } finally {
-      setLoading(false);
+  // Configuración por defecto
+  const mockConfiguracion = {
+    empresaNombre: 'EYS Inversiones',
+    dueno: user?.nombre || 'Erick Ysabel',
+    ubicacion: 'Santo Domingo, República Dominicana',
+    numero: '809-123-4567',
+    correo: 'info@eysinversiones.com',
+    sitioWeb: 'https://www.eysinversiones.com',
+    rnc: '123-456789-0',
+    logoUrl: '',
+    monedaPrincipal: 'DOP',
+    monedas: [
+      { codigo: 'DOP', nombre: 'Peso Dominicano', capital: 300000, activa: true },
+      { codigo: 'USD', nombre: 'Dólar Americano', capital: 10000, activa: true },
+      { codigo: 'EUR', nombre: 'Euro', capital: 5000, activa: false }
+    ],
+    tipoCarga: 'manual',
+    sesionTiempo: 60,
+    fechaHoraModificacion: new Date().toISOString(),
+    colores: {
+      primario: '#DC2626',
+      secundario: '#000000'
+    },
+    notificaciones: {
+      recordatoriosPago: true,
+      alertasMora: true,
+      confirmacionesPago: true,
+      notificacionesSolicitudes: true,
+      emailReportes: false,
+      smsAlertas: false
+    },
+    seguridad: {
+      requiereVerificacionEmail: false,
+      intentosLoginMaximos: 5,
+      longitudMinimaPassword: 6,
+      autenticacionDosFactores: false,
+      sesionUnica: true
+    },
+    backup: {
+      automatico: true,
+      frecuencia: 'diario',
+      hora: '02:00',
+      retencionDias: 7,
+      comprimir: true,
+      googleDrive: {
+        enabled: false,
+        folderId: '',
+        accessToken: ''
+      }
     }
   };
 
-  const handleInputChange = (section, field, value) => {
+  // Cargar configuración guardada
+  useEffect(() => {
+    const savedConfig = localStorage.getItem('empresaConfig');
+    if (savedConfig) {
+      const parsedConfig = JSON.parse(savedConfig);
+      setConfiguracion(parsedConfig);
+      setOriginalConfig(JSON.parse(JSON.stringify(parsedConfig)));
+      
+      if (parsedConfig.logoUrl) {
+        window.dispatchEvent(new CustomEvent('logoActualizado', { detail: parsedConfig.logoUrl }));
+      }
+      if (parsedConfig.empresaNombre) {
+        window.dispatchEvent(new CustomEvent('empresaNombreActualizado', { detail: parsedConfig.empresaNombre }));
+      }
+    } else {
+      setConfiguracion(mockConfiguracion);
+      setOriginalConfig(JSON.parse(JSON.stringify(mockConfiguracion)));
+    }
+    setLoading(false);
+  }, []);
+
+  // Función para actualizar configuración
+  const handleInputChange = useCallback((section, field, value) => {
     setConfiguracion(prev => {
+      if (!prev) return prev;
+      
       if (section) {
         return {
           ...prev,
@@ -88,615 +167,333 @@ const Configuracion = () => {
         };
       }
     });
-  };
+  }, []);
 
+  // Guardar configuración
   const handleSaveConfiguracion = async () => {
     try {
       setSaving(true);
       setError('');
       setSuccess('');
       
-      // Validaciones básicas
       if (!configuracion.empresaNombre.trim()) {
         setError('El nombre de la empresa es requerido');
-        return;
-      }
-
-      if (!configuracion.moneda) {
-        setError('La moneda principal es requerida');
-        return;
-      }
-
-      // En un sistema real: await api.put('/configuracion', configuracion);
-      
-      // Simular guardado
-      setTimeout(() => {
-        setSuccess('Configuración guardada exitosamente');
         setSaving(false);
-        
-        // Limpiar mensaje de éxito después de 3 segundos
-        setTimeout(() => setSuccess(''), 3000);
-      }, 1000);
+        return;
+      }
 
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      localStorage.setItem('empresaConfig', JSON.stringify(configuracion));
+      
+      if (configuracion.colores) {
+        document.documentElement.style.setProperty('--color-primario', configuracion.colores.primario);
+        document.documentElement.style.setProperty('--color-secundario', configuracion.colores.secundario);
+      }
+
+      if (configuracion.logoUrl) {
+        localStorage.setItem('empresaLogo', configuracion.logoUrl);
+        window.dispatchEvent(new CustomEvent('logoActualizado', { detail: configuracion.logoUrl }));
+      }
+      
+      if (configuracion.empresaNombre) {
+        localStorage.setItem('empresaNombre', configuracion.empresaNombre);
+        window.dispatchEvent(new CustomEvent('empresaNombreActualizado', { detail: configuracion.empresaNombre }));
+      }
+
+      setConfiguracion(prev => ({
+        ...prev,
+        fechaHoraModificacion: new Date().toISOString()
+      }));
+
+      setOriginalConfig(JSON.parse(JSON.stringify(configuracion)));
+      setSuccess('Configuración guardada exitosamente');
+      
+      setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       console.error('Error saving configuration:', error);
       setError(error.message || 'Error al guardar la configuración');
+    } finally {
       setSaving(false);
     }
   };
 
-  const handleResetConfiguracion = () => {
-    if (window.confirm('¿Estás seguro de que quieres restaurar la configuración por defecto? Se perderán todos los cambios no guardados.')) {
-      fetchConfiguracion();
-      setSuccess('Configuración restaurada a los valores por defecto');
-      setTimeout(() => setSuccess(''), 3000);
+  // Cancelar cambios
+  const handleCancelChanges = () => {
+    setConfiguracion(JSON.parse(JSON.stringify(originalConfig)));
+    setShowExitWarning(false);
+  };
+
+  // Navegar entre pestañas
+  const handleNavigate = (newTab) => {
+    if (JSON.stringify(configuracion) !== JSON.stringify(originalConfig)) {
+      setPendingAction(() => () => setActiveTab(newTab));
+      setShowExitWarning(true);
+    } else {
+      setActiveTab(newTab);
     }
   };
 
   const tabs = [
     { id: 'empresa', name: 'Empresa', icon: BuildingStorefrontIcon },
     { id: 'finanzas', name: 'Finanzas', icon: CurrencyDollarIcon },
-    { id: 'notificaciones', name: 'Notificaciones', icon: EnvelopeIcon },
+    { id: 'notificaciones', name: 'Notificaciones', icon: BellIcon },
     { id: 'seguridad', name: 'Seguridad', icon: ShieldCheckIcon },
-    { id: 'backup', name: 'Backup', icon: FolderIcon }
+    { id: 'roles', name: 'Roles y Permisos', icon: UserGroupIcon },
+    { id: 'backup', name: 'Backup', icon: FolderIcon },
+    { id: 'apariencia', name: 'Apariencia', icon: PaintBrushIcon }
   ];
 
-  const ConfiguracionEmpresa = () => (
-    <div className="space-y-6">
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">Información de la Empresa</h3>
-        </div>
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Nombre de la Empresa *
-              </label>
-              <input
-                type="text"
-                value={configuracion.empresaNombre}
-                onChange={(e) => handleInputChange(null, 'empresaNombre', e.target.value)}
-                className="input-primary"
-                placeholder="EYS Inversiones"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Propietario/Dueño
-              </label>
-              <input
-                type="text"
-                value={configuracion.dueno}
-                onChange={(e) => handleInputChange(null, 'dueno', e.target.value)}
-                className="input-primary"
-                placeholder="Nombre del propietario"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Ubicación
-              </label>
-              <input
-                type="text"
-                value={configuracion.ubicacion}
-                onChange={(e) => handleInputChange(null, 'ubicacion', e.target.value)}
-                className="input-primary"
-                placeholder="Dirección de la empresa"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Teléfono
-              </label>
-              <input
-                type="text"
-                value={configuracion.numero}
-                onChange={(e) => handleInputChange(null, 'numero', e.target.value)}
-                className="input-primary"
-                placeholder="809-123-4567"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Correo Electrónico
-              </label>
-              <input
-                type="email"
-                value={configuracion.correo}
-                onChange={(e) => handleInputChange(null, 'correo', e.target.value)}
-                className="input-primary"
-                placeholder="info@empresa.com"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                URL del Logo
-              </label>
-              <input
-                type="url"
-                value={configuracion.logoUrl}
-                onChange={(e) => handleInputChange(null, 'logoUrl', e.target.value)}
-                className="input-primary"
-                placeholder="https://ejemplo.com/logo.png"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Ingresa la URL de la imagen del logo de tu empresa
-              </p>
-            </div>
-          </div>
-
-          {/* Vista previa del logo */}
-          {configuracion.logoUrl && (
-            <div className="border border-gray-200 rounded-lg p-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Vista Previa del Logo
-              </label>
-              <div className="flex items-center space-x-4">
-                <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <img 
-                    src={configuracion.logoUrl} 
-                    alt="Logo preview" 
-                    className="max-w-full max-h-full object-contain"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                      e.target.nextSibling.style.display = 'block';
-                    }}
-                  />
-                  <PhotoIcon className="h-8 w-8 text-gray-400 hidden" />
-                </div>
-                <div className="text-sm text-gray-600">
-                  <div className="font-medium">{configuracion.empresaNombre}</div>
-                  <div>Aparecerá en el sidebar y reportes</div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Colores de la marca */}
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">Colores de la Marca</h3>
-        </div>
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Color Primario
-              </label>
-              <div className="flex items-center space-x-3">
-                <input
-                  type="color"
-                  value={configuracion.colores.primario}
-                  onChange={(e) => handleInputChange('colores', 'primario', e.target.value)}
-                  className="w-12 h-12 rounded cursor-pointer"
-                />
-                <input
-                  type="text"
-                  value={configuracion.colores.primario}
-                  onChange={(e) => handleInputChange('colores', 'primario', e.target.value)}
-                  className="input-primary flex-1 font-mono text-sm"
-                  placeholder="#DC2626"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Color principal de la aplicación (botones, encabezados)
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Color Secundario
-              </label>
-              <div className="flex items-center space-x-3">
-                <input
-                  type="color"
-                  value={configuracion.colores.secundario}
-                  onChange={(e) => handleInputChange('colores', 'secundario', e.target.value)}
-                  className="w-12 h-12 rounded cursor-pointer"
-                />
-                <input
-                  type="text"
-                  value={configuracion.colores.secundario}
-                  onChange={(e) => handleInputChange('colores', 'secundario', e.target.value)}
-                  className="input-primary flex-1 font-mono text-sm"
-                  placeholder="#000000"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Color secundario (textos, bordes)
-              </p>
-            </div>
-          </div>
-
-          {/* Vista previa de colores */}
-          <div className="mt-4 p-4 border border-gray-200 rounded-lg">
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Vista Previa
-            </label>
-            <div className="flex space-x-4">
-              <div className="flex-1">
-                <div 
-                  className="h-10 rounded-lg flex items-center justify-center text-white font-medium mb-2"
-                  style={{ backgroundColor: configuracion.colores.primario }}
-                >
-                  Botón Primario
-                </div>
-                <div className="text-xs text-center text-gray-600">Primario</div>
-              </div>
-              <div className="flex-1">
-                <div 
-                  className="h-10 rounded-lg flex items-center justify-center text-white font-medium mb-2"
-                  style={{ backgroundColor: configuracion.colores.secundario }}
-                >
-                  Texto Secundario
-                </div>
-                <div className="text-xs text-center text-gray-600">Secundario</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const ConfiguracionFinanzas = () => (
-    <div className="space-y-6">
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">Configuración Financiera</h3>
-        </div>
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Moneda Principal *
-              </label>
-              <select
-                value={configuracion.moneda}
-                onChange={(e) => handleInputChange(null, 'moneda', e.target.value)}
-                className="input-primary"
-              >
-                <option value="DOP">Peso Dominicano (DOP)</option>
-                <option value="USD">Dólar Americano (USD)</option>
-                <option value="EUR">Euro (EUR)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Capital Disponible (RD$)
-              </label>
-              <input
-                type="number"
-                value={configuracion.capitalDisponible}
-                onChange={(e) => handleInputChange(null, 'capitalDisponible', parseInt(e.target.value) || 0)}
-                className="input-primary"
-                placeholder="300000"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Tipo de Carga
-              </label>
-              <select
-                value={configuracion.tipoCarga}
-                onChange={(e) => handleInputChange(null, 'tipoCarga', e.target.value)}
-                className="input-primary"
-              >
-                <option value="manual">Manual</option>
-                <option value="automatica">Automática</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Tiempo de Sesión (minutos)
-              </label>
-              <input
-                type="number"
-                value={configuracion.sesionTiempo}
-                onChange={(e) => handleInputChange(null, 'sesionTiempo', parseInt(e.target.value) || 60)}
-                className="input-primary"
-                placeholder="60"
-                min="5"
-                max="480"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Monedas Disponibles
-            </label>
-            <div className="space-y-2">
-              {configuracion.monedasDisponibles.map((moneda, index) => (
-                <div key={index} className="flex items-center space-x-2">
-                  <div className="w-4 h-4 rounded border border-gray-300"></div>
-                  <span className="text-sm text-gray-700">{moneda}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const ConfiguracionNotificaciones = () => (
-    <div className="bg-white shadow rounded-lg">
-      <div className="px-6 py-4 border-b border-gray-200">
-        <h3 className="text-lg font-medium text-gray-900">Configuración de Notificaciones</h3>
-      </div>
-      <div className="p-6 space-y-4">
-        <div className="space-y-4">
-          <label className="flex items-center justify-between">
-            <div>
-              <span className="text-sm font-medium text-gray-700">Recordatorios de Pago</span>
-              <p className="text-xs text-gray-500">Enviar recordatorios automáticos de pagos pendientes</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={configuracion.notificaciones.recordatoriosPago}
-              onChange={(e) => handleInputChange('notificaciones', 'recordatoriosPago', e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-          </label>
-
-          <label className="flex items-center justify-between">
-            <div>
-              <span className="text-sm font-medium text-gray-700">Alertas de Mora</span>
-              <p className="text-xs text-gray-500">Notificar cuando un préstamo entre en estado de mora</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={configuracion.notificaciones.alertasMora}
-              onChange={(e) => handleInputChange('notificaciones', 'alertasMora', e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-          </label>
-
-          <label className="flex items-center justify-between">
-            <div>
-              <span className="text-sm font-medium text-gray-700">Confirmaciones de Pago</span>
-              <p className="text-xs text-gray-500">Enviar confirmación cuando se registre un pago</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={configuracion.notificaciones.confirmacionesPago}
-              onChange={(e) => handleInputChange('notificaciones', 'confirmacionesPago', e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-          </label>
-
-          <label className="flex items-center justify-between">
-            <div>
-              <span className="text-sm font-medium text-gray-700">Notificaciones de Solicitudes</span>
-              <p className="text-xs text-gray-500">Recibir notificaciones de nuevas solicitudes de préstamo</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={configuracion.notificaciones.notificacionesSolicitudes}
-              onChange={(e) => handleInputChange('notificaciones', 'notificacionesSolicitudes', e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-          </label>
-        </div>
-      </div>
-    </div>
-  );
-
-  const ConfiguracionSeguridad = () => (
-    <div className="bg-white shadow rounded-lg">
-      <div className="px-6 py-4 border-b border-gray-200">
-        <h3 className="text-lg font-medium text-gray-900">Configuración de Seguridad</h3>
-      </div>
-      <div className="p-6 space-y-4">
-        <div className="space-y-4">
-          <label className="flex items-center justify-between">
-            <div>
-              <span className="text-sm font-medium text-gray-700">Requerir Verificación de Email</span>
-              <p className="text-xs text-gray-500">Los usuarios deben verificar su email al registrarse</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={configuracion.seguridad.requiereVerificacionEmail}
-              onChange={(e) => handleInputChange('seguridad', 'requiereVerificacionEmail', e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-          </label>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Intentos Máximos de Login
-            </label>
-            <input
-              type="number"
-              value={configuracion.seguridad.intentosLoginMaximos}
-              onChange={(e) => handleInputChange('seguridad', 'intentosLoginMaximos', parseInt(e.target.value) || 5)}
-              className="input-primary"
-              min="1"
-              max="10"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Número máximo de intentos fallidos antes de bloquear la cuenta
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Longitud Mínima de Contraseña
-            </label>
-            <input
-              type="number"
-              value={configuracion.seguridad.longitudMinimaPassword}
-              onChange={(e) => handleInputChange('seguridad', 'longitudMinimaPassword', parseInt(e.target.value) || 6)}
-              className="input-primary"
-              min="6"
-              max="20"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Longitud mínima requerida para las contraseñas de usuarios
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const ConfiguracionBackup = () => (
-    <div className="space-y-6">
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">Configuración de Backup</h3>
-        </div>
-        <div className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Carpeta de Backup
-            </label>
-            <input
-              type="text"
-              value={configuracion.backupFolder}
-              onChange={(e) => handleInputChange(null, 'backupFolder', e.target.value)}
-              className="input-primary"
-              placeholder="/ruta/backup"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Ruta donde se guardarán las copias de seguridad automáticas
-            </p>
-          </div>
-
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex">
-              <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400 mr-2" />
-              <div>
-                <h4 className="text-sm font-medium text-yellow-800">Información de Backup</h4>
-                <p className="text-sm text-yellow-700 mt-1">
-                  Las copias de seguridad automáticas se realizan diariamente a las 2:00 AM.
-                  Se mantienen los últimos 7 días de backups.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex space-x-4">
-            <button className="btn-primary">
-              Realizar Backup Manual
-            </button>
-            <button className="btn-secondary">
-              Restaurar desde Backup
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
   if (loading || !configuracion) {
-    return (
-      <div className="flex items-center justify-center min-h-64">
-        <div className="text-gray-600">Cargando configuración...</div>
-      </div>
-    );
+    return <ConfigSkeleton />;
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Configuración</h1>
-          <p className="text-gray-600">Configura los datos y preferencias del sistema</p>
+    <div className="space-y-8 p-6">
+      {/* Header Principal */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden"
+      >
+        <div className="absolute inset-0 bg-gradient-to-r from-red-600/20 to-red-800/20 rounded-2xl blur-3xl"></div>
+        <div className="relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-red-600/20">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
+            <div className="flex items-center space-x-4">
+              <div className="p-4 bg-gradient-to-br from-red-600 to-red-800 rounded-2xl shadow-xl">
+                <CogIcon className="h-8 w-8 text-white animate-spin-slow" />
+              </div>
+              <div>
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-red-600 to-red-800 bg-clip-text text-transparent">
+                  Configuración
+                </h1>
+                <p className="text-gray-600 dark:text-gray-400 mt-1 flex items-center">
+                  <SparklesIcon className="h-4 w-4 text-yellow-500 mr-2" />
+                  Personaliza todos los aspectos del sistema
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex space-x-4">
+              {JSON.stringify(configuracion) !== JSON.stringify(originalConfig) && (
+                <motion.button
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  onClick={() => setShowExitWarning(true)}
+                  className="px-6 py-3 bg-gradient-to-r from-yellow-600 to-yellow-700 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center space-x-2"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                  <span>Cancelar Cambios</span>
+                </motion.button>
+              )}
+              
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleSaveConfiguracion}
+                disabled={saving || JSON.stringify(configuracion) === JSON.stringify(originalConfig)}
+                className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? (
+                  <>
+                    <CogIcon className="h-5 w-5 animate-spin" />
+                    <span>Guardando...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircleIcon className="h-5 w-5" />
+                    <span>Guardar Cambios</span>
+                  </>
+                )}
+              </motion.button>
+            </div>
+          </div>
         </div>
-        <div className="flex space-x-3">
-          <button
-            onClick={handleResetConfiguracion}
-            className="btn-secondary"
-          >
-            Restablecer
-          </button>
-          <button
-            onClick={handleSaveConfiguracion}
-            disabled={saving}
-            className="btn-primary flex items-center space-x-2"
-          >
-            {saving ? (
-              <>
-                <CogIcon className="h-5 w-5 animate-spin" />
-                <span>Guardando...</span>
-              </>
-            ) : (
-              <>
-                <CheckCircleIcon className="h-5 w-5" />
-                <span>Guardar Cambios</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+      </motion.div>
 
-      {/* Mensajes */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      )}
+      {/* Modal de advertencia */}
+      <AnimatePresence>
+        {showExitWarning && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md mx-4"
+            >
+              <ExclamationTriangleIcon className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">
+                ¿Salir sin guardar?
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-center mb-6">
+                Hay cambios sin guardar. ¿Estás seguro de que quieres salir?
+              </p>
+              <div className="flex space-x-4">
+                <button
+                  onClick={handleCancelChanges}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all"
+                >
+                  Descartar Cambios
+                </button>
+                <button
+                  onClick={() => setShowExitWarning(false)}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-gray-600 to-gray-700 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all"
+                >
+                  Seguir Editando
+                </button>
+              </div>
+              {pendingAction && (
+                <button
+                  onClick={() => {
+                    pendingAction();
+                    setShowExitWarning(false);
+                    setPendingAction(null);
+                  }}
+                  className="mt-3 w-full px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all"
+                >
+                  Guardar y Continuar
+                </button>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
-          {success}
-        </div>
-      )}
+      {/* Mensajes de éxito/error */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border-2 border-red-600/20 text-red-700 dark:text-red-400 px-6 py-4 rounded-xl shadow-lg"
+          >
+            <div className="flex items-center space-x-3">
+              <ExclamationTriangleIcon className="h-5 w-5" />
+              <span>{error}</span>
+            </div>
+          </motion.div>
+        )}
+
+        {success && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-2 border-green-600/20 text-green-700 dark:text-green-400 px-6 py-4 rounded-xl shadow-lg"
+          >
+            <div className="flex items-center space-x-3">
+              <CheckCircleIcon className="h-5 w-5" />
+              <span>{success}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Tabs */}
-      <div className="bg-white shadow-sm rounded-lg">
-        <div className="border-b border-gray-200">
-          <nav className="flex space-x-8 px-6">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === tab.id
-                      ? 'border-primary-500 text-primary-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  <Icon className="h-5 w-5" />
-                  <span>{tab.name}</span>
-                </button>
-              );
-            })}
-          </nav>
+      <GlassCard className="p-2">
+        <div className="flex flex-wrap justify-center gap-2">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            
+            return (
+              <motion.button
+                key={tab.id}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => handleNavigate(tab.id)}
+                className={`relative overflow-hidden group flex-1 min-w-[100px] sm:min-w-[120px]`}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="activeTab"
+                    className="absolute inset-0 bg-gradient-to-r from-red-600 to-red-800 rounded-xl shadow-lg"
+                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                  />
+                )}
+                <div className={`relative z-10 flex flex-col items-center py-2 sm:py-3 px-2 sm:px-4 rounded-xl transition-colors ${
+                  isActive 
+                    ? 'text-white' 
+                    : 'text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400'
+                }`}>
+                  <Icon className="h-4 w-4 sm:h-5 sm:w-5 mb-1" />
+                  <span className="text-xs sm:text-sm font-medium">{tab.name}</span>
+                </div>
+              </motion.button>
+            );
+          })}
         </div>
-      </div>
+      </GlassCard>
 
-      {/* Contenido de la pestaña activa */}
-      <div>
-        {activeTab === 'empresa' && <ConfiguracionEmpresa />}
-        {activeTab === 'finanzas' && <ConfiguracionFinanzas />}
-        {activeTab === 'notificaciones' && <ConfiguracionNotificaciones />}
-        {activeTab === 'seguridad' && <ConfiguracionSeguridad />}
-        {activeTab === 'backup' && <ConfiguracionBackup />}
-      </div>
+      {/* Contenido de las pestañas */}
+      <AnimatePresence mode="wait">
+        {activeTab === 'empresa' && (
+          <Empresa
+            key="empresa"
+            configuracion={configuracion}
+            handleInputChange={handleInputChange}
+          />
+        )}
+        {activeTab === 'finanzas' && (
+          <Finanzas
+            key="finanzas"
+            configuracion={configuracion}
+            handleInputChange={handleInputChange}
+          />
+        )}
+        {activeTab === 'notificaciones' && (
+          <Notificaciones
+            key="notificaciones"
+            configuracion={configuracion}
+            handleInputChange={handleInputChange}
+          />
+        )}
+        {activeTab === 'seguridad' && (
+          <Seguridad
+            key="seguridad"
+            configuracion={configuracion}
+            handleInputChange={handleInputChange}
+          />
+        )}
+        {activeTab === 'roles' && (
+          <Roles key="roles" />
+        )}
+        {activeTab === 'backup' && (
+          <Backup key="backup" />
+        )}
+        {activeTab === 'apariencia' && (
+          <Apariencia
+            key="apariencia"
+            configuracion={configuracion}
+            handleInputChange={handleInputChange}
+          />
+        )}
+      </AnimatePresence>
 
-      {/* Información de última modificación */}
-      <div className="bg-gray-50 rounded-lg p-4">
-        <div className="text-sm text-gray-600">
-          Última modificación: {new Date(configuracion.fechaHoraModificacion).toLocaleString()}
+      {/* Footer */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700"
+      >
+        <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+          <ClockIcon className="h-4 w-4" />
+          <span>Última modificación:</span>
+          <span className="font-mono font-medium">
+            {new Date(configuracion?.fechaHoraModificacion || Date.now()).toLocaleString()}
+          </span>
         </div>
-      </div>
+        <div className="flex items-center space-x-2">
+          <RocketLaunchIcon className="h-4 w-4 text-red-600 animate-pulse" />
+          <span className="text-xs text-gray-500 dark:text-gray-500">v2.0.0</span>
+        </div>
+      </motion.div>
     </div>
   );
 };

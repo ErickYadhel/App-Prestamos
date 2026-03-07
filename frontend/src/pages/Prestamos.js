@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   PlusIcon, 
   MagnifyingGlassIcon,
@@ -13,13 +14,276 @@ import {
   CalendarIcon,
   DocumentChartBarIcon,
   ArrowTrendingUpIcon,
-  BanknotesIcon
+  BanknotesIcon,
+  SparklesIcon,
+  RocketLaunchIcon,
+  ArrowPathIcon,
+  XMarkIcon,
+  FunnelIcon,
+  ChartBarIcon,
+  ShieldCheckIcon,
+  BellAlertIcon
 } from '@heroicons/react/24/outline';
 import api from '../services/api';
+import { useTheme } from '../context/ThemeContext';
 import PrestamoForm from '../components/Prestamos/PrestamoForm';
 import PrestamoDetails from '../components/Prestamos/PrestamoDetails';
 import RegistrarPago from '../components/Prestamos/RegistrarPago';
 import { normalizeFirebaseData, firebaseTimestampToLocalString } from '../utils/firebaseUtils';
+
+// ============================================
+// COMPONENTE DE BORDE LUMINOSO
+// ============================================
+const BorderGlow = ({ children, isHovered }) => (
+  <div className="relative group">
+    <div className={`absolute -inset-0.5 bg-gradient-to-r from-red-600 via-red-500 to-red-600 rounded-xl blur opacity-0 transition-all duration-500 ${
+      isHovered ? 'opacity-75' : 'group-hover:opacity-50'
+    }`} />
+    <div className={`absolute -inset-0.5 bg-gradient-to-r from-red-600 via-red-500 to-red-600 rounded-xl blur-lg opacity-0 transition-all duration-700 ${
+      isHovered ? 'opacity-50' : 'group-hover:opacity-30'
+    }`} />
+    <div className="relative">
+      {children}
+    </div>
+  </div>
+);
+
+// ============================================
+// COMPONENTE DE TARJETA CON EFECTO GLASSMORPHISM
+// ============================================
+const GlassCard = ({ children, className = '' }) => {
+  const { theme } = useTheme();
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className={`bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-xl shadow-xl border border-red-600/20 hover:border-red-600/40 transition-all duration-300 ${className}`}
+    >
+      {children}
+    </motion.div>
+  );
+};
+
+// ============================================
+// COMPONENTE DE SKELETON LOADER
+// ============================================
+const PrestamosSkeleton = () => {
+  const { theme } = useTheme();
+  
+  return (
+    <div className="space-y-6">
+      {/* Header Skeleton */}
+      <div className="flex justify-between items-center">
+        <div>
+          <div className={`h-8 w-48 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
+          <div className={`h-4 w-64 rounded-lg mt-2 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
+        </div>
+        <div className="flex space-x-2">
+          <div className={`h-10 w-10 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
+          <div className={`h-10 w-10 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
+        </div>
+      </div>
+
+      {/* Stats Skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className={`h-24 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
+        ))}
+      </div>
+
+      {/* Table Skeleton */}
+      <div className={`h-96 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
+    </div>
+  );
+};
+
+// ============================================
+// COMPONENTE DE STATS CARD
+// ============================================
+const StatsCard = ({ icon: Icon, label, value, subValue, gradient, trend }) => {
+  const { theme } = useTheme();
+  const [isHovered, setIsHovered] = useState(false);
+
+  const gradientColors = {
+    green: 'from-green-600 to-green-800',
+    blue: 'from-blue-600 to-blue-800',
+    purple: 'from-purple-600 to-purple-800',
+    orange: 'from-orange-600 to-orange-800',
+    teal: 'from-teal-600 to-teal-800'
+  };
+
+  return (
+    <BorderGlow isHovered={isHovered}>
+      <motion.div
+        onHoverStart={() => setIsHovered(true)}
+        onHoverEnd={() => setIsHovered(false)}
+        className={`relative overflow-hidden rounded-xl p-5 ${
+          theme === 'dark' 
+            ? 'bg-gray-800/80 border-gray-700' 
+            : 'bg-white border-gray-200'
+        } border-2 hover:border-red-600/40 transition-all duration-300`}
+      >
+        <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${gradientColors[gradient]} opacity-10 rounded-full blur-3xl`} />
+        
+        <div className="relative flex items-start justify-between">
+          <div>
+            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+              {label}
+            </p>
+            <p className={`text-2xl font-bold mt-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+              {value}
+            </p>
+            <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'} mt-1`}>
+              {subValue}
+            </p>
+          </div>
+          <div className={`p-3 bg-gradient-to-br ${gradientColors[gradient]} rounded-xl shadow-lg`}>
+            <Icon className="h-6 w-6 text-white" />
+          </div>
+        </div>
+        
+        {trend && (
+          <div className="absolute bottom-3 right-3 flex items-center space-x-1">
+            <span className={`text-xs ${trend > 0 ? 'text-green-500' : 'text-red-500'}`}>
+              {trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%
+            </span>
+          </div>
+        )}
+      </motion.div>
+    </BorderGlow>
+  );
+};
+
+// ============================================
+// COMPONENTE DE FILTROS AVANZADOS
+// ============================================
+const AdvancedFilters = ({ isOpen, onClose, onFilterChange }) => {
+  const { theme } = useTheme();
+
+  if (!isOpen) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="mb-6"
+    >
+      <GlassCard>
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+              Filtros Avanzados
+            </h3>
+            <button
+              onClick={onClose}
+              className={`p-2 rounded-lg transition-colors ${
+                theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+              }`}
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                Estado
+              </label>
+              <select
+                className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                  theme === 'dark'
+                    ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                    : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                }`}
+              >
+                <option value="">Todos</option>
+                <option value="activo">Activo</option>
+                <option value="completado">Completado</option>
+                <option value="moroso">Moroso</option>
+              </select>
+            </div>
+
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                Rango de Monto
+              </label>
+              <select
+                className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                  theme === 'dark'
+                    ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                    : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                }`}
+              >
+                <option value="">Todos</option>
+                <option value="0-50000">0 - 50,000</option>
+                <option value="50000-100000">50,000 - 100,000</option>
+                <option value="100000+">100,000+</option>
+              </select>
+            </div>
+
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                Frecuencia
+              </label>
+              <select
+                className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                  theme === 'dark'
+                    ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                    : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                }`}
+              >
+                <option value="">Todas</option>
+                <option value="diario">Diario</option>
+                <option value="semanal">Semanal</option>
+                <option value="quincenal">Quincenal</option>
+                <option value="mensual">Mensual</option>
+              </select>
+            </div>
+
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                Prioridad
+              </label>
+              <select
+                className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                  theme === 'dark'
+                    ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                    : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                }`}
+              >
+                <option value="">Todas</option>
+                <option value="alta">Alta</option>
+                <option value="media">Media</option>
+                <option value="baja">Baja</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-3 mt-4">
+            <button
+              onClick={onClose}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                theme === 'dark'
+                  ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Cancelar
+            </button>
+            <button
+              className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all"
+            >
+              Aplicar Filtros
+            </button>
+          </div>
+        </div>
+      </GlassCard>
+    </motion.div>
+  );
+};
 
 const Prestamos = () => {
   const [prestamos, setPrestamos] = useState([]);
@@ -27,10 +291,12 @@ const Prestamos = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState('list');
   const [selectedPrestamo, setSelectedPrestamo] = useState(null);
   const [editingPrestamo, setEditingPrestamo] = useState(null);
   const [error, setError] = useState('');
+  const [hoveredRow, setHoveredRow] = useState(null);
   const [stats, setStats] = useState({
     totalPrestamos: 0,
     totalCapitalPrestado: 0,
@@ -40,6 +306,8 @@ const Prestamos = () => {
     prestamosCompletados: 0,
     prestamosMorosos: 0
   });
+
+  const { theme } = useTheme();
 
   useEffect(() => {
     fetchPrestamos();
@@ -240,17 +508,41 @@ const Prestamos = () => {
 
   const getEstadoBadge = (prestamo) => {
     const estados = {
-      activo: { color: 'bg-green-100 text-green-800 border border-green-200', icon: CheckCircleIcon, text: 'Activo' },
-      completado: { color: 'bg-blue-100 text-blue-800 border border-blue-200', icon: CheckCircleIcon, text: 'Completado' },
-      moroso: { color: 'bg-red-100 text-red-800 border border-red-200', icon: ExclamationTriangleIcon, text: 'Moroso' },
-      pendiente: { color: 'bg-yellow-100 text-yellow-800 border border-yellow-200', icon: ClockIcon, text: 'Pendiente' }
+      activo: { 
+        color: theme === 'dark' 
+          ? 'bg-green-900/30 text-green-400 border-green-700' 
+          : 'bg-green-100 text-green-800 border-green-200',
+        icon: CheckCircleIcon,
+        text: 'Activo' 
+      },
+      completado: { 
+        color: theme === 'dark' 
+          ? 'bg-blue-900/30 text-blue-400 border-blue-700' 
+          : 'bg-blue-100 text-blue-800 border-blue-200',
+        icon: CheckCircleIcon, 
+        text: 'Completado' 
+      },
+      moroso: { 
+        color: theme === 'dark' 
+          ? 'bg-red-900/30 text-red-400 border-red-700' 
+          : 'bg-red-100 text-red-800 border-red-200',
+        icon: ExclamationTriangleIcon, 
+        text: 'Moroso' 
+      },
+      pendiente: { 
+        color: theme === 'dark' 
+          ? 'bg-yellow-900/30 text-yellow-400 border-yellow-700' 
+          : 'bg-yellow-100 text-yellow-800 border-yellow-200',
+        icon: ClockIcon, 
+        text: 'Pendiente' 
+      }
     };
 
     const estado = estados[prestamo.estado] || estados.activo;
     const Icon = estado.icon;
 
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${estado.color}`}>
+      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border-2 ${estado.color}`}>
         <Icon className="h-3 w-3 mr-1" />
         {estado.text}
       </span>
@@ -347,356 +639,519 @@ const Prestamos = () => {
     );
   }
 
+  if (loading) {
+    return <PrestamosSkeleton />;
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Préstamos</h1>
-          <p className="text-gray-600">Dashboard completo para toma de decisiones</p>
-        </div>
-        <div className="flex space-x-3">
-          <button
-            onClick={() => setShowSearch(!showSearch)}
-            className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 p-3 rounded-lg transition-colors"
-            title="Buscar préstamos"
-          >
-            <MagnifyingGlassIcon className="h-5 w-5" />
-          </button>
-          <button
-            onClick={handleCreatePrestamo}
-            className="btn-primary flex items-center space-x-2 p-3"
-            title="Nuevo préstamo"
-          >
-            <PlusIcon className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
+      {/* Header Mejorado */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden"
+      >
+        <div className="absolute inset-0 bg-gradient-to-r from-red-600/20 to-red-800/20 rounded-2xl blur-3xl"></div>
+        <div className={`relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl shadow-2xl p-6 border border-red-600/20`}>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-gradient-to-br from-red-600 to-red-800 rounded-xl shadow-lg">
+                <SparklesIcon className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className={`text-2xl sm:text-3xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  Préstamos
+                </h1>
+                <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Dashboard completo para toma de decisiones
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2 w-full sm:w-auto">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowFilters(!showFilters)}
+                className={`p-3 rounded-lg transition-all ${
+                  showFilters
+                    ? 'bg-red-600 text-white'
+                    : theme === 'dark'
+                    ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+                title="Filtros avanzados"
+              >
+                <FunnelIcon className="h-5 w-5" />
+              </motion.button>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowSearch(!showSearch)}
+                className={`p-3 rounded-lg transition-all ${
+                  showSearch
+                    ? 'bg-red-600 text-white'
+                    : theme === 'dark'
+                    ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+                title="Buscar préstamos"
+              >
+                <MagnifyingGlassIcon className="h-5 w-5" />
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleCreatePrestamo}
+                className="p-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg shadow-lg hover:shadow-xl transition-all"
+                title="Nuevo préstamo"
+              >
+                <PlusIcon className="h-5 w-5" />
+              </motion.button>
+            </div>
+          </div>
         </div>
-      )}
+      </motion.div>
+
+      {/* Mensaje de error */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className={`p-4 rounded-xl border-2 flex items-start space-x-3 ${
+              theme === 'dark'
+                ? 'bg-red-900/30 border-red-700 text-red-400'
+                : 'bg-red-50 border-red-200 text-red-700'
+            }`}
+          >
+            <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0 mt-0.5" />
+            <p className="text-sm">{error}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Filtros Avanzados */}
+      <AnimatePresence>
+        {showFilters && (
+          <AdvancedFilters
+            isOpen={showFilters}
+            onClose={() => setShowFilters(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Search Bar */}
-      {showSearch && (
-        <div className="bg-white rounded-lg shadow-sm p-4 animate-fade-in">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
-            </div>
-            <input
-              type="text"
-              placeholder="Buscar por cliente, cédula o ID..."
-              className="input-primary pl-10"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              autoFocus
-            />
-            <button
-              onClick={() => setShowSearch(false)}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {showSearch && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+          >
+            <GlassCard>
+              <div className="p-4">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <MagnifyingGlassIcon className={`h-5 w-5 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Buscar por cliente, cédula o ID..."
+                    className={`w-full pl-10 pr-10 py-3 rounded-lg border-2 outline-none transition-all ${
+                      theme === 'dark'
+                        ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                        : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                    }`}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    autoFocus
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    >
+                      <XMarkIcon className={`h-5 w-5 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} hover:text-red-600 transition-colors`} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </GlassCard>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Stats Summary MEJORADO - MÁS INFORMACIÓN PARA DECISIONES */}
+      {/* Stats Summary MEJORADO */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-          <div className="flex items-center">
-            <BanknotesIcon className="h-8 w-8 text-green-600" />
-            <div className="ml-3">
-              <p className="text-sm font-medium text-gray-600">Capital Invertido</p>
-              <p className="text-xl font-bold text-gray-900">
-                RD$ {stats.totalCapitalPrestado.toLocaleString()}
-              </p>
-              <p className="text-xs text-gray-500">{stats.totalPrestamos} préstamos</p>
-            </div>
-          </div>
-        </div>
+        <StatsCard
+          icon={BanknotesIcon}
+          label="Capital Invertido"
+          value={`RD$ ${stats.totalCapitalPrestado.toLocaleString()}`}
+          subValue={`${stats.totalPrestamos} préstamos`}
+          gradient="green"
+        />
         
-        <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-          <div className="flex items-center">
-            <ArrowTrendingUpIcon className="h-8 w-8 text-blue-600" />
-            <div className="ml-3">
-              <p className="text-sm font-medium text-gray-600">Interés Generado</p>
-              <p className="text-xl font-bold text-gray-900">
-                RD$ {stats.totalInteresGenerado.toLocaleString()}
-              </p>
-              <p className="text-xs text-gray-500">
-                ROI: {stats.totalCapitalPrestado > 0 ? ((stats.totalInteresGenerado / stats.totalCapitalPrestado) * 100).toFixed(1) : 0}%
-              </p>
-            </div>
-          </div>
-        </div>
+        <StatsCard
+          icon={ArrowTrendingUpIcon}
+          label="Interés Generado"
+          value={`RD$ ${stats.totalInteresGenerado.toLocaleString()}`}
+          subValue={`ROI: ${stats.totalCapitalPrestado > 0 ? ((stats.totalInteresGenerado / stats.totalCapitalPrestado) * 100).toFixed(1) : 0}%`}
+          gradient="blue"
+        />
 
-        <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-          <div className="flex items-center">
-            <DocumentChartBarIcon className="h-8 w-8 text-purple-600" />
-            <div className="ml-3">
-              <p className="text-sm font-medium text-gray-600">Estado Portfolio</p>
-              <p className="text-xl font-bold text-gray-900">
-                {stats.prestamosActivos} activos
-              </p>
-              <p className="text-xs text-gray-500">
-                {stats.prestamosCompletados} completados • {stats.prestamosMorosos} morosos
-              </p>
-            </div>
-          </div>
-        </div>
+        <StatsCard
+          icon={DocumentChartBarIcon}
+          label="Estado Portfolio"
+          value={`${stats.prestamosActivos} activos`}
+          subValue={`${stats.prestamosCompletados} completados • ${stats.prestamosMorosos} morosos`}
+          gradient="purple"
+        />
 
-        <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-          <div className="flex items-center">
-            <CurrencyDollarIcon className="h-8 w-8 text-orange-600" />
-            <div className="ml-3">
-              <p className="text-sm font-medium text-gray-600">Recuperación</p>
-              <p className="text-xl font-bold text-gray-900">
-                RD$ {stats.totalCapitalRecuperado.toLocaleString()}
-              </p>
-              <p className="text-xs text-gray-500">
-                {stats.totalCapitalPrestado > 0 ? ((stats.totalCapitalRecuperado / stats.totalCapitalPrestado) * 100).toFixed(1) : 0}% recuperado
-              </p>
-            </div>
-          </div>
-        </div>
+        <StatsCard
+          icon={CurrencyDollarIcon}
+          label="Recuperación"
+          value={`RD$ ${stats.totalCapitalRecuperado.toLocaleString()}`}
+          subValue={`${stats.totalCapitalPrestado > 0 ? ((stats.totalCapitalRecuperado / stats.totalCapitalPrestado) * 100).toFixed(1) : 0}% recuperado`}
+          gradient="orange"
+        />
       </div>
 
       {/* Quick Actions Bar */}
-      <div className="bg-white rounded-lg shadow-sm p-4">
-        <div className="flex flex-wrap gap-2">
-          <span className="text-sm font-medium text-gray-700 mr-2">Acciones rápidas:</span>
-          <button 
-            onClick={() => setSearchTerm('')}
-            className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-full"
-          >
-            Todos ({stats.totalPrestamos})
-          </button>
-          <button 
-            onClick={() => setSearchTerm('')}
-            className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-3 py-1 rounded-full"
-          >
-            Activos ({stats.prestamosActivos})
-          </button>
-          <button 
-            onClick={() => setSearchTerm('')}
-            className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded-full"
-          >
-            Morosos ({stats.prestamosMorosos})
-          </button>
-        </div>
-      </div>
-
-      {/* Prestamos Table MEJORADA CON MÁS INFORMACIÓN */}
-      <div className="bg-white shadow rounded-lg">
-        {loading ? (
-          <div className="flex items-center justify-center p-8">
-            <div className="text-gray-600">Cargando préstamos...</div>
+      <GlassCard>
+        <div className="p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-sm font-medium mr-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+              Acciones rápidas:
+            </span>
+            <button className="px-3 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-xs hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+              Todos ({stats.totalPrestamos})
+            </button>
+            <button className="px-3 py-1 bg-green-200 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs hover:bg-green-300 dark:hover:bg-green-800/50 transition-colors">
+              Activos ({stats.prestamosActivos})
+            </button>
+            <button className="px-3 py-1 bg-red-200 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full text-xs hover:bg-red-300 dark:hover:bg-red-800/50 transition-colors">
+              Morosos ({stats.prestamosMorosos})
+            </button>
           </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Cliente / Contacto
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Inversión
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Progreso
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Rentabilidad
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Próximo Pago
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Estado
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredPrestamos.map((prestamo) => {
-                    const contacto = getContactoCliente(prestamo);
-                    const porcentajeRecuperacion = calcularPorcentajeRecuperacion(prestamo);
-                    const roi = calcularROI(prestamo);
-                    const prioridad = getPrioridadPrestamo(prestamo);
-                    
-                    return (
-                      <tr key={prestamo.id} className={`hover:bg-gray-50 ${
-                        prioridad === 'alta' ? 'bg-green-50' : 
-                        prioridad === 'media' ? 'bg-yellow-50' : ''
-                      }`}>
-                        <td className="px-4 py-4">
-                          <div className="text-sm font-semibold text-gray-900">
-                            {prestamo.clienteNombre}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {getCedulaCliente(prestamo)}
-                          </div>
-                          <div className="text-xs text-gray-400 mt-1">
-                            📞 {contacto.celular}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            RD$ {prestamo.montoPrestado?.toLocaleString()}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            Restante: RD$ {prestamo.capitalRestante?.toLocaleString()}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {prestamo.frecuencia} • {prestamo.interesPercent}%
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-16 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-green-600 h-2 rounded-full" 
-                                style={{ width: `${Math.min(porcentajeRecuperacion, 100)}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-sm font-medium text-gray-700">
-                              {porcentajeRecuperacion.toFixed(1)}%
-                            </span>
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            RD$ {(prestamo.montoPrestado - prestamo.capitalRestante).toLocaleString()} pagado
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {roi.toFixed(1)}% ROI
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            RD$ {calcularInteresTotalGenerado(prestamo).toLocaleString()}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            Quincena: RD$ {calcularInteresQuincenal(prestamo).toLocaleString()}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="text-sm text-gray-900">
-                            {calcularProximoPago(prestamo)}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {prestamo.frecuencia}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          {getEstadoBadge(prestamo)}
-                          {prioridad === 'alta' && (
-                            <div className="text-xs text-green-600 mt-1">🔄 Alta prioridad</div>
-                          )}
-                        </td>
-                        <td className="px-4 py-4 text-right text-sm font-medium">
-                          <div className="flex justify-end space-x-1">
-                            <button
-                              onClick={() => handleEnviarWhatsApp(prestamo)}
-                              className="text-green-600 hover:text-green-900 p-1.5 rounded hover:bg-green-50"
-                              title="Enviar recordatorio WhatsApp"
-                            >
-                              <ChatBubbleLeftIcon className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleViewPrestamo(prestamo)}
-                              className="text-blue-600 hover:text-blue-900 p-1.5 rounded hover:bg-blue-50"
-                              title="Ver análisis detallado"
-                            >
-                              <EyeIcon className="h-4 w-4" />
-                            </button>
-                            {prestamo.estado === 'activo' && (
-                              <button
-                                onClick={() => handleRegistrarPago(prestamo)}
-                                className="text-green-600 hover:text-green-900 p-1.5 rounded hover:bg-green-50"
-                                title="Registrar pago"
-                              >
-                                <CurrencyDollarIcon className="h-4 w-4" />
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleEditPrestamo(prestamo)}
-                              className="text-yellow-600 hover:text-yellow-900 p-1.5 rounded hover:bg-yellow-50"
-                              title="Editar préstamo"
-                            >
-                              <PencilIcon className="h-4 w-4" />
-                            </button>
-                            {prestamo.estado === 'activo' && (
-                              <button
-                                onClick={() => handleDeletePrestamo(prestamo.id)}
-                                className="text-red-600 hover:text-red-900 p-1.5 rounded hover:bg-red-50"
-                                title="Eliminar préstamo"
-                              >
-                                <TrashIcon className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+        </div>
+      </GlassCard>
 
-            {filteredPrestamos.length === 0 && (
-              <div className="text-center py-12">
-                <div className="text-gray-500 text-lg mb-2">
-                  {searchTerm ? 'No se encontraron préstamos' : 'No hay préstamos registrados'}
-                </div>
-                {!searchTerm && (
-                  <button
-                    onClick={handleCreatePrestamo}
-                    className="btn-primary mt-4"
+      {/* Prestamos Table MEJORADA */}
+      <GlassCard>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className={theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}>
+              <tr>
+                {['Cliente / Contacto', 'Inversión', 'Progreso', 'Rentabilidad', 'Próximo Pago', 'Estado', 'Acciones'].map((header, index) => (
+                  <th
+                    key={index}
+                    className="px-4 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                   >
-                    <PlusIcon className="h-5 w-5 mr-2" />
-                    Crear Primer Préstamo
-                  </button>
-                )}
-              </div>
-            )}
-          </>
-        )}
-      </div>
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className={`divide-y divide-gray-200 dark:divide-gray-700 ${
+              theme === 'dark' ? 'bg-gray-800/50' : 'bg-white'
+            }`}>
+              <AnimatePresence>
+                {filteredPrestamos.map((prestamo) => {
+                  const contacto = getContactoCliente(prestamo);
+                  const porcentajeRecuperacion = calcularPorcentajeRecuperacion(prestamo);
+                  const roi = calcularROI(prestamo);
+                  const prioridad = getPrioridadPrestamo(prestamo);
+                  
+                  return (
+                    <motion.tr
+                      key={prestamo.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      onHoverStart={() => setHoveredRow(prestamo.id)}
+                      onHoverEnd={() => setHoveredRow(null)}
+                      className={`cursor-pointer transition-all duration-300 ${
+                        hoveredRow === prestamo.id
+                          ? theme === 'dark'
+                            ? 'bg-gray-700/50'
+                            : 'bg-gray-100'
+                          : ''
+                      } ${
+                        prioridad === 'alta' 
+                          ? theme === 'dark'
+                            ? 'bg-green-900/20'
+                            : 'bg-green-50'
+                          : prioridad === 'media'
+                          ? theme === 'dark'
+                            ? 'bg-yellow-900/20'
+                            : 'bg-yellow-50'
+                          : ''
+                      }`}
+                      onClick={() => handleViewPrestamo(prestamo)}
+                    >
+                      <td className="px-4 py-4">
+                        <div className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                          {prestamo.clienteNombre}
+                        </div>
+                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {getCedulaCliente(prestamo)}
+                        </div>
+                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1 flex items-center`}>
+                          <span className="mr-2">📞</span> {contacto.celular}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                          RD$ {prestamo.montoPrestado?.toLocaleString()}
+                        </div>
+                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Restante: RD$ {prestamo.capitalRestante?.toLocaleString()}
+                        </div>
+                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                          {prestamo.frecuencia} • {prestamo.interesPercent}%
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${Math.min(porcentajeRecuperacion, 100)}%` }}
+                              transition={{ duration: 1 }}
+                              className={`h-full rounded-full ${
+                                porcentajeRecuperacion > 66 
+                                  ? 'bg-green-600' 
+                                  : porcentajeRecuperacion > 33 
+                                  ? 'bg-yellow-600' 
+                                  : 'bg-red-600'
+                              }`}
+                            />
+                          </div>
+                          <span className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                            {porcentajeRecuperacion.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
+                          RD$ {(prestamo.montoPrestado - prestamo.capitalRestante).toLocaleString()} pagado
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                          {roi.toFixed(1)}% ROI
+                        </div>
+                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                          RD$ {calcularInteresTotalGenerado(prestamo).toLocaleString()}
+                        </div>
+                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                          Quincena: RD$ {calcularInteresQuincenal(prestamo).toLocaleString()}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className={`text-sm ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                          {calcularProximoPago(prestamo)}
+                        </div>
+                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {prestamo.frecuencia}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        {getEstadoBadge(prestamo)}
+                        {prioridad === 'alta' && (
+                          <div className="flex items-center mt-1 text-xs text-green-600 dark:text-green-400">
+                            <BellAlertIcon className="h-3 w-3 mr-1" />
+                            Alta prioridad
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-right text-sm font-medium">
+                        <div className="flex justify-end space-x-1">
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEnviarWhatsApp(prestamo);
+                            }}
+                            className={`p-2 rounded-lg transition-colors ${
+                              theme === 'dark'
+                                ? 'hover:bg-gray-700 text-green-400'
+                                : 'hover:bg-green-50 text-green-600'
+                            }`}
+                            title="Enviar recordatorio WhatsApp"
+                          >
+                            <ChatBubbleLeftIcon className="h-4 w-4" />
+                          </motion.button>
+                          
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewPrestamo(prestamo);
+                            }}
+                            className={`p-2 rounded-lg transition-colors ${
+                              theme === 'dark'
+                                ? 'hover:bg-gray-700 text-blue-400'
+                                : 'hover:bg-blue-50 text-blue-600'
+                            }`}
+                            title="Ver análisis detallado"
+                          >
+                            <EyeIcon className="h-4 w-4" />
+                          </motion.button>
+                          
+                          {prestamo.estado === 'activo' && (
+                            <motion.button
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.9 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRegistrarPago(prestamo);
+                              }}
+                              className={`p-2 rounded-lg transition-colors ${
+                                theme === 'dark'
+                                  ? 'hover:bg-gray-700 text-green-400'
+                                  : 'hover:bg-green-50 text-green-600'
+                              }`}
+                              title="Registrar pago"
+                            >
+                              <CurrencyDollarIcon className="h-4 w-4" />
+                            </motion.button>
+                          )}
+                          
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditPrestamo(prestamo);
+                            }}
+                            className={`p-2 rounded-lg transition-colors ${
+                              theme === 'dark'
+                                ? 'hover:bg-gray-700 text-yellow-400'
+                                : 'hover:bg-yellow-50 text-yellow-600'
+                            }`}
+                            title="Editar préstamo"
+                          >
+                            <PencilIcon className="h-4 w-4" />
+                          </motion.button>
+                          
+                          {prestamo.estado === 'activo' && (
+                            <motion.button
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.9 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeletePrestamo(prestamo.id);
+                              }}
+                              className={`p-2 rounded-lg transition-colors ${
+                                theme === 'dark'
+                                  ? 'hover:bg-gray-700 text-red-400'
+                                  : 'hover:bg-red-50 text-red-600'
+                              }`}
+                              title="Eliminar préstamo"
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                            </motion.button>
+                          )}
+                        </div>
+                      </td>
+                    </motion.tr>
+                  );
+                })}
+              </AnimatePresence>
+            </tbody>
+          </table>
 
-      {/* Resumen Ejecutivo para Toma de Decisiones */}
+          {filteredPrestamos.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-12"
+            >
+              <div className={`text-6xl mb-4 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-300'}`}>📊</div>
+              <p className={`text-lg font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                {searchTerm ? 'No se encontraron préstamos' : 'No hay préstamos registrados'}
+              </p>
+              {!searchTerm && (
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleCreatePrestamo}
+                  className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all inline-flex items-center space-x-2"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                  <span>Crear Primer Préstamo</span>
+                </motion.button>
+              )}
+            </motion.div>
+          )}
+        </div>
+      </GlassCard>
+
+      {/* Resumen Ejecutivo MEJORADO */}
       {filteredPrestamos.length > 0 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Resumen Ejecutivo</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-            <div>
-              <p className="font-medium text-gray-700">Préstamos de Alta Prioridad:</p>
-              <p className="text-green-600">
-                {filteredPrestamos.filter(p => getPrioridadPrestamo(p) === 'alta').length} préstamos
-              </p>
+        <GlassCard>
+          <div className="p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-2 bg-gradient-to-br from-purple-600 to-purple-800 rounded-lg shadow-lg">
+                <RocketLaunchIcon className="h-5 w-5 text-white" />
+              </div>
+              <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                Resumen Ejecutivo
+              </h3>
             </div>
-            <div>
-              <p className="font-medium text-gray-700">Interés Quincenal Total:</p>
-              <p className="text-blue-600">
-                RD$ {filteredPrestamos.reduce((sum, p) => sum + calcularInteresQuincenal(p), 0).toLocaleString()}
-              </p>
-            </div>
-            <div>
-              <p className="font-medium text-gray-700">ROI Promedio:</p>
-              <p className="text-purple-600">
-                {filteredPrestamos.length > 0 ? 
-                  (filteredPrestamos.reduce((sum, p) => sum + calcularROI(p), 0) / filteredPrestamos.length).toFixed(1) : 0
-                }%
-              </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className={`p-4 rounded-lg border-2 ${
+                theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <p className={`text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Préstamos de Alta Prioridad
+                </p>
+                <p className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  {filteredPrestamos.filter(p => getPrioridadPrestamo(p) === 'alta').length}
+                </p>
+                <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                  Requieren atención inmediata
+                </p>
+              </div>
+
+              <div className={`p-4 rounded-lg border-2 ${
+                theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <p className={`text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Interés Quincenal Total
+                </p>
+                <p className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  RD$ {filteredPrestamos.reduce((sum, p) => sum + calcularInteresQuincenal(p), 0).toLocaleString()}
+                </p>
+                <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                  Próximo período
+                </p>
+              </div>
+
+              <div className={`p-4 rounded-lg border-2 ${
+                theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <p className={`text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  ROI Promedio
+                </p>
+                <p className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  {filteredPrestamos.length > 0 ? 
+                    (filteredPrestamos.reduce((sum, p) => sum + calcularROI(p), 0) / filteredPrestamos.length).toFixed(1) : 0
+                  }%
+                </p>
+                <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                  Rentabilidad promedio
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        </GlassCard>
       )}
     </div>
   );

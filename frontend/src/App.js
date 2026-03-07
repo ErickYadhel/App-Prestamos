@@ -2,20 +2,20 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ErrorProvider } from './context/ErrorContext';
-import { ThemeProvider } from './context/ThemeContext'; // 👈 NUEVO: Para modo oscuro/claro
-import { NotificationProvider } from './context/NotificationContext'; // 👈 NUEVO: Para notificaciones globales
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Layout from './components/Layout/Layout';
-import Clientes from './pages/Clientes';
-import Prestamos from './pages/Prestamos';
-import Pagos from './pages/Pagos';
-import Solicitudes from './pages/Solicitudes';
-import Garantes from './pages/Garantes';
-import Usuarios from './pages/Usuarios';
-import Configuracion from './pages/Configuracion';
-import Notificaciones from './pages/Notificaciones';
-import Perfil from './pages/Usuarios'; // 👈 NUEVO: Página de perfil de usuario
+import { ThemeProvider } from './context/ThemeContext'; 
+import { NotificationProvider } from './context/NotificationContext'; 
+import Login from './pages/Login.js';
+import Dashboard from './pages/Dashboard.js';
+import Layout from './components/Layout/Layout.js';
+import Clientes from './pages/Clientes.js';
+import Prestamos from './pages/Prestamos.js';
+import Pagos from './pages/Pagos.js';
+import Solicitudes from './pages/Solicitudes.js';
+import Garantes from './pages/Garantes.js';
+import Usuarios from './pages/Usuarios.js';
+import Configuracion from './pages/Configuracion.js';
+import Notificaciones from './pages/Notificaciones.js';
+import Perfil from './pages/Usuarios.js'; // 👈 NUEVO: Página de perfil de usuario
 import ErrorBoundary from './components/ErrorBoundary'; // 👈 NUEVO: Manejador de errores global
 
 // Componente de carga mejorado

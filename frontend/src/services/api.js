@@ -1,7 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://eys-backend.onrender.com/api';
-
+const API_BASE_URL = 'http://localhost:5001/api';
 
 // Configuración global de axios
 const api = axios.create({

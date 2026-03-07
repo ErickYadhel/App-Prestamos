@@ -1,7 +1,11 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
-
+const API_BASE_URL =
+  (typeof import.meta !== "undefined" &&
+   import.meta.env &&
+   import.meta.env.VITE_API_URL)
+    ? import.meta.env.VITE_API_URL
+    : "http://localhost:5001/api";
 // Configuración global de axios
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -237,3 +241,4 @@ export const notificacionesService = {
 
 
 export default api;
+

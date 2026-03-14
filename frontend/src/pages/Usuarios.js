@@ -3,6 +3,7 @@ import {
   UserPlusIcon,
   MagnifyingGlassIcon,
   PencilIcon,
+  XMarkIcon,
   TrashIcon,
   EyeIcon,
   EyeSlashIcon,
@@ -21,8 +22,11 @@ import {
   CalendarIcon,
   BuildingOfficeIcon,
   KeyIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  PhotoIcon
 } from '@heroicons/react/24/outline';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import api from '../services/api';
 import { useError } from '../context/ErrorContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -33,7 +37,7 @@ const SkeletonLoader = () => (
   <div className="animate-pulse">
     <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
     <div className="space-y-3">
-      {[1,2,3,4].map(i => (
+      {[1, 2, 3, 4].map(i => (
         <div key={i} className="grid grid-cols-6 gap-4">
           <div className="h-4 bg-gray-200 rounded col-span-2"></div>
           <div className="h-4 bg-gray-200 rounded col-span-1"></div>
@@ -63,9 +67,8 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, type = 'dang
         >
           <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="sm:flex sm:items-start">
-              <div className={`mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full sm:mx-0 sm:h-10 sm:w-10 ${
-                type === 'danger' ? 'bg-red-100' : 'bg-yellow-100'
-              }`}>
+              <div className={`mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full sm:mx-0 sm:h-10 sm:w-10 ${type === 'danger' ? 'bg-red-100' : 'bg-yellow-100'
+                }`}>
                 {type === 'danger' ? (
                   <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
                 ) : (
@@ -88,11 +91,10 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, type = 'dang
             <button
               type="button"
               onClick={onConfirm}
-              className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white sm:ml-3 sm:w-auto sm:text-sm ${
-                type === 'danger'
+              className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white sm:ml-3 sm:w-auto sm:text-sm ${type === 'danger'
                   ? 'bg-red-600 hover:bg-red-700'
                   : 'bg-yellow-600 hover:bg-yellow-700'
-              }`}
+                }`}
             >
               Confirmar
             </button>
@@ -111,7 +113,7 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, type = 'dang
 };
 
 // Componente de filtros avanzados
-const AdvancedFilters = ({ filters, onFilterChange, onClose }) => {
+const AdvancedFilters = ({ filters, onFilterChange, onClose, rolesDisponibles }) => {
   const [localFilters, setLocalFilters] = useState(filters);
 
   const handleChange = (key, value) => {
@@ -143,13 +145,14 @@ const AdvancedFilters = ({ filters, onFilterChange, onClose }) => {
           <select
             value={localFilters.rol || ''}
             onChange={(e) => handleChange('rol', e.target.value)}
-            className="input-primary"
+            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-gray-900 bg-white"
           >
             <option value="">Todos los roles</option>
-            <option value="admin">Administrador</option>
-            <option value="supervisor">Supervisor</option>
-            <option value="consultor">Consultor</option>
-            <option value="solicitante">Solicitante</option>
+            {rolesDisponibles.map(rol => (
+              <option key={rol.id} value={rol.id}>
+                {rol.nombre || rol.id}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -158,7 +161,7 @@ const AdvancedFilters = ({ filters, onFilterChange, onClose }) => {
           <select
             value={localFilters.estado || ''}
             onChange={(e) => handleChange('estado', e.target.value)}
-            className="input-primary"
+            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-gray-900 bg-white"
           >
             <option value="">Todos</option>
             <option value="activo">Activo</option>
@@ -172,7 +175,7 @@ const AdvancedFilters = ({ filters, onFilterChange, onClose }) => {
             type="text"
             value={localFilters.departamento || ''}
             onChange={(e) => handleChange('departamento', e.target.value)}
-            className="input-primary"
+            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-gray-900 bg-white"
             placeholder="Filtrar por departamento"
           />
         </div>
@@ -185,11 +188,11 @@ const AdvancedFilters = ({ filters, onFilterChange, onClose }) => {
             onFilterChange({});
             onClose();
           }}
-          className="btn-secondary"
+          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
         >
           Limpiar filtros
         </button>
-        <button onClick={applyFilters} className="btn-primary">
+        <button onClick={applyFilters} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
           Aplicar filtros
         </button>
       </div>
@@ -197,9 +200,533 @@ const AdvancedFilters = ({ filters, onFilterChange, onClose }) => {
   );
 };
 
+// Función para obtener color según el rol (para estadísticas)
+const getColorForRol = (rolId) => {
+  const colorMap = {
+    admin: 'purple',
+    supervisor: 'blue',
+    solicitante: 'green',
+    consultor: 'gray'
+  };
+  return colorMap[rolId] || 'indigo';
+};
+
+// Función para obtener estilos del rol
+const getRolStyles = (rolId, rolesDisponibles) => {
+  const rol = rolesDisponibles.find(r => r.id === rolId);
+
+  if (rol?.color) {
+    return rol.color.includes('from-')
+      ? `${rol.color} text-white`
+      : `${rol.color} text-white`;
+  }
+
+  switch (rolId) {
+    case 'admin':
+      return 'bg-purple-600 text-white';
+    case 'supervisor':
+      return 'bg-blue-600 text-white';
+    case 'solicitante':
+      return 'bg-green-600 text-white';
+    case 'consultor':
+      return 'bg-gray-600 text-white';
+    default:
+      return 'bg-indigo-600 text-white';
+  }
+};
+
+// Función para obtener texto del rol
+const getRolText = (rolId, rolesDisponibles) => {
+  const rol = rolesDisponibles.find(r => r.id === rolId);
+
+  if (rol?.nombre) {
+    return rol.nombre;
+  }
+
+  const rolesDefault = {
+    admin: 'Administrador',
+    supervisor: 'Supervisor',
+    solicitante: 'Solicitante',
+    consultor: 'Consultor'
+  };
+
+  return rolesDefault[rolId] || rolId;
+};
+
+// Componente de tarjeta de estadística
+const StatCard = ({ icon: Icon, label, value, color }) => {
+  const colors = {
+    blue: 'bg-blue-100 text-blue-600',
+    green: 'bg-green-100 text-green-600',
+    red: 'bg-red-100 text-red-600',
+    purple: 'bg-purple-100 text-purple-600',
+    yellow: 'bg-yellow-100 text-yellow-600',
+    orange: 'bg-orange-100 text-orange-600',
+    indigo: 'bg-indigo-100 text-indigo-600',
+    gray: 'bg-gray-100 text-gray-600'
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow p-4 border border-gray-200">
+      <div className="flex items-center">
+        <div className={`p-2 rounded-lg ${colors[color] || colors.gray}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="ml-3">
+          <p className="text-xs font-medium text-gray-500 uppercase">{label}</p>
+          <p className="text-lg font-bold text-gray-900">{value}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Componente de formulario de usuario
+const UsuarioForm = ({ editingUsuario, onBack, onSave, rolesDisponibles, loadingRoles }) => {
+  const [formData, setFormData] = useState({
+    email: '',
+    nombre: '',
+    password: '',
+    rol: '',
+    telefono: '',
+    departamento: '',
+    activo: true,
+    color: undefined,
+    foto: '',
+    ...(editingUsuario || {})
+  });
+
+  const [errors, setErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [fotoPreview, setFotoPreview] = useState('');
+
+  // Actualizar vista previa cuando cambia la URL de la foto
+  useEffect(() => {
+    if (formData.foto) {
+      setFotoPreview(formData.foto);
+    } else {
+      setFotoPreview('');
+    }
+  }, [formData.foto]);
+
+  // Debug: Mostrar roles cuando se renderiza el componente
+  useEffect(() => {
+    console.log('📋 UsuarioForm - rolesDisponibles:', rolesDisponibles);
+  }, [rolesDisponibles]);
+
+  // Establecer rol por defecto cuando se cargan los roles
+  useEffect(() => {
+    if (!editingUsuario && rolesDisponibles.length > 0 && !formData.rol) {
+      const rolDefault = rolesDisponibles.find(r => r.id === 'solicitante') || rolesDisponibles[0];
+      if (rolDefault) {
+        setFormData(prev => ({ ...prev, rol: rolDefault.id }));
+      }
+    }
+  }, [rolesDisponibles, editingUsuario]);
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!formData.email.trim()) {
+      newErrors.email = 'El email es requerido';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'El formato del email es inválido';
+    }
+
+    if (!formData.nombre.trim()) {
+      newErrors.nombre = 'El nombre es requerido';
+    }
+
+    if (!formData.rol) {
+      newErrors.rol = 'Debes seleccionar un rol';
+    }
+
+    if (!editingUsuario && !formData.password) {
+      newErrors.password = 'La contraseña es requerida para nuevos usuarios';
+    } else if (formData.password && formData.password.length < 6) {
+      newErrors.password = 'La contraseña debe tener al menos 6 caracteres';
+    }
+
+    // Validación de URL de foto (opcional)
+    if (formData.foto && !isValidUrl(formData.foto)) {
+      newErrors.foto = 'La URL de la foto no es válida';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Función para validar URL
+  const isValidUrl = (string) => {
+    try {
+      new URL(string);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (validateForm()) {
+      const dataToSend = editingUsuario && !formData.password
+        ? { ...formData, password: undefined }
+        : formData;
+      onSave(dataToSend);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 20 }}
+      className="bg-white shadow-lg rounded-lg overflow-hidden max-w-4xl mx-auto mt-8"
+    >
+      <div className="px-6 py-4 bg-gradient-to-r from-red-600 to-red-700">
+        <h3 className="text-lg font-medium text-white">
+          {editingUsuario ? '✏️ Editar Usuario' : '👤 Nuevo Usuario'}
+        </h3>
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Columna izquierda - Información básica */}
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Email <span className="text-red-600">*</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <EnvelopeIcon className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-gray-900 bg-white"
+                  placeholder="usuario@empresa.com"
+                  disabled={editingUsuario}
+                />
+              </div>
+              {errors.email && <p className="text-red-600 text-sm mt-1">{errors.email}</p>}
+              {editingUsuario && (
+                <p className="text-xs text-gray-500 mt-1">
+                  <EnvelopeIcon className="h-3 w-3 inline mr-1" />
+                  El email no se puede cambiar (es el identificador único)
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Nombre Completo <span className="text-red-600">*</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <UserGroupIcon className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  name="nombre"
+                  value={formData.nombre}
+                  onChange={handleChange}
+                  className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-gray-900 bg-white"
+                  placeholder="Ej: Juan Pérez"
+                />
+              </div>
+              {errors.nombre && <p className="text-red-600 text-sm mt-1">{errors.nombre}</p>}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Contraseña {!editingUsuario && <span className="text-red-600">*</span>}
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <KeyIcon className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="w-full pl-10 pr-10 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-gray-900 bg-white"
+                  placeholder={editingUsuario ? "Dejar vacío para no cambiar" : "Mínimo 6 caracteres"}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <EyeSlashIcon className="h-5 w-5" />
+                  ) : (
+                    <EyeIcon className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
+              {errors.password && <p className="text-red-600 text-sm mt-1">{errors.password}</p>}
+              {editingUsuario && (
+                <p className="text-xs text-gray-500 mt-1">
+                  <KeyIcon className="h-3 w-3 inline mr-1" />
+                  Solo completa este campo si deseas cambiar la contraseña
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Columna derecha - Información adicional */}
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Rol <span className="text-red-600">*</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <ShieldCheckIcon className="h-5 w-5 text-gray-400" />
+                </div>
+                <select
+                  name="rol"
+                  value={formData.rol}
+                  onChange={handleChange}
+                  className="w-full pl-10 pr-10 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-gray-900 bg-white appearance-none cursor-pointer"
+                  disabled={loadingRoles}
+                >
+                  <option value="" className="text-gray-500 bg-white">
+                    {loadingRoles ? 'Cargando roles...' : '-- Selecciona un rol --'}
+                  </option>
+
+                  {rolesDisponibles.length > 0 ? (
+                    rolesDisponibles.map(rol => (
+                      <option
+                        key={rol.id}
+                        value={rol.id}
+                        className="text-gray-900 bg-white"
+                      >
+                        {rol.nombre || rol.id}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="" disabled className="text-gray-400 bg-white">
+                      No hay roles disponibles
+                    </option>
+                  )}
+                </select>
+
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+              {errors.rol && <p className="text-red-600 text-sm mt-1">{errors.rol}</p>}
+              {loadingRoles && (
+                <p className="text-xs text-gray-500 mt-1 flex items-center">
+                  <ArrowPathIcon className="h-3 w-3 animate-spin mr-1" />
+                  Cargando roles...
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Teléfono
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <PhoneIcon className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="tel"
+                  name="telefono"
+                  value={formData.telefono}
+                  onChange={handleChange}
+                  className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-gray-900 bg-white"
+                  placeholder="809-123-4567"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Departamento
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <BuildingOfficeIcon className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  name="departamento"
+                  value={formData.departamento}
+                  onChange={handleChange}
+                  className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-gray-900 bg-white"
+                  placeholder="Ej: Ventas, Administración, etc."
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Fila completa para Foto de perfil */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Foto de perfil (URL)
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-2">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <PhotoIcon className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="url"
+                    name="foto"
+                    value={formData.foto}
+                    onChange={handleChange}
+                    className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-gray-900 bg-white"
+                    placeholder="https://ejemplo.com/mi-foto.jpg"
+                  />
+                </div>
+                {errors.foto && <p className="text-red-600 text-sm mt-1">{errors.foto}</p>}
+                <p className="text-xs text-gray-500 mt-1">
+                  Ingresa una URL válida de una imagen (opcional)
+                </p>
+              </div>
+              
+              {/* Vista previa de la foto */}
+              <div className="flex items-center justify-center md:justify-start">
+                {fotoPreview ? (
+                  <div className="relative group">
+                    <img
+                      src={fotoPreview}
+                      alt="Vista previa"
+                      className="h-20 w-20 rounded-lg object-cover border-2 border-gray-300"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = 'https://via.placeholder.com/80?text=Error';
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, foto: '' }));
+                        setFotoPreview('');
+                      }}
+                      className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Eliminar foto"
+                    >
+                      <XMarkIcon className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="h-20 w-20 rounded-lg bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center">
+                    <PhotoIcon className="h-8 w-8 text-gray-400" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Color de identificación */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Color de identificación
+            </label>
+            <div className="flex items-center space-x-4">
+              <div className="flex space-x-2 flex-wrap gap-2">
+                {['bg-red-600', 'bg-yellow-500', 'bg-green-500', 'bg-blue-500', 'bg-purple-600', 'bg-pink-500', 'bg-indigo-500'].map(color => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, color }))}
+                    className={`w-8 h-8 rounded-lg ${color} ${formData.color === color ? 'ring-2 ring-offset-2 ring-gray-400' : ''
+                      } transition-all hover:scale-110`}
+                    title={`Color ${color}`}
+                  />
+                ))}
+              </div>
+              {formData.color && (
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, color: undefined }))}
+                  className="text-xs text-red-600 hover:text-red-800"
+                >
+                  Quitar color personalizado
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Selecciona un color para identificar rápidamente al usuario en la interfaz
+            </p>
+          </div>
+
+          {editingUsuario && (
+            <div className="md:col-span-2">
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="activo"
+                  checked={formData.activo}
+                  onChange={handleChange}
+                  className="rounded border-gray-300 text-red-600 focus:ring-red-500 h-4 w-4"
+                />
+                <span className="text-sm text-gray-700">Usuario activo</span>
+              </label>
+            </div>
+          )}
+        </div>
+
+        {/* Panel de debug - Solo visible en desarrollo */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+            <p className="font-semibold text-yellow-700">🔍 Debug Info:</p>
+            <p>Total roles: {rolesDisponibles.length}</p>
+            <p>Rol seleccionado: {formData.rol || 'ninguno'}</p>
+            <p>Email: {formData.email}</p>
+          </div>
+        )}
+
+        <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 rounded-b-lg">
+          <button
+            type="button"
+            onClick={onBack}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            {editingUsuario ? 'Actualizar Usuario' : 'Crear Usuario'}
+          </button>
+        </div>
+      </form>
+    </motion.div>
+  );
+};
+
+// Componente principal
 const Usuarios = () => {
   const [usuarios, setUsuarios] = useState([]);
+  const [rolesDisponibles, setRolesDisponibles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingRoles, setLoadingRoles] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -218,95 +745,84 @@ const Usuarios = () => {
   const { showError, showSuccess, showWarning } = useError();
   const { user: currentUser } = useAuth();
 
+  // Cargar roles desde Firebase
+  const cargarRoles = useCallback(async () => {
+    try {
+      setLoadingRoles(true);
+      console.log('🔄 Cargando roles desde Firebase...');
+      const rolesRef = collection(db, 'Roles');
+      const rolesSnap = await getDocs(rolesRef);
+
+      const roles = [];
+      rolesSnap.forEach(doc => {
+        roles.push({
+          id: doc.id,
+          ...doc.data()
+        });
+      });
+
+      console.log('✅ Roles cargados desde Firebase:', roles);
+      setRolesDisponibles(roles);
+    } catch (error) {
+      console.error('❌ Error al cargar roles:', error);
+      showError('Error al cargar los roles');
+    } finally {
+      setLoadingRoles(false);
+    }
+  }, [showError]);
+
+  // Cargar usuarios desde API - CORREGIDO
   const fetchUsuarios = useCallback(async () => {
     try {
       setLoading(true);
-      console.log('📡 Cargando usuarios desde API...');
+      console.log('📡 Cargando usuarios desde API backend...');
 
       const response = await api.get('/usuarios');
       console.log('✅ Usuarios cargados:', response.data);
 
-      setUsuarios(response.data || []);
-      setApiConnected(true);
+      // Verificar diferentes formatos de respuesta
+      if (response.data && Array.isArray(response.data)) {
+        // Si la API devuelve directamente un array
+        setUsuarios(response.data);
+        setApiConnected(true);
+      } else if (response.data && response.data.success && Array.isArray(response.data.data)) {
+        // Si la API devuelve { success: true, data: [...] }
+        setUsuarios(response.data.data);
+        setApiConnected(true);
+      } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+        // Si la API devuelve { data: [...] } sin success
+        setUsuarios(response.data.data);
+        setApiConnected(true);
+      } else {
+        console.warn('⚠️ Formato de respuesta inesperado:', response.data);
+        setUsuarios([]);
+      }
 
     } catch (error) {
       console.error('❌ Error fetching users:', error);
 
-      const errorMessage = error.message || 'Error al cargar los usuarios';
+      const errorMessage = error.response?.data?.error || error.message || 'Error al cargar los usuarios';
       showError(errorMessage);
 
       setApiConnected(false);
-      setUsuarios(getMockUsuarios());
+      setUsuarios([]);
     } finally {
       setLoading(false);
     }
   }, [showError]);
 
-  const getMockUsuarios = () => {
-    return [
-      {
-        id: '1',
-        email: 'admin@eysinversiones.com',
-        nombre: 'Administrador Principal',
-        rol: 'admin',
-        activo: true,
-        telefono: '809-123-4567',
-        departamento: 'Administración',
-        fechaCreacion: '2024-01-15T10:30:00Z',
-        ultimoAcceso: '2024-02-28T09:15:00Z',
-        intentosFallidos: 0,
-        notificaciones: 5,
-        color: 'bg-red-600'
-      },
-      {
-        id: '2',
-        email: 'supervisor@eysinversiones.com',
-        nombre: 'María Rodríguez',
-        rol: 'supervisor',
-        activo: true,
-        telefono: '809-987-6543',
-        departamento: 'Supervisión',
-        fechaCreacion: '2024-01-20T14:20:00Z',
-        ultimoAcceso: '2024-02-27T16:45:00Z',
-        intentosFallidos: 0,
-        notificaciones: 3,
-        color: 'bg-yellow-500'
-      },
-      {
-        id: '3',
-        email: 'empleado1@eysinversiones.com',
-        nombre: 'Carlos López',
-        rol: 'solicitante',
-        activo: true,
-        telefono: '809-555-7890',
-        departamento: 'Ventas',
-        fechaCreacion: '2024-02-01T09:00:00Z',
-        ultimoAcceso: '2024-02-26T11:30:00Z',
-        intentosFallidos: 2,
-        notificaciones: 1,
-        color: 'bg-blue-500'
-      },
-      {
-        id: '4',
-        email: 'consultor1@eysinversiones.com',
-        nombre: 'Ana Martínez',
-        rol: 'consultor',
-        activo: false,
-        telefono: '809-444-1234',
-        departamento: 'Consultoría',
-        fechaCreacion: '2024-01-10T11:15:00Z',
-        ultimoAcceso: '2024-02-15T10:00:00Z',
-        intentosFallidos: 5,
-        notificaciones: 0,
-        color: 'bg-green-500'
-      }
-    ];
-  };
-
+  // Cargar datos iniciales
   useEffect(() => {
+    cargarRoles();
     fetchUsuarios();
-  }, [fetchUsuarios]);
+  }, [cargarRoles, fetchUsuarios]);
 
+  // Debug: Verificar roles cargados
+  useEffect(() => {
+    console.log('📋 Roles disponibles en el componente principal:', rolesDisponibles);
+  }, [rolesDisponibles]);
+
+  // Filtrar y ordenar usuarios
   const filteredAndSortedUsuarios = useMemo(() => {
     let filtered = [...usuarios];
 
@@ -352,18 +868,20 @@ const Usuarios = () => {
     return filtered;
   }, [usuarios, searchTerm, filters, sortConfig]);
 
+  // Estadísticas
   const stats = useMemo(() => {
     const activos = usuarios.filter(u => u.activo).length;
+
+    const porRol = {};
+    rolesDisponibles.forEach(rol => {
+      porRol[rol.id] = usuarios.filter(u => u.rol === rol.id).length;
+    });
+
     return {
       total: usuarios.length,
       activos,
       inactivos: usuarios.length - activos,
-      porRol: {
-        admin: usuarios.filter(u => u.rol === 'admin').length,
-        supervisor: usuarios.filter(u => u.rol === 'supervisor').length,
-        solicitante: usuarios.filter(u => u.rol === 'solicitante').length,
-        consultor: usuarios.filter(u => u.rol === 'consultor').length
-      },
+      porRol,
       conAccesoReciente: usuarios.filter(u => {
         const ultimoAcceso = new Date(u.ultimoAcceso || 0);
         const hace7Dias = new Date();
@@ -372,7 +890,7 @@ const Usuarios = () => {
       }).length,
       intentosFallidos: usuarios.reduce((sum, u) => sum + (u.intentosFallidos || 0), 0)
     };
-  }, [usuarios]);
+  }, [usuarios, rolesDisponibles]);
 
   const handleSort = (key) => {
     setSortConfig(prev => ({
@@ -397,7 +915,7 @@ const Usuarios = () => {
         mimeType = 'application/json';
         break;
       case 'csv':
-        const headers = ['ID', 'Nombre', 'Email', 'Rol', 'Departamento', 'Estado', 'Teléfono', 'Color'];
+        const headers = ['ID', 'Nombre', 'Email', 'Rol', 'Departamento', 'Estado', 'Teléfono', 'Color', 'Foto'];
         const rows = dataToExport.map(u => [
           u.id,
           u.nombre,
@@ -406,7 +924,8 @@ const Usuarios = () => {
           u.departamento || '',
           u.activo ? 'Activo' : 'Inactivo',
           u.telefono || '',
-          u.color || ''
+          u.color || '',
+          u.foto || ''
         ]);
         exportData = [headers, ...rows].map(row => row.join(',')).join('\n');
         filename = 'usuarios.csv';
@@ -464,6 +983,7 @@ const Usuarios = () => {
       setShowBulkActions(false);
 
     } catch (error) {
+      console.error('Error en acción masiva:', error);
       showError('Error al ejecutar acción masiva');
     } finally {
       setLoading(false);
@@ -484,19 +1004,41 @@ const Usuarios = () => {
     setShowSearch(false);
   };
 
+  // CORREGIDO: Función para guardar usuario
   const handleSaveUsuario = async (usuarioData) => {
     try {
+      console.log('💾 Guardando usuario a través de API:', { 
+        ...usuarioData, 
+        password: usuarioData.password ? '***' : undefined 
+      });
+
+      let response;
+
       if (editingUsuario) {
-        await api.put(`/usuarios/${editingUsuario.id}`, usuarioData);
+        // Actualizar usuario existente
+        response = await api.put(`/usuarios/${editingUsuario.id}`, usuarioData);
+        console.log('✅ Usuario actualizado en backend:', response.data);
         showSuccess('Usuario actualizado exitosamente');
       } else {
-        await api.post('/usuarios', usuarioData);
-        showSuccess('Usuario creado exitosamente');
+        // Crear nuevo usuario
+        response = await api.post('/usuarios', usuarioData);
+        console.log('✅ Usuario creado en backend:', response.data);
+        showSuccess('Usuario creado exitosamente. Ya puede iniciar sesión.');
       }
+
+      // Recargar la lista de usuarios
       await fetchUsuarios();
+      
+      // Cerrar el formulario
       setShowForm(false);
+      setEditingUsuario(null);
+
     } catch (error) {
-      showError('Error al guardar el usuario');
+      console.error('❌ Error al guardar usuario:', error);
+      
+      // Mostrar mensaje de error específico del backend si existe
+      const errorMessage = error.response?.data?.error || error.message || 'Error al guardar el usuario';
+      showError(errorMessage);
     }
   };
 
@@ -507,6 +1049,7 @@ const Usuarios = () => {
         showSuccess('Usuario reactivado exitosamente');
         await fetchUsuarios();
       } catch (error) {
+        console.error('Error al reactivar usuario:', error);
         showError('Error al reactivar el usuario');
       }
     }
@@ -518,16 +1061,21 @@ const Usuarios = () => {
       showSuccess('Usuario eliminado exitosamente');
       await fetchUsuarios();
     } catch (error) {
+      console.error('Error al eliminar usuario:', error);
       showError('Error al eliminar el usuario');
     }
   };
 
   if (showForm) {
-    return <UsuarioForm
-      editingUsuario={editingUsuario}
-      onBack={handleBackToList}
-      onSave={handleSaveUsuario}
-    />;
+    return (
+      <UsuarioForm
+        editingUsuario={editingUsuario}
+        onBack={handleBackToList}
+        onSave={handleSaveUsuario}
+        rolesDisponibles={rolesDisponibles}
+        loadingRoles={loadingRoles}
+      />
+    );
   }
 
   return (
@@ -544,9 +1092,10 @@ const Usuarios = () => {
         <div className="flex items-center space-x-2">
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`btn-secondary flex items-center space-x-2 p-3 ${
-              showFilters ? 'bg-red-50 text-red-600' : ''
-            }`}
+            className={`px-3 py-2 border-2 rounded-lg transition-colors flex items-center space-x-2 ${showFilters
+                ? 'border-red-600 bg-red-50 text-red-600'
+                : 'border-gray-300 hover:border-red-600 hover:bg-red-50 text-gray-700'
+              }`}
             title="Filtros avanzados"
           >
             <FunnelIcon className="h-5 w-5" />
@@ -560,7 +1109,7 @@ const Usuarios = () => {
           <div className="relative">
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
-              className="btn-secondary flex items-center space-x-2 p-3"
+              className="px-3 py-2 border-2 border-gray-300 rounded-lg hover:border-red-600 hover:bg-red-50 transition-colors flex items-center space-x-2 text-gray-700"
               title="Exportar datos"
             >
               <DocumentDuplicateIcon className="h-5 w-5" />
@@ -602,8 +1151,11 @@ const Usuarios = () => {
           </div>
 
           <button
-            onClick={fetchUsuarios}
-            className="btn-secondary flex items-center space-x-2 p-3"
+            onClick={() => {
+              cargarRoles();
+              fetchUsuarios();
+            }}
+            className="px-3 py-2 border-2 border-gray-300 rounded-lg hover:border-red-600 hover:bg-red-50 transition-colors flex items-center space-x-2 text-gray-700"
             title="Refrescar datos"
           >
             <ArrowPathIcon className="h-5 w-5" />
@@ -614,10 +1166,10 @@ const Usuarios = () => {
               setEditingUsuario(null);
               setShowForm(true);
             }}
-            className="btn-primary flex items-center space-x-2 px-4 py-2"
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-2"
           >
-            <UserPlusIcon className="h-5 w-5 mr-2" />
-            Nuevo Usuario
+            <UserPlusIcon className="h-5 w-5" />
+            <span>Nuevo Usuario</span>
           </button>
         </div>
       </div>
@@ -628,6 +1180,7 @@ const Usuarios = () => {
             filters={filters}
             onFilterChange={setFilters}
             onClose={() => setShowFilters(false)}
+            rolesDisponibles={rolesDisponibles}
           />
         )}
       </AnimatePresence>
@@ -675,13 +1228,22 @@ const Usuarios = () => {
         )}
       </AnimatePresence>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         <StatCard icon={UserGroupIcon} label="Total" value={stats.total} color="blue" />
         <StatCard icon={CheckCircleIcon} label="Activos" value={stats.activos} color="green" />
         <StatCard icon={XCircleIcon} label="Inactivos" value={stats.inactivos} color="red" />
-        <StatCard icon={ShieldCheckIcon} label="Admins" value={stats.porRol.admin} color="purple" />
         <StatCard icon={ChartBarIcon} label="Acceso reciente" value={stats.conAccesoReciente} color="yellow" />
         <StatCard icon={ExclamationTriangleIcon} label="Intentos fallidos" value={stats.intentosFallidos} color="orange" />
+
+        {rolesDisponibles.map(rol => (
+          <StatCard
+            key={rol.id}
+            icon={rol.icon || ShieldCheckIcon}
+            label={rol.nombre || rol.id}
+            value={stats.porRol[rol.id] || 0}
+            color={getColorForRol(rol.id)}
+          />
+        ))}
       </div>
 
       <AnimatePresence>
@@ -699,7 +1261,7 @@ const Usuarios = () => {
               <input
                 type="text"
                 placeholder="Buscar por nombre, email, departamento o teléfono..."
-                className="input-primary pl-10 pr-10"
+                className="w-full pl-10 pr-10 py-2 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none text-gray-900 bg-white"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 autoFocus
@@ -731,7 +1293,7 @@ const Usuarios = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-8">
                       <input
                         type="checkbox"
-                        checked={selectedUsuarios.length === filteredAndSortedUsuarios.length}
+                        checked={selectedUsuarios.length === filteredAndSortedUsuarios.length && filteredAndSortedUsuarios.length > 0}
                         onChange={(e) => {
                           if (e.target.checked) {
                             setSelectedUsuarios(filteredAndSortedUsuarios.map(u => u.id));
@@ -743,27 +1305,27 @@ const Usuarios = () => {
                       />
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('nombre')}>
+                      onClick={() => handleSort('nombre')}>
                       Usuario {getSortIcon('nombre')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('email')}>
+                      onClick={() => handleSort('email')}>
                       Contacto {getSortIcon('email')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('departamento')}>
+                      onClick={() => handleSort('departamento')}>
                       Departamento {getSortIcon('departamento')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('rol')}>
+                      onClick={() => handleSort('rol')}>
                       Rol {getSortIcon('rol')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('activo')}>
+                      onClick={() => handleSort('activo')}>
                       Estado {getSortIcon('activo')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('ultimoAcceso')}>
+                      onClick={() => handleSort('ultimoAcceso')}>
                       Último acceso {getSortIcon('ultimoAcceso')}
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -778,9 +1340,8 @@ const Usuarios = () => {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className={`hover:bg-gray-50 transition-colors ${
-                        selectedUsuarios.includes(usuario.id) ? 'bg-red-50' : ''
-                      }`}
+                      className={`hover:bg-gray-50 transition-colors ${selectedUsuarios.includes(usuario.id) ? 'bg-red-50' : ''
+                        }`}
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <input
@@ -798,14 +1359,22 @@ const Usuarios = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className={`h-10 w-10 rounded-lg flex items-center justify-center text-white font-bold text-sm ${
-                            usuario.color ? usuario.color :
-                            usuario.rol === 'admin' ? 'bg-red-600' :
-                            usuario.rol === 'supervisor' ? 'bg-yellow-500' :
-                            usuario.rol === 'consultor' ? 'bg-green-500' : 'bg-blue-500'
-                          }`}>
-                            {usuario.nombre?.charAt(0)}
-                          </div>
+                          {usuario.foto ? (
+                            <img
+                              src={usuario.foto}
+                              alt={usuario.nombre}
+                              className="h-10 w-10 rounded-lg object-cover"
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = `https://ui-avatars.com/api/?name=${usuario.nombre}&background=random`;
+                              }}
+                            />
+                          ) : (
+                            <div className={`h-10 w-10 rounded-lg flex items-center justify-center text-white font-bold text-sm ${usuario.color ? usuario.color : getRolStyles(usuario.rol, rolesDisponibles).split(' ')[0]
+                              }`}>
+                              {usuario.nombre?.charAt(0)}
+                            </div>
+                          )}
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900">
                               {usuario.nombre}
@@ -831,8 +1400,8 @@ const Usuarios = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${getRolStyles(usuario.rol)}`}>
-                          {getRolText(usuario.rol)}
+                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${getRolStyles(usuario.rol, rolesDisponibles)}`}>
+                          {getRolText(usuario.rol, rolesDisponibles)}
                         </span>
                         {usuario.intentosFallidos > 3 && (
                           <div className="flex items-center mt-1 text-xs text-red-600">
@@ -924,7 +1493,7 @@ const Usuarios = () => {
                       setEditingUsuario(null);
                       setShowForm(true);
                     }}
-                    className="btn-primary flex items-center space-x-2 mx-auto"
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-2 mx-auto"
                   >
                     <UserPlusIcon className="h-5 w-5" />
                     <span>Crear Primer Usuario</span>
@@ -951,7 +1520,7 @@ const Usuarios = () => {
           <div className="flex space-x-2">
             <button
               onClick={() => setShowSearch(!showSearch)}
-              className="btn-secondary flex items-center space-x-2 text-sm px-3 py-2"
+              className="px-3 py-2 border-2 border-gray-300 rounded-lg hover:border-red-600 hover:bg-red-50 transition-colors flex items-center space-x-2 text-sm text-gray-700"
             >
               <MagnifyingGlassIcon className="h-4 w-4" />
               <span>{showSearch ? 'Ocultar' : 'Buscar'}</span>
@@ -961,7 +1530,7 @@ const Usuarios = () => {
                 setEditingUsuario(null);
                 setShowForm(true);
               }}
-              className="btn-primary flex items-center space-x-2 text-sm px-3 py-2"
+              className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-2 text-sm"
             >
               <UserPlusIcon className="h-4 w-4" />
               <span>Nuevo</span>
@@ -988,339 +1557,6 @@ const Usuarios = () => {
         type="danger"
       />
     </div>
-  );
-};
-
-const StatCard = ({ icon: Icon, label, value, color }) => {
-  const colors = {
-    blue: 'bg-blue-100 text-blue-600',
-    green: 'bg-green-100 text-green-600',
-    red: 'bg-red-100 text-red-600',
-    purple: 'bg-purple-100 text-purple-600',
-    yellow: 'bg-yellow-100 text-yellow-600',
-    orange: 'bg-orange-100 text-orange-600'
-  };
-
-  return (
-    <div className="bg-white rounded-lg shadow p-4 border border-gray-200">
-      <div className="flex items-center">
-        <div className={`p-2 rounded-lg ${colors[color]}`}>
-          <Icon className="h-5 w-5" />
-        </div>
-        <div className="ml-3">
-          <p className="text-xs font-medium text-gray-500 uppercase">{label}</p>
-          <p className="text-lg font-bold text-gray-900">{value}</p>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const getRolStyles = (rol) => {
-  switch (rol) {
-    case 'admin':
-      return 'bg-purple-100 text-purple-800';
-    case 'supervisor':
-      return 'bg-blue-100 text-blue-800';
-    case 'solicitante':
-      return 'bg-green-100 text-green-800';
-    case 'consultor':
-      return 'bg-gray-100 text-gray-800';
-    default:
-      return 'bg-gray-100 text-gray-800';
-  }
-};
-
-const getRolText = (rol) => {
-  const roles = {
-    admin: 'Administrador',
-    supervisor: 'Supervisor',
-    solicitante: 'Solicitante',
-    consultor: 'Consultor'
-  };
-  return roles[rol] || rol;
-};
-
-const UsuarioForm = ({ editingUsuario, onBack, onSave }) => {
-  const [formData, setFormData] = useState({
-    email: '',
-    nombre: '',
-    password: '',
-    rol: 'solicitante',
-    telefono: '',
-    departamento: '',
-    activo: true,
-    color: undefined,
-    ...(editingUsuario || {})
-  });
-
-  const [errors, setErrors] = useState({});
-  const [showPassword, setShowPassword] = useState(false);
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
-
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-  };
-
-  const validateForm = () => {
-    const newErrors = {};
-
-    if (!formData.email.trim()) {
-      newErrors.email = 'El email es requerido';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'El formato del email es inválido';
-    }
-
-    if (!formData.nombre.trim()) {
-      newErrors.nombre = 'El nombre es requerido';
-    }
-
-    if (!editingUsuario && !formData.password) {
-      newErrors.password = 'La contraseña es requerida para nuevos usuarios';
-    } else if (formData.password && formData.password.length < 6) {
-      newErrors.password = 'La contraseña debe tener al menos 6 caracteres';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (validateForm()) {
-      const dataToSend = editingUsuario && !formData.password
-        ? { ...formData, password: undefined }
-        : formData;
-      onSave(dataToSend);
-    }
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
-      className="bg-white shadow-lg rounded-lg overflow-hidden max-w-4xl mx-auto mt-8"
-    >
-      <div className="px-6 py-4 bg-gradient-to-r from-red-600 to-red-700">
-        <h3 className="text-lg font-medium text-white">
-          {editingUsuario ? '✏️ Editar Usuario' : '👤 Nuevo Usuario'}
-        </h3>
-      </div>
-
-      <form onSubmit={handleSubmit} className="p-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email <span className="text-red-600">*</span>
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <EnvelopeIcon className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="input-primary pl-10"
-                placeholder="usuario@empresa.com"
-              />
-            </div>
-            {errors.email && <p className="text-red-600 text-sm mt-1">{errors.email}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nombre Completo <span className="text-red-600">*</span>
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <UserGroupIcon className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                type="text"
-                name="nombre"
-                value={formData.nombre}
-                onChange={handleChange}
-                className="input-primary pl-10"
-                placeholder="Ej: Juan Pérez"
-              />
-            </div>
-            {errors.nombre && <p className="text-red-600 text-sm mt-1">{errors.nombre}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Contraseña {!editingUsuario && <span className="text-red-600">*</span>}
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <KeyIcon className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                type={showPassword ? "text" : "password"}
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                className="input-primary pl-10 pr-10"
-                placeholder={editingUsuario ? "Dejar vacío para no cambiar" : "Mínimo 6 caracteres"}
-              />
-              <button
-                type="button"
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? (
-                  <EyeSlashIcon className="h-5 w-5" />
-                ) : (
-                  <EyeIcon className="h-5 w-5" />
-                )}
-              </button>
-            </div>
-            {errors.password && <p className="text-red-600 text-sm mt-1">{errors.password}</p>}
-            {editingUsuario && (
-              <p className="text-xs text-gray-500 mt-1">
-                <KeyIcon className="h-3 w-3 inline mr-1" />
-                Solo completa este campo si deseas cambiar la contraseña
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Rol <span className="text-red-600">*</span>
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <ShieldCheckIcon className="h-5 w-5 text-gray-400" />
-              </div>
-              <select
-                name="rol"
-                value={formData.rol}
-                onChange={handleChange}
-                className="input-primary pl-10"
-              >
-                <option value="solicitante">Solicitante</option>
-                <option value="supervisor">Supervisor</option>
-                <option value="consultor">Consultor</option>
-                <option value="admin">Administrador</option>
-              </select>
-            </div>
-            {errors.rol && <p className="text-red-600 text-sm mt-1">{errors.rol}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Teléfono
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <PhoneIcon className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                type="tel"
-                name="telefono"
-                value={formData.telefono}
-                onChange={handleChange}
-                className="input-primary pl-10"
-                placeholder="809-123-4567"
-              />
-            </div>
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Departamento
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <BuildingOfficeIcon className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                type="text"
-                name="departamento"
-                value={formData.departamento}
-                onChange={handleChange}
-                className="input-primary pl-10"
-                placeholder="Ej: Ventas, Administración, etc."
-              />
-            </div>
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Color de identificación
-            </label>
-            <div className="flex items-center space-x-4">
-              <div className="flex space-x-2 flex-wrap gap-2">
-                {['bg-red-600', 'bg-yellow-500', 'bg-green-500', 'bg-blue-500', 'bg-purple-600', 'bg-pink-500', 'bg-indigo-500'].map(color => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, color }))}
-                    className={`w-8 h-8 rounded-lg ${color} ${
-                      formData.color === color ? 'ring-2 ring-offset-2 ring-gray-400' : ''
-                    } transition-all hover:scale-110`}
-                    title={`Color ${color}`}
-                  />
-                ))}
-              </div>
-              {formData.color && (
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, color: undefined }))}
-                  className="text-xs text-red-600 hover:text-red-800"
-                >
-                  Quitar color personalizado
-                </button>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              Selecciona un color para identificar rápidamente al usuario en la interfaz
-            </p>
-          </div>
-
-          {editingUsuario && (
-            <div className="md:col-span-2">
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="activo"
-                  checked={formData.activo}
-                  onChange={handleChange}
-                  className="rounded border-gray-300 text-red-600 focus:ring-red-500 h-4 w-4"
-                />
-                <span className="text-sm text-gray-700">Usuario activo</span>
-              </label>
-            </div>
-          )}
-        </div>
-
-        <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 rounded-b-lg">
-          <button
-            type="button"
-            onClick={onBack}
-            className="btn-secondary px-4 py-2"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            className="btn-primary px-6 py-2"
-          >
-            {editingUsuario ? 'Actualizar Usuario' : 'Crear Usuario'}
-          </button>
-        </div>
-      </form>
-    </motion.div>
   );
 };
 

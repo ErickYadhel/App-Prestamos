@@ -2,21 +2,22 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ErrorProvider } from './context/ErrorContext';
-import { ThemeProvider } from './context/ThemeContext'; 
-import { NotificationProvider } from './context/NotificationContext'; 
-import Login from './pages/Login.js';
-import Dashboard from './pages/Dashboard.js';
-import Layout from './components/Layout/Layout.js';
-import Clientes from './pages/Clientes.js';
-import Prestamos from './pages/Prestamos.js';
-import Pagos from './pages/Pagos.js';
-import Solicitudes from './pages/Solicitudes.js';
-import Garantes from './pages/Garantes.js';
-import Usuarios from './pages/Usuarios.js';
-import Configuracion from './pages/Configuracion.js';
-import Notificaciones from './pages/Notificaciones.js';
-import Perfil from './pages/Usuarios.js'; // 👈 NUEVO: Página de perfil de usuario
-import ErrorBoundary from './components/ErrorBoundary'; // 👈 NUEVO: Manejador de errores global
+import { ThemeProvider } from './context/ThemeContext';
+import { NotificationProvider } from './context/NotificationContext';
+import Login from './pages/Login';
+import Welcome from './pages/Welcome'; // 👈 NUEVO: Página de bienvenida
+import Dashboard from './pages/Dashboard';
+import Layout from './components/Layout/Layout';
+import Clientes from './pages/Clientes';
+import Prestamos from './pages/Prestamos';
+import Pagos from './pages/Pagos';
+import Solicitudes from './pages/Solicitudes';
+import Garantes from './pages/Garantes';
+import Usuarios from './pages/Usuarios';
+import Configuracion from './pages/Configuracion';
+import Notificaciones from './pages/Notificaciones';
+import Perfil from './pages/Usuarios';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Componente de carga mejorado
 const LoadingScreen = () => (
@@ -44,7 +45,7 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
 
   // Verificar si el usuario tiene el rol permitido
   if (allowedRoles.length > 0 && !allowedRoles.includes(user.rol)) {
-    return <Navigate to="/" />; // Redirigir al dashboard si no tiene permisos
+    return <Navigate to="/" />; // Redirigir a la bienvenida si no tiene permisos
   }
 
   return children;
@@ -52,20 +53,29 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
 
 function App() {
   return (
-    <ErrorBoundary> {/* 👈 NUEVO: Captura errores globales */}
+    <ErrorBoundary>
       <ErrorProvider>
         <AuthProvider>
-          <ThemeProvider> {/* 👈 NUEVO: Para tema oscuro/claro */}
-            <NotificationProvider> {/* 👈 NUEVO: Para notificaciones */}
+          <ThemeProvider>
+            <NotificationProvider>
               <Router>
                 <div className="App min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
                   <Routes>
                     {/* Ruta pública */}
                     <Route path="/login" element={<Login />} />
                     
-                    {/* Rutas protegidas - Acceso general */}
+                    {/* 👈 NUEVO: Ruta de bienvenida */}
                     <Route path="/" element={
                       <ProtectedRoute>
+                        <Layout>
+                          <Welcome />
+                        </Layout>
+                      </ProtectedRoute>
+                    } />
+                    
+                    {/* Dashboard - Ruta separada para quienes tienen permisos */}
+                    <Route path="/dashboard" element={
+                      <ProtectedRoute allowedRoles={['admin', 'consultor', 'solicitante', 'supervisor']}>
                         <Layout>
                           <Dashboard />
                         </Layout>
@@ -136,8 +146,6 @@ function App() {
                         </Layout>
                       </ProtectedRoute>
                     } />
-                    
-                    {/* 👇 NUEVAS RUTAS MEJORADAS */}
                     
                     {/* Perfil de usuario - Accesible para todos */}
                     <Route path="/perfil" element={

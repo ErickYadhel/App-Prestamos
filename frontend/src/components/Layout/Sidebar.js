@@ -21,7 +21,9 @@ import {
   EyeIcon,
   ShieldCheckIcon,
   SparklesIcon,
-  RocketLaunchIcon
+  RocketLaunchIcon,
+  Bars3Icon, // Nuevo ícono para menú móvil
+  XMarkIcon // Nuevo ícono para cerrar menú móvil
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -33,12 +35,31 @@ const Sidebar = ({ children }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [logoUrl, setLogoUrl] = useState(null);
   const [empresaNombre, setEmpresaNombre] = useState('EYS Inversiones');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // Nuevo estado para menú móvil
+  const [isMobile, setIsMobile] = useState(false); // Nuevo estado para detectar móvil
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
   const sidebarOpen = isFixed || isHovered || isOpen;
+
+  // Detectar si es móvil
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Cerrar menú móvil al cambiar de ruta
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location]);
 
   // Escuchar cambios en el logo y nombre de empresa desde Configuración
   useEffect(() => {
@@ -107,113 +128,198 @@ const Sidebar = ({ children }) => {
     item.roles.includes(user?.rol || 'admin')
   );
 
+  // Sidebar para móvil (overlay)
+  const MobileSidebar = () => (
+    <AnimatePresence>
+      {isMobileMenuOpen && (
+        <>
+          {/* Overlay oscuro */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+          
+          {/* Sidebar móvil */}
+          <motion.div
+            initial={{ x: -280 }}
+            animate={{ x: 0 }}
+            exit={{ x: -280 }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className={`fixed left-0 top-0 h-full w-[280px] z-50 md:hidden ${
+              theme === 'dark' ? 'bg-gray-900' : 'bg-black'
+            }`}
+          >
+            {/* Logo en móvil */}
+            <div className="h-16 flex items-center px-4 border-b border-gray-800">
+              <div className="flex items-center space-x-3 flex-1">
+                {logoUrl ? (
+                  <img src={logoUrl} alt="Logo" className="h-10 w-10 object-contain rounded-lg" />
+                ) : (
+                  <div className="h-10 w-10 bg-gradient-to-br from-red-600 to-red-800 rounded-lg flex items-center justify-center">
+                    <span className="text-white text-lg font-bold">{empresaNombre.charAt(0)}</span>
+                  </div>
+                )}
+                <span className="text-xl font-bold bg-gradient-to-r from-red-500 to-red-700 bg-clip-text text-transparent truncate max-w-[180px]">
+                  {empresaNombre}
+                </span>
+              </div>
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-1 rounded-lg hover:bg-gray-800 transition-colors"
+              >
+                <XMarkIcon className="h-6 w-6 text-gray-400" />
+              </button>
+            </div>
+
+            {/* Navegación móvil */}
+            <nav className="mt-4 px-3 overflow-y-auto max-h-[calc(100vh-4rem)]">
+              <ul className="space-y-1">
+                {filteredMenu.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = location.pathname === item.path;
+                  
+                  return (
+                    <li key={item.name}>
+                      <Link
+                        to={item.path}
+                        className={`flex items-center px-3 py-3 text-sm font-medium rounded-lg transition-all ${
+                          isActive
+                            ? 'bg-gradient-to-r from-red-600 to-red-800 text-white'
+                            : theme === 'dark'
+                            ? 'text-gray-300 hover:bg-gray-800'
+                            : 'text-gray-300 hover:bg-gray-800'
+                        }`}
+                      >
+                        <Icon className="h-5 w-5 mr-3" />
+                        <span>{item.name}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </nav>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+
   return (
     <>
-      {/* Sidebar */}
-      <motion.div
-        className={`h-screen relative flex-shrink-0 ${
-          theme === 'dark' ? 'bg-gray-900' : 'bg-black'
-        }`}
-        animate={{ width: sidebarOpen ? 280 : 80 }}
-        transition={{ duration: 0.3, ease: "easeInOut" }}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => {
-          setIsHovered(false);
-          setShowUserMenu(false);
-        }}
-      >
-        {/* Logo - Versión MEJORADA */}
-        <div className={`h-16 flex items-center ${sidebarOpen ? 'justify-start pl-4' : 'justify-center'}`}>
-          {sidebarOpen ? (
-            <div className="flex items-center space-x-3">
-              {logoUrl ? (
-                <img src={logoUrl} alt="Logo" className="h-10 w-10 object-contain rounded-lg" />
-              ) : (
-                <div className="h-10 w-10 bg-gradient-to-br from-red-600 to-red-800 rounded-lg flex items-center justify-center">
-                  <span className="text-white text-lg font-bold">{empresaNombre.charAt(0)}</span>
-                </div>
-              )}
-              <span className="text-xl font-bold bg-gradient-to-r from-red-500 to-red-700 bg-clip-text text-transparent truncate max-w-[180px]">
-                {empresaNombre}
-              </span>
-            </div>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              {logoUrl ? (
-                <img src={logoUrl} alt="Logo" className="h-8 w-8 object-contain" />
-              ) : (
-                <span className="text-white text-2xl font-bold bg-gradient-to-br from-red-600 to-red-800 w-full h-full flex items-center justify-center">
-                  {empresaNombre.charAt(0)}
+      {/* Sidebar para desktop (solo visible en md y superior) */}
+      {!isMobile && (
+        <motion.div
+          className={`h-screen relative flex-shrink-0 hidden md:block ${
+            theme === 'dark' ? 'bg-gray-900' : 'bg-black'
+          }`}
+          animate={{ width: sidebarOpen ? 280 : 80 }}
+          transition={{ duration: 0.3, ease: "easeInOut" }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => {
+            setIsHovered(false);
+            setShowUserMenu(false);
+          }}
+        >
+          {/* Logo - Versión MEJORADA */}
+          <div className={`h-16 flex items-center ${sidebarOpen ? 'justify-start pl-4' : 'justify-center'}`}>
+            {sidebarOpen ? (
+              <div className="flex items-center space-x-3">
+                {logoUrl ? (
+                  <img src={logoUrl} alt="Logo" className="h-10 w-10 object-contain rounded-lg" />
+                ) : (
+                  <div className="h-10 w-10 bg-gradient-to-br from-red-600 to-red-800 rounded-lg flex items-center justify-center">
+                    <span className="text-white text-lg font-bold">{empresaNombre.charAt(0)}</span>
+                  </div>
+                )}
+                <span className="text-xl font-bold bg-gradient-to-r from-red-500 to-red-700 bg-clip-text text-transparent truncate max-w-[180px]">
+                  {empresaNombre}
                 </span>
-              )}
-            </div>
-          )}
-        </div>
+              </div>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                {logoUrl ? (
+                  <img src={logoUrl} alt="Logo" className="h-8 w-8 object-contain" />
+                ) : (
+                  <span className="text-white text-2xl font-bold bg-gradient-to-br from-red-600 to-red-800 w-full h-full flex items-center justify-center">
+                    {empresaNombre.charAt(0)}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
 
-        {/* Botón fijar (solo visible en hover) */}
-        <AnimatePresence>
-          {isHovered && sidebarOpen && (
-            <motion.button
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -10 }}
-              onClick={() => setIsFixed(!isFixed)}
-              className={`absolute -right-3 top-14 ${
-                isFixed ? 'bg-red-600' : 'bg-gray-600'
-              } text-white rounded-full p-1 shadow-lg hover:bg-red-700 transition-colors z-50`}
-            >
-              {isFixed ? (
-                <ChevronLeftIcon className="h-4 w-4" />
-              ) : (
-                <ChevronRightIcon className="h-4 w-4" />
-              )}
-            </motion.button>
-          )}
-        </AnimatePresence>
+          {/* Botón fijar (solo visible en hover) */}
+          <AnimatePresence>
+            {isHovered && sidebarOpen && (
+              <motion.button
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                onClick={() => setIsFixed(!isFixed)}
+                className={`absolute -right-3 top-14 ${
+                  isFixed ? 'bg-red-600' : 'bg-gray-600'
+                } text-white rounded-full p-1 shadow-lg hover:bg-red-700 transition-colors z-50`}
+              >
+                {isFixed ? (
+                  <ChevronLeftIcon className="h-4 w-4" />
+                ) : (
+                  <ChevronRightIcon className="h-4 w-4" />
+                )}
+              </motion.button>
+            )}
+          </AnimatePresence>
 
-        {/* Navegación */}
-        <nav className="mt-4">
-          <ul className="space-y-1 px-3">
-            {filteredMenu.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path;
-              
-              return (
-                <li key={item.name}>
-                  <Link
-                    to={item.path}
-                    className={`flex items-center px-3 py-3 text-sm font-medium rounded-lg transition-all relative overflow-hidden group ${
-                      isActive
-                        ? 'bg-gradient-to-r from-red-600 to-red-800 text-white shadow-lg shadow-red-600/30'
-                        : theme === 'dark'
-                        ? 'text-gray-300 hover:text-white'
-                        : 'text-gray-300 hover:text-white'
-                    } ${!sidebarOpen && 'justify-center'}`}
-                  >
-                    <span className="absolute inset-0 border-2 border-red-600 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></span>
-                    
-                    <Icon className={`h-5 w-5 ${sidebarOpen ? 'mr-3' : ''} relative z-10 group-hover:text-white transition-colors`} />
-                    
-                    <AnimatePresence>
-                      {sidebarOpen && (
-                        <motion.span
-                          initial={{ opacity: 0, width: 0 }}
-                          animate={{ opacity: 1, width: 'auto' }}
-                          exit={{ opacity: 0, width: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="relative z-10 group-hover:text-white transition-colors"
-                        >
-                          {item.name}
-                        </motion.span>
-                      )}
-                    </AnimatePresence>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-      </motion.div>
+          {/* Navegación */}
+          <nav className="mt-4">
+            <ul className="space-y-1 px-3">
+              {filteredMenu.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.path;
+                
+                return (
+                  <li key={item.name}>
+                    <Link
+                      to={item.path}
+                      className={`flex items-center px-3 py-3 text-sm font-medium rounded-lg transition-all relative overflow-hidden group ${
+                        isActive
+                          ? 'bg-gradient-to-r from-red-600 to-red-800 text-white shadow-lg shadow-red-600/30'
+                          : theme === 'dark'
+                          ? 'text-gray-300 hover:text-white'
+                          : 'text-gray-300 hover:text-white'
+                      } ${!sidebarOpen && 'justify-center'}`}
+                    >
+                      <span className="absolute inset-0 border-2 border-red-600 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></span>
+                      
+                      <Icon className={`h-5 w-5 ${sidebarOpen ? 'mr-3' : ''} relative z-10 group-hover:text-white transition-colors`} />
+                      
+                      <AnimatePresence>
+                        {sidebarOpen && (
+                          <motion.span
+                            initial={{ opacity: 0, width: 0 }}
+                            animate={{ opacity: 1, width: 'auto' }}
+                            exit={{ opacity: 0, width: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="relative z-10 group-hover:text-white transition-colors"
+                          >
+                            {item.name}
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        </motion.div>
+      )}
+
+      {/* Sidebar móvil (overlay) */}
+      <MobileSidebar />
 
       {/* Header Superior */}
       <div className={`flex-1 flex flex-col overflow-hidden ${
@@ -222,19 +328,31 @@ const Sidebar = ({ children }) => {
         <header className={`${
           theme === 'dark' ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
         } border-b sticky top-0 z-10`}>
-          <div className="flex justify-between items-center px-6 py-3">
-            <div>
-              <h1 className={`text-xl font-bold ${
-                theme === 'dark' ? 'text-white' : 'text-gray-900'
-              }`}>
-                {empresaNombre} {/* El nombre de la empresa en el header */}
-              </h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Sistema de Gestión de Préstamos
-              </p>
+          <div className="flex justify-between items-center px-4 md:px-6 py-3">
+            <div className="flex items-center space-x-3">
+              {/* Botón menú móvil */}
+              <button
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="md:hidden p-2 rounded-lg transition-colors hover:bg-gray-800"
+              >
+                <Bars3Icon className={`h-6 w-6 ${
+                  theme === 'dark' ? 'text-white' : 'text-gray-900'
+                }`} />
+              </button>
+              
+              <div>
+                <h1 className={`text-lg md:text-xl font-bold ${
+                  theme === 'dark' ? 'text-white' : 'text-gray-900'
+                }`}>
+                  {empresaNombre}
+                </h1>
+                <p className="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
+                  Sistema de Gestión de Préstamos
+                </p>
+              </div>
             </div>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 md:space-x-4">
               {/* Toggle tema */}
               <button
                 onClick={toggleTheme}
@@ -280,10 +398,10 @@ const Sidebar = ({ children }) => {
                   <div className={`${getRoleColor(user?.rol)} rounded-lg p-2 text-white relative z-10 shadow-lg transition-all group-hover:shadow-red-600/50 group-hover:scale-110`}>
                     {getRoleIcon(user?.rol)}
                   </div>
-                  <span className="absolute inset-0 border-2 border-red-600 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></span>
+                  <span className="hidden sm:block absolute inset-0 border-2 border-red-600 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></span>
                 </motion.button>
 
-                {/* Menú desplegable del usuario */}
+                {/* Menú desplegable del usuario (sin cambios) */}
                 <AnimatePresence>
                   {showUserMenu && (
                     <motion.div
@@ -291,8 +409,9 @@ const Sidebar = ({ children }) => {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -20, scale: 0.95 }}
                       transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                      className="absolute right-0 mt-2 w-72 rounded-xl shadow-2xl overflow-hidden z-50"
+                      className="absolute right-0 mt-2 w-64 md:w-72 rounded-xl shadow-2xl overflow-hidden z-50"
                     >
+                      {/* Contenido del menú de usuario (exactamente igual) */}
                       <div className="absolute inset-0 bg-gradient-to-br from-red-600 via-red-700 to-black opacity-95"></div>
                       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-white to-transparent"></div>
                       
@@ -405,7 +524,7 @@ const Sidebar = ({ children }) => {
         </header>
 
         {/* Page content */}
-        <main className={`flex-1 overflow-x-hidden overflow-y-auto p-6 ${
+        <main className={`flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6 ${
           theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'
         }`}>
           {children}

@@ -23,7 +23,11 @@ import {
   SparklesIcon,
   RocketLaunchIcon,
   Bars3Icon,
-  XMarkIcon
+  XMarkIcon,
+  // 👇 NUEVOS ICONOS
+  PresentationChartLineIcon,
+  LockClosedIcon,
+  FingerPrintIcon
 } from '@heroicons/react/24/outline';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../services/firebase';
@@ -228,7 +232,7 @@ const Sidebar = ({ children }) => {
     cargarRolReal();
   }, [user]);
 
-  // 👇 AHORA SÍ, definimos esAdmin después de que rolReal ya tiene un valor
+  // Definir esAdmin después de que rolReal tiene valor
   const esAdmin = rolReal === 'admin';
 
   // Obtener el icono del rol
@@ -277,7 +281,7 @@ const Sidebar = ({ children }) => {
     };
   }, []);
 
-  // 👇 MODIFICADO: Dashboard ahora apunta a /dashboard
+  // 👇 DEFINICIÓN DE ITEMS DEL MENÚ CON LOS NUEVOS MÓDULOS
   const todosLosMenuItems = [
     { name: 'Dashboard', path: '/dashboard', icon: HomeIcon, modulo: 'dashboard', accion: 'ver' },
     { name: 'Clientes', path: '/clientes', icon: UsersIcon, modulo: 'clientes', accion: 'ver' },
@@ -287,6 +291,9 @@ const Sidebar = ({ children }) => {
     { name: 'Garantes', path: '/garantes', icon: UserGroupIcon, modulo: 'garantes', accion: 'ver' },
     { name: 'Usuarios', path: '/usuarios', icon: UsersIcon, modulo: 'usuarios', accion: 'ver' },
     { name: 'Notificaciones', path: '/notificaciones', icon: BellIcon, modulo: 'notificaciones', accion: 'ver' },
+    // 👇 NUEVOS MÓDULOS
+    { name: 'Operaciones', path: '/operaciones', icon: PresentationChartLineIcon, modulo: 'operaciones', accion: 'ver' },
+    { name: 'Seguridad', path: '/seguridad', icon: LockClosedIcon, modulo: 'seguridad', accion: 'ver' },
     { name: 'Configuración', path: '/configuracion', icon: CogIcon, modulo: 'configuracion', accion: 'ver' },
   ];
 
@@ -308,24 +315,14 @@ const Sidebar = ({ children }) => {
     return tienePermiso;
   });
 
-  // 👇 NUEVO: Redirección automática desde la raíz
+  // 👇 REDIRECCIÓN ELIMINADA - Ahora siempre muestra el Welcome sin importar el rol
   useEffect(() => {
-    // Si estamos en la ruta raíz y el usuario tiene permisos para dashboard, no redirigir (mostrar bienvenida)
+    // Ya no redirigimos automáticamente, el usuario siempre ve la bienvenida
     if (!loadingPermisos && location.pathname === '/') {
-      // Verificar si tiene permiso para dashboard
-      if (esAdmin || permisosUsuario['dashboard']?.includes('ver')) {
-        console.log('👋 Usuario con permisos para dashboard, mostrando bienvenida');
-        // Ya está en la bienvenida, no hacer nada
-        return;
-      }
-      
-      // Si tiene otros permisos, redirigir al primer módulo disponible
-      if (filteredMenu.length > 0) {
-        console.log('🔄 Redirigiendo a primer módulo disponible:', filteredMenu[0].path);
-        navigate(filteredMenu[0].path);
-      }
+      console.log('👋 Usuario en welcome, puede navegar manualmente desde el menú lateral');
+      // No hacemos nada, se queda en welcome
     }
-  }, [loadingPermisos, location.pathname, esAdmin, permisosUsuario, filteredMenu, navigate]);
+  }, [loadingPermisos, location.pathname]);
 
   // Debug: Mostrar resumen de permisos
   useEffect(() => {
@@ -572,7 +569,7 @@ const Sidebar = ({ children }) => {
       }`}>
         <header className={`${
           theme === 'dark' ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-        } border-b sticky top-0 z-10`}>
+        } border-b sticky top-0 z-50`}>
           <div className="flex justify-between items-center px-4 md:px-6 py-3">
             <div className="flex items-center space-x-3">
               {/* Botón menú móvil */}
@@ -656,7 +653,7 @@ const Sidebar = ({ children }) => {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -20, scale: 0.95 }}
                       transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                      className="absolute right-0 mt-2 w-64 md:w-72 rounded-xl shadow-2xl overflow-hidden z-50"
+                      className="absolute right-0 mt-2 w-64 md:w-72 rounded-xl shadow-2xl overflow-hidden z-[9999]"
                     >
                       <div className="absolute inset-0 bg-gradient-to-br from-red-600 via-red-700 to-black opacity-95"></div>
                       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-white to-transparent"></div>

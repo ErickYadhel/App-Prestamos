@@ -5,8 +5,6 @@ import {
   BuildingStorefrontIcon,
   CurrencyDollarIcon,
   BellIcon,
-  ShieldCheckIcon,
-  UserGroupIcon,
   FolderIcon,
   PaintBrushIcon,
   XMarkIcon,
@@ -23,9 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import Empresa from './Configuracion/Empresa.js';
 import Finanzas from './Configuracion/Finanzas.js';
 import Notificaciones from './Configuracion/Notificaciones.js';
-import Seguridad from './Configuracion/Seguridad.js';
 import Apariencia from './Configuracion/Apariencia.js';
-import Roles from './Configuracion/Roles.js';
 import Backup from './Configuracion/Backup.js';
 
 // ============================================
@@ -104,13 +100,6 @@ const Configuracion = () => {
       notificacionesSolicitudes: true,
       emailReportes: false,
       smsAlertas: false
-    },
-    seguridad: {
-      requiereVerificacionEmail: false,
-      intentosLoginMaximos: 5,
-      longitudMinimaPassword: 6,
-      autenticacionDosFactores: false,
-      sesionUnica: true
     },
     backup: {
       automatico: true,
@@ -234,12 +223,11 @@ const Configuracion = () => {
     }
   };
 
+  // 👇 PESTAÑAS ACTUALIZADAS (sin Seguridad y sin Roles)
   const tabs = [
     { id: 'empresa', name: 'Empresa', icon: BuildingStorefrontIcon },
     { id: 'finanzas', name: 'Finanzas', icon: CurrencyDollarIcon },
     { id: 'notificaciones', name: 'Notificaciones', icon: BellIcon },
-    { id: 'seguridad', name: 'Seguridad', icon: ShieldCheckIcon },
-    { id: 'roles', name: 'Roles y Permisos', icon: UserGroupIcon },
     { id: 'backup', name: 'Backup', icon: FolderIcon },
     { id: 'apariencia', name: 'Apariencia', icon: PaintBrushIcon }
   ];
@@ -395,7 +383,7 @@ const Configuracion = () => {
         )}
       </AnimatePresence>
 
-      {/* Tabs */}
+      {/* Tabs - AHORA SOLO 5 PESTAÑAS */}
       <GlassCard className="p-2">
         <div className="flex flex-wrap justify-center gap-2">
           {tabs.map((tab) => {
@@ -453,16 +441,6 @@ const Configuracion = () => {
             configuracion={configuracion}
             handleInputChange={handleInputChange}
           />
-        )}
-        {activeTab === 'seguridad' && (
-          <Seguridad
-            key="seguridad"
-            configuracion={configuracion}
-            handleInputChange={handleInputChange}
-          />
-        )}
-        {activeTab === 'roles' && (
-          <Roles key="roles" />
         )}
         {activeTab === 'backup' && (
           <Backup key="backup" />

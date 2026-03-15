@@ -5,7 +5,7 @@ import { ErrorProvider } from './context/ErrorContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { NotificationProvider } from './context/NotificationContext';
 import Login from './pages/Login';
-import Welcome from './pages/Welcome'; // 👈 NUEVO: Página de bienvenida
+import Welcome from './pages/Welcome';
 import Dashboard from './pages/Dashboard';
 import Layout from './components/Layout/Layout';
 import Clientes from './pages/Clientes';
@@ -18,6 +18,10 @@ import Configuracion from './pages/Configuracion';
 import Notificaciones from './pages/Notificaciones';
 import Perfil from './pages/Usuarios';
 import ErrorBoundary from './components/ErrorBoundary';
+
+// 👇 NUEVAS IMPORTACIONES
+import Operaciones from './pages/Operaciones';
+import Seguridad from './pages/Seguridad';
 
 // Componente de carga mejorado
 const LoadingScreen = () => (
@@ -64,7 +68,7 @@ function App() {
                     {/* Ruta pública */}
                     <Route path="/login" element={<Login />} />
                     
-                    {/* 👈 NUEVO: Ruta de bienvenida */}
+                    {/* Ruta de bienvenida */}
                     <Route path="/" element={
                       <ProtectedRoute>
                         <Layout>
@@ -73,7 +77,7 @@ function App() {
                       </ProtectedRoute>
                     } />
                     
-                    {/* Dashboard - Ruta separada para quienes tienen permisos */}
+                    {/* Dashboard */}
                     <Route path="/dashboard" element={
                       <ProtectedRoute allowedRoles={['admin', 'consultor', 'solicitante', 'supervisor']}>
                         <Layout>
@@ -82,7 +86,7 @@ function App() {
                       </ProtectedRoute>
                     } />
                     
-                    {/* Rutas protegidas - Con roles específicos */}
+                    {/* Rutas de gestión principal */}
                     <Route path="/clientes" element={
                       <ProtectedRoute allowedRoles={['admin', 'consultor', 'supervisor']}>
                         <Layout>
@@ -131,18 +135,39 @@ function App() {
                       </ProtectedRoute>
                     } />
                     
-                    <Route path="/configuracion" element={
-                      <ProtectedRoute allowedRoles={['admin']}>
-                        <Layout>
-                          <Configuracion />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
                     <Route path="/notificaciones" element={
                       <ProtectedRoute allowedRoles={['admin', 'consultor', 'solicitante', 'supervisor']}>
                         <Layout>
                           <Notificaciones />
+                        </Layout>
+                      </ProtectedRoute>
+                    } />
+                    
+                    {/* 👇 NUEVAS RUTAS */}
+                    
+                    {/* Operaciones - Acceso para admin, supervisor y consultor */}
+                    <Route path="/operaciones" element={
+                      <ProtectedRoute allowedRoles={['admin', 'supervisor', 'consultor']}>
+                        <Layout>
+                          <Operaciones />
+                        </Layout>
+                      </ProtectedRoute>
+                    } />
+                    
+                    {/* Seguridad - Solo admin */}
+                    <Route path="/seguridad" element={
+                      <ProtectedRoute allowedRoles={['admin']}>
+                        <Layout>
+                          <Seguridad />
+                        </Layout>
+                      </ProtectedRoute>
+                    } />
+                    
+                    {/* Configuración - Solo admin */}
+                    <Route path="/configuracion" element={
+                      <ProtectedRoute allowedRoles={['admin']}>
+                        <Layout>
+                          <Configuracion />
                         </Layout>
                       </ProtectedRoute>
                     } />

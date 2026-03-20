@@ -24,6 +24,7 @@ import {
   MagnifyingGlassIcon,
   PlusIcon,
   TrashIcon,
+  UserIcon,
   PencilIcon,
   XMarkIcon,
   CpuChipIcon,
@@ -39,7 +40,10 @@ import {
   PhoneIcon,
   EnvelopeIcon,
   IdentificationIcon,
-  BriefcaseIcon
+  BriefcaseIcon,
+  ArrowsPointingOutIcon,
+  ChevronDoubleRightIcon,
+  Squares2X2Icon
 } from '@heroicons/react/24/outline';
 import {
   Chart as ChartJS,
@@ -58,12 +62,15 @@ import {
   ScatterController,
   BubbleController
 } from 'chart.js';
-import { Bar, Line, Doughnut, Pie, Radar, Scatter, Bubble } from 'react-chartjs-2';
+import { Bar, Line, Doughnut, Pie, Radar, Scatter, Bubble } from 'react-chartjs-2'; 
 import dashboardService from '../services/dashboardService';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../services/firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
+import ChartModal from '../components/Dashboard/ChartModal';
+import DashboardManager from '../components/Dashboard/DashboardManager';
+import { formatFirebaseDate, formatShortDate, getRelativeTime, convertTimestampToDate } from '../components/Dashboard/DateFormatter';
 
 // Registrar componentes de Chart.js
 ChartJS.register(
@@ -84,20 +91,21 @@ ChartJS.register(
 );
 
 // ============================================
-// COMPONENTE DE BORDE LUMINOSO
+// COMPONENTE DE BORDE LUMINOSO MEJORADO (SIN CÍRCULOS ROJOS)
 // ============================================
 const BorderGlow = ({ children, isHovered, color = 'from-red-600 via-red-500 to-red-600' }) => {
   const { theme } = useTheme();
   
   return (
     <div className="relative group">
-      <div className={`absolute -inset-0.5 bg-gradient-to-r ${color} rounded-xl blur opacity-0 transition-all duration-500 ${
-        isHovered ? 'opacity-75' : 'group-hover:opacity-50'
+      <div className={`absolute -inset-0.5 bg-gradient-to-r ${color} rounded-xl blur opacity-0 transition-all duration-300 ${
+        isHovered ? 'opacity-100' : 'group-hover:opacity-70'
       }`} />
-      <div className={`absolute -inset-0.5 bg-gradient-to-r ${color} rounded-xl blur-lg opacity-0 transition-all duration-700 ${
-        isHovered ? 'opacity-50' : 'group-hover:opacity-30'
+      <div className={`absolute -inset-0.5 bg-gradient-to-r ${color} rounded-xl blur-lg opacity-0 transition-all duration-500 ${
+        isHovered ? 'opacity-60' : 'group-hover:opacity-40'
       }`} />
-      <div className="relative">
+      <div className="absolute -inset-0.5 bg-gradient-to-r ${color} rounded-xl opacity-0 group-hover:opacity-20 blur-2xl transition-all duration-700" />
+      <div className="relative transform transition-all duration-300 group-hover:scale-[1.02]">
         {children}
       </div>
     </div>
@@ -105,18 +113,31 @@ const BorderGlow = ({ children, isHovered, color = 'from-red-600 via-red-500 to-
 };
 
 // ============================================
-// COMPONENTE DE TARJETA CON EFECTO GLASSMORPHISM
+// COMPONENTE DE TARJETA CON EFECTO GLASSMORPHISM MEJORADO (SIN CÍRCULOS ROJOS)
 // ============================================
-const GlassCard = ({ children, className = '' }) => {
+const GlassCard = ({ children, className = '', onClick }) => {
   const { theme } = useTheme();
+  const [isHovered, setIsHovered] = useState(false);
   
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className={`bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-xl shadow-xl border border-red-600/20 hover:border-red-600/40 transition-all duration-300 ${className}`}
+      onHoverStart={() => setIsHovered(true)}
+      onHoverEnd={() => setIsHovered(false)}
+      onClick={onClick}
+      className={`relative overflow-hidden bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-xl shadow-xl border transition-all duration-300 cursor-pointer ${
+        isHovered 
+          ? 'border-red-600 shadow-2xl shadow-red-600/20 scale-[1.02] z-10' 
+          : 'border-red-600/20 hover:border-red-600/40'
+      } ${className}`}
     >
+      {/* Efecto de brillo en hover */}
+      <div className={`absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full transition-transform duration-1000 ${
+        isHovered ? 'translate-x-full' : ''
+      }`} />
+      
       {children}
     </motion.div>
   );
@@ -130,7 +151,6 @@ const DashboardSkeleton = () => {
   
   return (
     <div className="space-y-6">
-      {/* Header Skeleton */}
       <div className="flex justify-between items-center">
         <div>
           <div className={`h-8 w-48 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
@@ -138,8 +158,6 @@ const DashboardSkeleton = () => {
         </div>
         <div className={`h-10 w-32 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
       </div>
-
-      {/* Métricas Skeleton */}
       <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-4">
         {[1, 2, 3, 4].map(i => (
           <div key={i} className={`h-32 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
@@ -150,7 +168,7 @@ const DashboardSkeleton = () => {
 };
 
 // ============================================
-// COMPONENTE METRIC CARD MEJORADO
+// COMPONENTE METRIC CARD MEJORADO (CON TOOLTIP MEJORADO)
 // ============================================
 const MetricCard = ({ title, value, change, changeType, icon: Icon, color, link, description, gradient, onClick, tooltip }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -203,13 +221,17 @@ const MetricCard = ({ title, value, change, changeType, icon: Icon, color, link,
                 {tooltip && (
                   <div className="group/tooltip relative">
                     <InformationCircleIcon className={`h-3 w-3 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-400'}`} />
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-xs bg-gray-900 text-white rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
-                      {tooltip}
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-4 py-2 text-xs bg-gray-900 text-white rounded-lg opacity-0 group-hover/tooltip:opacity-100 transition-all duration-200 whitespace-normal min-w-[250px] max-w-[350px] shadow-xl z-[100] pointer-events-none break-words border border-gray-700">
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
+                      <div className="relative">
+                        <p className="font-medium text-sm mb-1 text-red-400">ℹ️ Información</p>
+                        <p className="text-gray-300 leading-relaxed">{tooltip}</p>
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
-              <div className="flex items-baseline">
+              <div className="flex items-baseline flex-wrap">
                 <p className={`text-2xl sm:text-3xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                   {value}
                 </p>
@@ -250,7 +272,7 @@ const MetricCard = ({ title, value, change, changeType, icon: Icon, color, link,
 };
 
 // ============================================
-// COMPONENTE DE FILTROS AVANZADOS
+// COMPONENTE DE FILTROS AVANZADOS MEJORADO
 // ============================================
 const AdvancedFilters = ({ filters, onFilterChange, onClose }) => {
   const { theme } = useTheme();
@@ -265,16 +287,30 @@ const AdvancedFilters = ({ filters, onFilterChange, onClose }) => {
     onClose();
   };
 
+  const clearFilters = () => {
+    const emptyFilters = { periodo: 'mes' };
+    setLocalFilters(emptyFilters);
+    onFilterChange(emptyFilters);
+    onClose();
+  };
+
   const periodos = [
+    { value: 'mes', label: 'Este Mes' },
     { value: 'hoy', label: 'Hoy' },
     { value: 'ayer', label: 'Ayer' },
     { value: 'semana', label: 'Esta Semana' },
-    { value: 'mes', label: 'Este Mes' },
     { value: 'trimestre', label: 'Este Trimestre' },
     { value: 'año', label: 'Este Año' },
     { value: 'todo', label: 'Todo el Tiempo' },
     { value: 'personalizado', label: 'Personalizado' }
   ];
+
+  const hasActiveFilters = () => {
+    const filterKeys = Object.keys(localFilters);
+    return filterKeys.some(key => 
+      key !== 'periodo' && localFilters[key] && localFilters[key] !== ''
+    );
+  };
 
   return (
     <motion.div
@@ -287,11 +323,16 @@ const AdvancedFilters = ({ filters, onFilterChange, onClose }) => {
         <div className="p-4 sm:p-6">
           <div className="flex justify-between items-center mb-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-gradient-to-br from-purple-600 to-purple-800 rounded-lg">
+              <div className="p-2 bg-gradient-to-br from-red-600 to-red-800 rounded-lg">
                 <FunnelIcon className="h-5 w-5 text-white" />
               </div>
               <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                 Filtros Avanzados
+                {hasActiveFilters() && (
+                  <span className="ml-2 px-2 py-0.5 text-xs bg-red-600 text-white rounded-full">
+                    Activos
+                  </span>
+                )}
               </h3>
             </div>
             <motion.button
@@ -306,7 +347,7 @@ const AdvancedFilters = ({ filters, onFilterChange, onClose }) => {
             </motion.button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className={`block text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                 Período
@@ -339,32 +380,12 @@ const AdvancedFilters = ({ filters, onFilterChange, onClose }) => {
                     : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
                 } focus:ring-2 focus:ring-red-500/20 outline-none transition-all`}
               >
-                <option value="">Todas</option>
+                <option value="">Todas las provincias</option>
                 <option value="SD">Santo Domingo</option>
                 <option value="Santiago">Santiago</option>
                 <option value="La Vega">La Vega</option>
                 <option value="Puerto Plata">Puerto Plata</option>
-              </select>
-            </div>
-
-            <div>
-              <label className={`block text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                Tipo de Préstamo
-              </label>
-              <select
-                value={localFilters.tipoPrestamo || ''}
-                onChange={(e) => handleChange('tipoPrestamo', e.target.value)}
-                className={`w-full px-3 sm:px-4 py-2 rounded-lg border-2 text-sm ${
-                  theme === 'dark'
-                    ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
-                    : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
-                } focus:ring-2 focus:ring-red-500/20 outline-none transition-all`}
-              >
-                <option value="">Todos</option>
-                <option value="personal">Personal</option>
-                <option value="hipotecario">Hipotecario</option>
-                <option value="vehicular">Vehicular</option>
-                <option value="comercial">Comercial</option>
+                <option value="Distrito Nacional">Distrito Nacional</option>
               </select>
             </div>
 
@@ -381,7 +402,7 @@ const AdvancedFilters = ({ filters, onFilterChange, onClose }) => {
                     : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
                 } focus:ring-2 focus:ring-red-500/20 outline-none transition-all`}
               >
-                <option value="">Todos</option>
+                <option value="">Todos los montos</option>
                 <option value="0-50000">0 - 50,000</option>
                 <option value="50000-100000">50,000 - 100,000</option>
                 <option value="100000-250000">100,000 - 250,000</option>
@@ -428,11 +449,7 @@ const AdvancedFilters = ({ filters, onFilterChange, onClose }) => {
 
           <div className="flex flex-wrap justify-end gap-2 mt-4">
             <button
-              onClick={() => {
-                setLocalFilters({ periodo: 'mes' });
-                onFilterChange({ periodo: 'mes' });
-                onClose();
-              }}
+              onClick={clearFilters}
               className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                 theme === 'dark'
                   ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -457,16 +474,19 @@ const AdvancedFilters = ({ filters, onFilterChange, onClose }) => {
 };
 
 // ============================================
-// MODAL PARA GUARDAR DASHBOARD
+// MODAL PARA GESTIONAR DASHBOARDS (NUEVO)
 // ============================================
-const SaveDashboardModal = ({ isOpen, onClose, onSave, dashboard }) => {
+const DashboardManagerModal = ({ isOpen, onClose, dashboards, currentDashboard, onSelect, onSave, onEdit, onDelete }) => {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const [nombre, setNombre] = useState(dashboard?.nombre || '');
-  const [descripcion, setDescripcion] = useState(dashboard?.descripcion || '');
+  const [nombre, setNombre] = useState('');
+  const [descripcion, setDescripcion] = useState('');
   const [error, setError] = useState('');
+  const [modo, setModo] = useState('listar'); // 'listar', 'crear', 'editar'
+  const [editandoId, setEditandoId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const handleSubmit = () => {
+  const handleGuardar = () => {
     if (!nombre.trim()) {
       setError('El nombre es requerido');
       return;
@@ -475,10 +495,67 @@ const SaveDashboardModal = ({ isOpen, onClose, onSave, dashboard }) => {
     onSave({
       nombre: nombre.trim(),
       descripcion: descripcion.trim(),
-      creadoPor: user?.email,
+      creadoPor: user?.email || 'Usuario',
       fechaCreacion: new Date().toISOString()
     });
+
+    setNombre('');
+    setDescripcion('');
+    setError('');
+    setModo('listar');
   };
+
+  const handleEditar = (dashboard) => {
+    setEditandoId(dashboard.id);
+    setNombre(dashboard.nombre);
+    setDescripcion(dashboard.descripcion || '');
+    setModo('editar');
+  };
+
+  const handleActualizar = () => {
+    if (!nombre.trim()) {
+      setError('El nombre es requerido');
+      return;
+    }
+
+    onEdit(editandoId, {
+      nombre: nombre.trim(),
+      descripcion: descripcion.trim()
+    });
+
+    setNombre('');
+    setDescripcion('');
+    setError('');
+    setEditandoId(null);
+    setModo('listar');
+  };
+
+  const handleEliminar = (id, nombre) => {
+    if (window.confirm(`¿Estás seguro de eliminar el dashboard "${nombre}"?`)) {
+      onDelete(id);
+    }
+  };
+
+  const handleCancelar = () => {
+    setNombre('');
+    setDescripcion('');
+    setError('');
+    setEditandoId(null);
+    setModo('listar');
+  };
+
+  const handleNuevo = () => {
+    setNombre('');
+    setDescripcion('');
+    setError('');
+    setModo('crear');
+  };
+
+  // Filtrar dashboards por término de búsqueda
+  const dashboardsFiltrados = dashboards.filter(d => 
+    d.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (d.descripcion && d.descripcion.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   if (!isOpen) return null;
 
@@ -488,14 +565,14 @@ const SaveDashboardModal = ({ isOpen, onClose, onSave, dashboard }) => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xl"
+        className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-xl"
         onClick={onClose}
       >
         <motion.div
           initial={{ scale: 0.9, y: 20, opacity: 0 }}
           animate={{ scale: 1, y: 0, opacity: 1 }}
           exit={{ scale: 0.9, y: 20, opacity: 0 }}
-          className="relative w-full max-w-md mx-4"
+          className="relative w-full max-w-3xl max-h-[85vh] mx-4 overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="absolute -inset-0.5 bg-gradient-to-r from-red-600 via-red-500 to-red-600 rounded-2xl blur-xl opacity-75" />
@@ -510,79 +587,283 @@ const SaveDashboardModal = ({ isOpen, onClose, onSave, dashboard }) => {
             <div className={`p-6 border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} bg-gradient-to-r ${
               theme === 'dark' ? 'from-gray-800 to-gray-900' : 'from-red-50 to-white'
             }`}>
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-gradient-to-br from-red-600 to-red-800 rounded-lg">
-                  <PresentationChartLineIcon className="h-5 w-5 text-white" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-gradient-to-br from-red-600 to-red-800 rounded-lg">
+                    <Squares2X2Icon className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                      {modo === 'listar' && 'Mis Dashboards'}
+                      {modo === 'crear' && 'Guardar Nuevo Dashboard'}
+                      {modo === 'editar' && 'Editar Dashboard'}
+                    </h3>
+                    <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                      {modo === 'listar' && 'Administra tus dashboards personalizados'}
+                      {modo === 'crear' && 'Guarda la configuración actual para acceder rápidamente'}
+                      {modo === 'editar' && 'Modifica los detalles del dashboard'}
+                    </p>
+                  </div>
                 </div>
-                <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                  {dashboard ? 'Editar Dashboard' : 'Guardar Dashboard'}
-                </h3>
+                <button
+                  onClick={onClose}
+                  className={`p-2 rounded-lg transition-all hover:scale-110 ${
+                    theme === 'dark' 
+                      ? 'hover:bg-gray-700 text-gray-400 hover:text-white' 
+                      : 'hover:bg-gray-200 text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
               </div>
             </div>
 
-            <div className="p-6 space-y-4">
-              <div>
-                <label className={`block text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Nombre del Dashboard *
-                </label>
-                <input
-                  type="text"
-                  value={nombre}
-                  onChange={(e) => {
-                    setNombre(e.target.value);
-                    setError('');
-                  }}
-                  className={`w-full px-4 py-2 rounded-lg border-2 ${
-                    theme === 'dark'
-                      ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
-                      : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
-                  } focus:ring-2 focus:ring-red-500/20 outline-none transition-all`}
-                  placeholder="Ej: Dashboard Principal"
-                  autoFocus
-                />
-                {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
-              </div>
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              {modo === 'listar' && (
+                <div>
+                  <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Buscar dashboards..."
+                        className={`w-full px-4 py-2.5 rounded-lg border-2 text-sm ${
+                          theme === 'dark'
+                            ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-red-500'
+                            : 'bg-white border-gray-200 text-gray-900 placeholder-gray-400 focus:border-red-500'
+                        } focus:ring-2 focus:ring-red-500/20 outline-none transition-all`}
+                      />
+                    </div>
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleNuevo}
+                      className="px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg text-sm font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center space-x-2"
+                    >
+                      <PlusIcon className="h-4 w-4" />
+                      <span>Nuevo Dashboard</span>
+                    </motion.button>
+                  </div>
 
-              <div>
-                <label className={`block text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Descripción
-                </label>
-                <textarea
-                  value={descripcion}
-                  onChange={(e) => setDescripcion(e.target.value)}
-                  rows="3"
-                  className={`w-full px-4 py-2 rounded-lg border-2 resize-none ${
-                    theme === 'dark'
-                      ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
-                      : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
-                  } focus:ring-2 focus:ring-red-500/20 outline-none transition-all`}
-                  placeholder="Breve descripción del dashboard..."
-                />
-              </div>
+                  {dashboardsFiltrados.length > 0 ? (
+                    <div className="space-y-3">
+                      {dashboardsFiltrados.map((d, index) => {
+                        const fecha = d.fechaCreacion ? new Date(d.fechaCreacion) : null;
+                        const esActual = currentDashboard?.id === d.id;
+                        
+                        return (
+                          <motion.div
+                            key={d.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.05 }}
+                            className={`relative overflow-hidden rounded-xl border-2 transition-all ${
+                              esActual
+                                ? 'border-red-600 bg-red-50/50 dark:bg-red-900/20'
+                                : 'border-gray-200 dark:border-gray-700 hover:border-red-600/50'
+                            }`}
+                          >
+                            <div className={`absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full transition-transform duration-1000 hover:translate-x-full`} />
+                            
+                            <div className="p-4">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-2 mb-2">
+                                    <h4 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                      {d.nombre}
+                                    </h4>
+                                    {esActual && (
+                                      <span className="px-2 py-0.5 text-xs bg-red-600 text-white rounded-full flex items-center space-x-1">
+                                        <CheckCircleIcon className="h-3 w-3" />
+                                        <span>Actual</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                  
+                                  {d.descripcion && (
+                                    <p className={`text-sm mb-3 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                                      {d.descripcion}
+                                    </p>
+                                  )}
+                                  
+                                  <div className="flex flex-wrap items-center gap-3 text-xs">
+                                    <div className={`flex items-center space-x-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                                      <UserIcon className="h-3 w-3" />
+                                      <span>{d.creadoPor || 'Usuario'}</span>
+                                    </div>
+                                    {fecha && (
+                                      <div className={`flex items-center space-x-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                                        <ClockIcon className="h-3 w-3" />
+                                        <span>{fecha.toLocaleDateString()}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center space-x-2 ml-4">
+                                  <button
+                                    onClick={() => onSelect(d)}
+                                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                                      esActual
+                                        ? 'bg-green-600 text-white hover:bg-green-700'
+                                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                                    }`}
+                                  >
+                                    {esActual ? 'Actual' : 'Cargar'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleEditar(d)}
+                                    className={`p-2 rounded-lg transition-all hover:scale-110 ${
+                                      theme === 'dark'
+                                        ? 'hover:bg-gray-700 text-yellow-500 hover:text-yellow-400'
+                                        : 'hover:bg-yellow-100 text-yellow-600 hover:text-yellow-700'
+                                    }`}
+                                    title="Editar"
+                                  >
+                                    <PencilIcon className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleEliminar(d.id, d.nombre)}
+                                    className={`p-2 rounded-lg transition-all hover:scale-110 ${
+                                      theme === 'dark'
+                                        ? 'hover:bg-gray-700 text-red-500 hover:text-red-400'
+                                        : 'hover:bg-red-100 text-red-600 hover:text-red-700'
+                                    }`}
+                                    title="Eliminar"
+                                  >
+                                    <TrashIcon className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className={`text-center py-12 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {searchTerm ? (
+                        <>
+                          <Squares2X2Icon className="h-16 w-16 mx-auto mb-4 opacity-30" />
+                          <p className="text-lg font-medium mb-2">No se encontraron dashboards</p>
+                          <p className="text-sm mb-4">No hay resultados para "{searchTerm}"</p>
+                          <button
+                            onClick={() => setSearchTerm('')}
+                            className="text-red-600 hover:text-red-700 font-medium text-sm"
+                          >
+                            Limpiar búsqueda
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <Squares2X2Icon className="h-16 w-16 mx-auto mb-4 opacity-30" />
+                          <p className="text-lg font-medium mb-2">No hay dashboards guardados</p>
+                          <p className="text-sm mb-4">Guarda tu configuración actual para acceder rápidamente</p>
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={handleNuevo}
+                            className="px-6 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg text-sm font-medium shadow-lg hover:shadow-xl transition-all inline-flex items-center space-x-2"
+                          >
+                            <PlusIcon className="h-4 w-4" />
+                            <span>Guardar Dashboard Actual</span>
+                          </motion.button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(modo === 'crear' || modo === 'editar') && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                >
+                  <div className="space-y-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Nombre del Dashboard *
+                      </label>
+                      <input
+                        type="text"
+                        value={nombre}
+                        onChange={(e) => {
+                          setNombre(e.target.value);
+                          setError('');
+                        }}
+                        className={`w-full px-4 py-2.5 rounded-lg border-2 text-sm ${
+                          theme === 'dark'
+                            ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                            : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                        } focus:ring-2 focus:ring-red-500/20 outline-none transition-all`}
+                        placeholder="Ej: Dashboard Principal"
+                        autoFocus
+                      />
+                      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Descripción
+                      </label>
+                      <textarea
+                        value={descripcion}
+                        onChange={(e) => setDescripcion(e.target.value)}
+                        rows="4"
+                        className={`w-full px-4 py-2.5 rounded-lg border-2 resize-none text-sm ${
+                          theme === 'dark'
+                            ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                            : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                        } focus:ring-2 focus:ring-red-500/20 outline-none transition-all`}
+                        placeholder="Breve descripción del dashboard (opcional)..."
+                      />
+                    </div>
+
+                    <div className={`mt-4 p-4 rounded-lg border-2 ${
+                      theme === 'dark' ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'
+                    }`}>
+                      <h5 className={`text-sm font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Configuración actual que se guardará:
+                      </h5>
+                      <ul className={`text-xs space-y-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                        <li>• Filtros aplicados</li>
+                        <li>• Visibilidad de gráficos</li>
+                        <li>• Período seleccionado</li>
+                      </ul>
+                    </div>
+
+                    <div className="flex justify-end space-x-3 pt-4">
+                      <button
+                        onClick={handleCancelar}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                          theme === 'dark'
+                            ? 'bg-white/10 text-white hover:bg-white/20'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        Cancelar
+                      </button>
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={modo === 'crear' ? handleGuardar : handleActualizar}
+                        className="px-6 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg text-sm font-medium shadow-lg hover:shadow-xl transition-all"
+                      >
+                        {modo === 'crear' ? 'Guardar Dashboard' : 'Actualizar Dashboard'}
+                      </motion.button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
             </div>
 
-            <div className={`p-6 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} flex flex-col sm:flex-row justify-end gap-2 sm:space-x-3 bg-gradient-to-r ${
-              theme === 'dark' ? 'from-gray-800 to-gray-900' : 'from-gray-50 to-white'
-            }`}>
-              <button
-                type="button"
-                onClick={onClose}
-                className={`w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  theme === 'dark'
-                    ? 'bg-white/10 text-white hover:bg-white/20'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                Cancelar
-              </button>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleSubmit}
-                className="w-full sm:w-auto px-6 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg text-sm font-medium shadow-lg hover:shadow-xl transition-all"
-              >
-                Guardar
-              </motion.button>
+            <div className={`p-4 border-t ${theme === 'dark' ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'} text-center`}>
+              <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                Los dashboards guardados almacenan tu configuración de filtros y visibilidad de gráficos
+              </p>
             </div>
           </div>
         </motion.div>
@@ -592,13 +873,52 @@ const SaveDashboardModal = ({ isOpen, onClose, onSave, dashboard }) => {
 };
 
 // ============================================
-// COMPONENTE DE SELECTOR DE DASHBOARDS
+// COMPONENTE DE SELECTOR DE DASHBOARDS SIMPLIFICADO
 // ============================================
-const DashboardSelector = ({ dashboards, currentDashboard, onSelectDashboard, onSaveNew, onEdit, onDelete }) => {
+const DashboardSelector = ({ dashboards, currentDashboard, onOpenManager }) => {
+  const { theme } = useTheme();
+
+  return (
+    <motion.button
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      onClick={onOpenManager}
+      className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center space-x-2 ${
+        theme === 'dark'
+          ? 'bg-white/10 text-white hover:bg-white/20'
+          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+      }`}
+      title="Gestionar Dashboards"
+    >
+      <Squares2X2Icon className="h-4 w-4" />
+      <span className="max-w-[100px] truncate">{currentDashboard?.nombre || 'Dashboards'}</span>
+    </motion.button>
+  );
+};
+
+// ============================================
+// COMPONENTE DE ACCIONES RÁPIDAS OCULTO (MEJORADO)
+// ============================================
+const QuickActions = () => {
   const { theme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [startX, setStartX] = useState(0);
   const menuRef = React.useRef(null);
+  const touchAreaRef = React.useRef(null);
 
+  // Detectar si es móvil
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Manejar click fuera
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -609,101 +929,175 @@ const DashboardSelector = ({ dashboards, currentDashboard, onSelectDashboard, on
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Manejar gestos táctiles
+  useEffect(() => {
+    const touchArea = touchAreaRef.current;
+    if (!touchArea || !isMobile) return;
+
+    const handleTouchStart = (e) => {
+      setStartX(e.touches[0].clientX);
+    };
+
+    const handleTouchMove = (e) => {
+      if (!isOpen) {
+        const currentX = e.touches[0].clientX;
+        const diff = currentX - startX;
+        
+        // Si desliza de derecha a izquierda en el borde derecho
+        if (startX > window.innerWidth - 50 && diff < -30) {
+          setIsOpen(true);
+        }
+      }
+    };
+
+    touchArea.addEventListener('touchstart', handleTouchStart);
+    touchArea.addEventListener('touchmove', handleTouchMove);
+
+    return () => {
+      touchArea.removeEventListener('touchstart', handleTouchStart);
+      touchArea.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, [isOpen, startX, isMobile]);
+
+  const actions = [
+    { to: '/clientes', icon: UsersIcon, text: 'Clientes', color: 'from-blue-600 to-blue-800', description: 'Gestionar clientes' },
+    { to: '/prestamos', icon: CurrencyDollarIcon, text: 'Préstamos', color: 'from-green-600 to-green-800', description: 'Ver préstamos activos' },
+    { to: '/pagos', icon: CreditCardIcon, text: 'Pagos', color: 'from-teal-600 to-teal-800', description: 'Registrar pagos' },
+    { to: '/solicitudes', icon: DocumentTextIcon, text: 'Solicitudes', color: 'from-purple-600 to-purple-800', description: 'Revisar solicitudes' }
+  ];
+
   return (
-    <div className="relative" ref={menuRef}>
+    <>
+      {/* Área táctil invisible para detectar deslizamiento */}
+      <div 
+        ref={touchAreaRef}
+        className="fixed right-0 top-0 w-[50px] h-full z-30"
+        style={{ pointerEvents: isMobile ? 'auto' : 'none' }}
+      />
+
+      {/* Botón flotante */}
       <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
         onClick={() => setIsOpen(!isOpen)}
-        className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center space-x-2 ${
-          theme === 'dark'
-            ? 'bg-white/10 text-white hover:bg-white/20'
-            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-        }`}
+        className={`fixed right-6 top-1/2 transform -translate-y-1/2 z-40 p-3 rounded-full shadow-2xl transition-all flex items-center justify-center ${
+          isOpen
+            ? 'bg-gradient-to-r from-red-600 to-red-800 text-white'
+            : theme === 'dark'
+              ? 'bg-gray-800 text-white hover:bg-gray-700'
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+        } border-2 ${isOpen ? 'border-white' : 'border-red-600/30'}`}
+        title="Acciones rápidas"
       >
-        <PresentationChartLineIcon className="h-4 w-4" />
-        <span>{currentDashboard?.nombre || 'Dashboards'}</span>
-        <svg className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <ChevronDoubleRightIcon className={`h-6 w-6 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
       </motion.button>
 
+      {/* Menú deslizable */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -10 }}
-            className={`absolute left-0 mt-2 w-64 rounded-xl shadow-2xl overflow-hidden z-50 border ${
-              theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-            }`}
+            ref={menuRef}
+            initial={{ opacity: 0, x: 300 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 300 }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className={`fixed right-0 top-0 h-full w-80 z-50 shadow-2xl overflow-hidden ${
+              theme === 'dark' ? 'bg-gray-900' : 'bg-white'
+            } border-l-2 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}
+            style={{ boxShadow: '-5px 0 25px rgba(0,0,0,0.15)' }}
           >
-            <div className="py-2">
-              {dashboards.map((d) => (
-                <div key={d.id} className="flex items-center justify-between px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                  <button
-                    onClick={() => {
-                      onSelectDashboard(d);
-                      setIsOpen(false);
-                    }}
-                    className="flex-1 text-left"
-                  >
-                    <p className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      {d.nombre}
+            {/* Header del menú */}
+            <div className={`p-6 border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} bg-gradient-to-r ${theme === 'dark' ? 'from-gray-800 to-gray-900' : 'from-red-50 to-white'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-gradient-to-br from-red-600 to-red-800 rounded-lg">
+                    <RocketLaunchIcon className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className={`text-lg font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                      Acciones Rápidas
+                    </h3>
+                    <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Acceso directo a funciones principales
                     </p>
-                    {d.descripcion && (
-                      <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {d.descripcion}
-                      </p>
-                    )}
-                  </button>
-                  <div className="flex space-x-1">
-                    <button
-                      onClick={() => {
-                        onEdit(d);
-                        setIsOpen(false);
-                      }}
-                      className="p-1 text-yellow-600 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 rounded"
-                    >
-                      <PencilIcon className="h-3 w-3" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        onDelete(d.id);
-                        setIsOpen(false);
-                      }}
-                      className="p-1 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
-                    >
-                      <TrashIcon className="h-3 w-3" />
-                    </button>
                   </div>
                 </div>
-              ))}
-              
-              <div className="border-t border-gray-200 dark:border-gray-700 my-2" />
-              
-              <button
-                onClick={() => {
-                  onSaveNew();
-                  setIsOpen(false);
-                }}
-                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
-              >
-                <PlusIcon className="h-4 w-4" />
-                <span>Guardar como nuevo dashboard</span>
-              </button>
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className={`p-2 rounded-lg transition-all hover:scale-110 ${
+                    theme === 'dark' 
+                      ? 'hover:bg-gray-700 text-gray-400 hover:text-white' 
+                      : 'hover:bg-gray-200 text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Lista de acciones */}
+            <div className="p-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+              <div className="space-y-3">
+                {actions.map((action, index) => (
+                  <motion.div
+                    key={action.to}
+                    initial={{ opacity: 0, x: 50 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                  >
+                    <Link
+                      to={action.to}
+                      onClick={() => setIsOpen(false)}
+                      className={`block p-4 rounded-xl border-2 transition-all hover:scale-[1.02] ${
+                        theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700 hover:border-red-600/50'
+                          : 'bg-white border-gray-200 hover:border-red-600/50'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className={`p-3 rounded-xl bg-gradient-to-br ${action.color}`}>
+                          <action.icon className="h-6 w-6 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className={`text-base font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                            {action.text}
+                          </h4>
+                          <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                            {action.description}
+                          </p>
+                        </div>
+                        <ChevronDoubleRightIcon className={`h-5 w-5 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-400'}`} />
+                      </div>
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* Información adicional */}
+              <div className={`mt-6 p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'} border-2 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  <span className="font-semibold">Consejo:</span> En dispositivos móviles, desliza desde el borde derecho de la pantalla para abrir este menú rápidamente.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className={`absolute bottom-0 left-0 right-0 p-4 border-t ${theme === 'dark' ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+              <p className={`text-xs text-center ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                Acceso rápido a las funciones principales
+              </p>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 };
 
 // ============================================
-// COMPONENTE DE GRÁFICO PERSONALIZABLE (MODIFICADO)
+// COMPONENTE DE GRÁFICO PERSONALIZABLE MEJORADO
 // ============================================
-const CustomizableChart = ({ title, data, type, onToggle, isVisible, getChartOptions }) => {
+const CustomizableChart = ({ title, data, type, onToggle, isVisible, getChartOptions, onExpand }) => {
   const { theme } = useTheme();
   const [isHovered, setIsHovered] = useState(false);
 
@@ -714,7 +1108,6 @@ const CustomizableChart = ({ title, data, type, onToggle, isVisible, getChartOpt
       case 'doughnut': return Doughnut;
       case 'pie': return Pie;
       case 'radar': return Radar;
-      case 'scatter': return Scatter;
       default: return Bar;
     }
   };
@@ -734,22 +1127,44 @@ const CustomizableChart = ({ title, data, type, onToggle, isVisible, getChartOpt
             <h4 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
               {title}
             </h4>
-            <button
-              onClick={onToggle}
-              className={`p-2 rounded-lg transition-colors ${
-                isHovered ? 'opacity-100' : 'opacity-0'
-              } ${
-                theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-              }`}
-            >
-              {isVisible ? (
-                <EyeIcon className="h-5 w-5 text-green-600" />
-              ) : (
-                <EyeSlashIcon className="h-5 w-5 text-red-600" />
-              )}
-            </button>
+            <div className="flex items-center space-x-2">
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={onExpand}
+                className={`p-2 rounded-lg transition-all ${
+                  isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-90'
+                } ${
+                  theme === 'dark' 
+                    ? 'hover:bg-gray-700 text-gray-400 hover:text-white' 
+                    : 'hover:bg-gray-100 text-gray-600 hover:text-gray-900'
+                }`}
+                title="Ampliar gráfico"
+              >
+                <ArrowsPointingOutIcon className="h-5 w-5" />
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={onToggle}
+                className={`p-2 rounded-lg transition-all ${
+                  isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-90'
+                } ${
+                  theme === 'dark' 
+                    ? 'hover:bg-gray-700' 
+                    : 'hover:bg-gray-100'
+                }`}
+                title={isVisible ? "Ocultar gráfico" : "Mostrar gráfico"}
+              >
+                {isVisible ? (
+                  <EyeIcon className="h-5 w-5 text-green-600" />
+                ) : (
+                  <EyeSlashIcon className="h-5 w-5 text-red-600" />
+                )}
+              </motion.button>
+            </div>
           </div>
-          <div className="h-80">
+          <div className="h-80 transition-all duration-300">
             {data && data.labels && data.labels.length > 0 ? (
               <ChartComponent data={data} options={getChartOptions(type)} />
             ) : (
@@ -780,7 +1195,9 @@ const Dashboard = () => {
       pagosPendientes: 0,
       nuevosClientes: 0,
       capitalRecuperado: 0,
-      tasaRecuperacion: 0
+      tasaRecuperacion: 0,
+      prestamosMes: 0,
+      prestamosDesembolsadosMes: 0
     },
     graficos: {
       pagosPorMes: [],
@@ -819,15 +1236,17 @@ const Dashboard = () => {
   const [error, setError] = useState(null);
   const [dashboardsGuardados, setDashboardsGuardados] = useState([]);
   const [currentDashboard, setCurrentDashboard] = useState(null);
-  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showDashboardManager, setShowDashboardManager] = useState(false);
   const [editingDashboard, setEditingDashboard] = useState(null);
   const [chartVisibility, setChartVisibility] = useState({});
+  const [selectedChart, setSelectedChart] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
   
   const { theme } = useTheme();
   const { user } = useAuth();
 
   // ============================================
-  // FUNCIONES AUXILIARES PARA GRÁFICOS (CORREGIDAS CON VALIDACIONES)
+  // FUNCIONES AUXILIARES PARA GRÁFICOS
   // ============================================
   const getChartOptions = (type = 'bar') => {
     const textColor = theme === 'dark' ? '#9CA3AF' : '#4B5563';
@@ -929,9 +1348,7 @@ const Dashboard = () => {
     return new Intl.NumberFormat('es-DO').format(number);
   };
 
-  // FUNCIONES DE GRÁFICOS CORREGIDAS CON VALIDACIONES
   const getBarData = (data, label) => {
-    // Validar que data exista y sea un array
     const safeData = Array.isArray(data) ? data : [];
     
     return {
@@ -951,7 +1368,6 @@ const Dashboard = () => {
   };
 
   const getBarDataGrouped = (data) => {
-    // Validar que data exista y sea un array
     const safeData = Array.isArray(data) ? data : [];
     
     return {
@@ -978,7 +1394,6 @@ const Dashboard = () => {
   };
 
   const getLineData = (data, label, color) => {
-    // Validar que data exista y sea un array
     const safeData = Array.isArray(data) ? data : [];
     
     return {
@@ -1003,10 +1418,8 @@ const Dashboard = () => {
   };
 
   const getDoughnutData = (data) => {
-    // Validar que data exista y sea un array
     const safeData = Array.isArray(data) ? data : [];
     
-    // Si no hay datos, retornar estructura vacía pero válida
     if (safeData.length === 0) {
       return {
         labels: ['Sin datos'],
@@ -1041,7 +1454,6 @@ const Dashboard = () => {
   };
 
   const getRadarData = (data) => {
-    // Validar que data exista
     if (!data || !data.stats) {
       return {
         labels: ['Clientes', 'Préstamos', 'Pagos', 'Ganancias', 'Recuperación', 'Solicitudes'],
@@ -1160,7 +1572,9 @@ const Dashboard = () => {
       morosidad: currentValue * 1.1,
       nuevosClientes: currentValue * 0.90,
       capitalRecuperado: currentValue * 0.85,
-      tasaRecuperacion: currentValue * 0.95
+      tasaRecuperacion: currentValue * 0.95,
+      prestamosMes: currentValue * 0.70,
+      prestamosDesembolsadosMes: currentValue * 0.70
     };
 
     const previous = historicalData[metricType] || currentValue * 0.8;
@@ -1190,6 +1604,7 @@ const Dashboard = () => {
         setDashboardsGuardados(prev => prev.map(d => 
           d.id === editingDashboard.id ? { ...d, ...dashboardData } : d
         ));
+        setEditingDashboard(null);
       } else {
         const docRef = await addDoc(collection(db, 'dashboards'), {
           ...dashboardData,
@@ -1204,11 +1619,38 @@ const Dashboard = () => {
         setCurrentDashboard(nuevoDashboard);
       }
       
-      setShowSaveModal(false);
-      setEditingDashboard(null);
+      // Recargar la lista de dashboards
+      const dashboardsRef = collection(db, 'dashboards');
+      const q = query(dashboardsRef, orderBy('fechaCreacion', 'desc'));
+      const querySnapshot = await getDocs(q);
+      const dashboards = [];
+      querySnapshot.forEach((doc) => {
+        dashboards.push({ id: doc.id, ...doc.data() });
+      });
+      setDashboardsGuardados(dashboards);
+      
     } catch (error) {
       console.error('Error guardando dashboard:', error);
       setError('Error al guardar el dashboard');
+    }
+  };
+
+  // Editar dashboard
+  const handleEditDashboard = async (id, data) => {
+    try {
+      const docRef = doc(db, 'dashboards', id);
+      await updateDoc(docRef, data);
+      
+      setDashboardsGuardados(prev => prev.map(d => 
+        d.id === id ? { ...d, ...data } : d
+      ));
+      
+      if (currentDashboard?.id === id) {
+        setCurrentDashboard({ ...currentDashboard, ...data });
+      }
+    } catch (error) {
+      console.error('Error editando dashboard:', error);
+      setError('Error al editar el dashboard');
     }
   };
 
@@ -1219,21 +1661,20 @@ const Dashboard = () => {
       setFiltros(dashboard.configuracion.filtros || { periodo: 'mes' });
       setChartVisibility(dashboard.configuracion.chartVisibility || {});
     }
+    setShowDashboardManager(false);
   };
 
   // Eliminar dashboard
   const handleDeleteDashboard = async (id) => {
-    if (window.confirm('¿Estás seguro de eliminar este dashboard?')) {
-      try {
-        await deleteDoc(doc(db, 'dashboards', id));
-        setDashboardsGuardados(prev => prev.filter(d => d.id !== id));
-        if (currentDashboard?.id === id) {
-          setCurrentDashboard(dashboardsGuardados[0] || null);
-        }
-      } catch (error) {
-        console.error('Error eliminando dashboard:', error);
-        setError('Error al eliminar el dashboard');
+    try {
+      await deleteDoc(doc(db, 'dashboards', id));
+      setDashboardsGuardados(prev => prev.filter(d => d.id !== id));
+      if (currentDashboard?.id === id) {
+        setCurrentDashboard(dashboardsGuardados[0] || null);
       }
+    } catch (error) {
+      console.error('Error eliminando dashboard:', error);
+      setError('Error al eliminar el dashboard');
     }
   };
 
@@ -1245,19 +1686,32 @@ const Dashboard = () => {
     }));
   };
 
+  // Abrir modal de gráfico
+  const openChartModal = (chartTitle, chartData, chartType) => {
+    setSelectedChart({
+      title: chartTitle,
+      data: chartData,
+      type: chartType
+    });
+    setModalOpen(true);
+  };
+
   if (loading && !lastUpdated) {
     return <DashboardSkeleton />;
   }
 
   return (
-    <div className="space-y-6 p-3 sm:p-4 lg:p-6">
-      {/* Header Ultra Premium */}
+    <div className="space-y-6 p-3 sm:p-4 lg:p-6 relative min-h-screen">
+      {/* Acciones Rápidas Flotantes */}
+      <QuickActions />
+
+      {/* Header Ultra Premium - ROJO */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="relative overflow-hidden"
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-red-600/20 via-red-500/20 via-purple-600/20 to-red-600/20 rounded-2xl blur-3xl animate-gradient-xy" />
+        <div className="absolute inset-0 bg-gradient-to-r from-red-600/30 via-red-500/30 to-red-600/30 rounded-2xl blur-3xl animate-gradient-xy" />
         
         <div className="absolute inset-0 opacity-10" style={{
           backgroundImage: `radial-gradient(circle at 1px 1px, ${
@@ -1274,12 +1728,12 @@ const Dashboard = () => {
               <motion.div
                 whileHover={{ rotate: 360, scale: 1.1 }}
                 transition={{ duration: 0.6 }}
-                className="p-2 sm:p-3 lg:p-4 bg-gradient-to-br from-red-600 via-purple-600 to-red-600 rounded-xl sm:rounded-2xl shadow-xl"
+                className="p-2 sm:p-3 lg:p-4 bg-gradient-to-br from-red-600 to-red-800 rounded-xl sm:rounded-2xl shadow-xl"
               >
                 <PresentationChartLineIcon className="h-5 w-5 sm:h-6 sm:w-6 lg:h-8 lg:w-8 text-white" />
               </motion.div>
               <div>
-                <h1 className={`text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-red-600 via-purple-600 to-red-600 bg-clip-text text-transparent`}>
+                <h1 className={`text-xl sm:text-2xl lg:text-3xl font-bold text-red-600 dark:text-red-500`}>
                   Dashboard Inteligente
                 </h1>
                 <p className={`text-xs sm:text-sm mt-1 flex items-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -1300,7 +1754,7 @@ const Dashboard = () => {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setShowFilters(!showFilters)}
-                className={`px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center space-x-1 sm:space-x-2 ${
+                className={`px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center space-x-1 sm:space-x-2 relative ${
                   showFilters
                     ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg'
                     : theme === 'dark'
@@ -1310,9 +1764,9 @@ const Dashboard = () => {
               >
                 <FunnelIcon className="h-3 w-3 sm:h-4 sm:w-4" />
                 <span>Filtros</span>
-                {Object.keys(filtros).length > 0 && (
-                  <span className="bg-red-600 text-white text-xs rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center">
-                    {Object.keys(filtros).length}
+                {Object.keys(filtros).length > 1 && (
+                  <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center animate-pulse">
+                    {Object.keys(filtros).length - 1}
                   </span>
                 )}
               </motion.button>
@@ -1320,16 +1774,7 @@ const Dashboard = () => {
               <DashboardSelector
                 dashboards={dashboardsGuardados}
                 currentDashboard={currentDashboard}
-                onSelectDashboard={handleLoadDashboard}
-                onSaveNew={() => {
-                  setEditingDashboard(null);
-                  setShowSaveModal(true);
-                }}
-                onEdit={(d) => {
-                  setEditingDashboard(d);
-                  setShowSaveModal(true);
-                }}
-                onDelete={handleDeleteDashboard}
+                onOpenManager={() => setShowDashboardManager(true)}
               />
 
               <motion.button
@@ -1381,49 +1826,6 @@ const Dashboard = () => {
         )}
       </AnimatePresence>
 
-      {/* Quick Actions - Versión Mejorada */}
-      <GlassCard>
-        <div className="p-4 sm:p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="p-2 bg-gradient-to-br from-red-600 to-red-800 rounded-lg shadow-lg">
-              <RocketLaunchIcon className="h-5 w-5 text-white" />
-            </div>
-            <h3 className={`text-base sm:text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-              Acciones Rápidas
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-            {[
-              { to: '/clientes', color: 'from-blue-600 to-blue-800', icon: UsersIcon, text: 'Clientes' },
-              { to: '/prestamos', color: 'from-green-600 to-green-800', icon: CurrencyDollarIcon, text: 'Préstamos' },
-              { to: '/pagos', color: 'from-teal-600 to-teal-800', icon: CreditCardIcon, text: 'Pagos' },
-              { to: '/solicitudes', color: 'from-purple-600 to-purple-800', icon: DocumentTextIcon, text: 'Solicitudes' }
-            ].map((action, index) => (
-              <motion.div
-                key={action.to}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <Link
-                  to={action.to}
-                  className={`relative overflow-hidden group block p-3 sm:p-4 rounded-xl bg-gradient-to-br ${action.color} shadow-lg hover:shadow-xl transition-all transform hover:scale-105`}
-                >
-                  <div className="absolute top-0 right-0 w-20 sm:w-24 h-20 sm:h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform" />
-                  <div className="relative flex items-center space-x-2">
-                    <div className="p-1.5 sm:p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                      <action.icon className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
-                    </div>
-                    <span className="text-white text-xs sm:text-sm font-medium">{action.text}</span>
-                  </div>
-                </Link>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </GlassCard>
-
       {/* Métricas Principales - 8 tarjetas */}
       <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard
@@ -1434,7 +1836,7 @@ const Dashboard = () => {
           icon={UsersIcon}
           color="blue"
           link="/clientes"
-          tooltip="Total de clientes con préstamos activos"
+          tooltip="Total de clientes con préstamos activos en el sistema. Se considera activo un cliente que tiene al menos un préstamo vigente."
         />
         <MetricCard
           title="Préstamos Activos"
@@ -1444,7 +1846,7 @@ const Dashboard = () => {
           icon={CurrencyDollarIcon}
           color="green"
           link="/prestamos"
-          tooltip="Préstamos vigentes en este momento"
+          tooltip="Préstamos vigentes en este momento. No incluye préstamos completados o cancelados."
         />
         <MetricCard
           title="Ganancias del Mes"
@@ -1455,7 +1857,7 @@ const Dashboard = () => {
           color="purple"
           link="/pagos"
           description="Solo intereses"
-          tooltip="Intereses generados en el mes"
+          tooltip="Intereses generados en el mes actual. No incluye pagos de capital."
         />
         <MetricCard
           title="Tasa de Morosidad"
@@ -1465,7 +1867,7 @@ const Dashboard = () => {
           icon={ChartBarIcon}
           color="red"
           link="/prestamos"
-          tooltip="Porcentaje de préstamos en mora"
+          tooltip="Porcentaje de préstamos en mora sobre el total de préstamos activos. Una tasa superior al 5% requiere atención."
         />
       </div>
 
@@ -1479,7 +1881,7 @@ const Dashboard = () => {
           icon={BanknotesIcon}
           color="indigo"
           link="/prestamos"
-          tooltip="Total de capital prestado"
+          tooltip="Total de capital prestado a todos los clientes, incluyendo préstamos activos y completados."
         />
         <MetricCard
           title="Pagos Hoy"
@@ -1489,7 +1891,7 @@ const Dashboard = () => {
           icon={CreditCardIcon}
           color="teal"
           link="/pagos"
-          tooltip="Pagos recibidos hoy"
+          tooltip="Pagos recibidos hoy. Incluye pagos de capital e intereses."
         />
         <MetricCard
           title="Capital Recuperado"
@@ -1500,7 +1902,31 @@ const Dashboard = () => {
           color="emerald"
           link="/pagos"
           description={`${dashboardData.stats.tasaRecuperacion}% del total`}
-          tooltip="Capital recuperado del total prestado"
+          tooltip="Capital recuperado del total prestado. Incluye todos los pagos de capital realizados."
+        />
+        <MetricCard
+          title="Préstamos del Mes"
+          value={formatNumber(dashboardData.stats.prestamosMes)}
+          change={calculateChange(dashboardData.stats.prestamosMes, 'prestamosMes')?.value}
+          changeType={calculateChange(dashboardData.stats.prestamosMes, 'prestamosMes')?.type}
+          icon={DocumentTextIcon}
+          color="cyan"
+          link="/prestamos"
+          tooltip="Préstamos desembolsados en el mes actual."
+        />
+      </div>
+
+      {/* Tercera Fila de Métricas - Nuevas */}
+      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <MetricCard
+          title="Préstamos Desembolsados"
+          value={formatNumber(dashboardData.stats.prestamosDesembolsadosMes)}
+          change={calculateChange(dashboardData.stats.prestamosDesembolsadosMes, 'prestamosDesembolsadosMes')?.value}
+          changeType={calculateChange(dashboardData.stats.prestamosDesembolsadosMes, 'prestamosDesembolsadosMes')?.type}
+          icon={CurrencyDollarIcon}
+          color="purple"
+          link="/prestamos"
+          tooltip="Préstamos desembolsados en el mes actual."
         />
         <MetricCard
           title="Clientes Nuevos"
@@ -1508,9 +1934,29 @@ const Dashboard = () => {
           change={calculateChange(dashboardData.stats.nuevosClientes, 'nuevosClientes')?.value}
           changeType={calculateChange(dashboardData.stats.nuevosClientes, 'nuevosClientes')?.type}
           icon={UsersIcon}
-          color="cyan"
+          color="blue"
           link="/clientes"
-          tooltip="Clientes registrados en el mes"
+          tooltip="Clientes registrados en el mes actual."
+        />
+        <MetricCard
+          title="Solicitudes Pendientes"
+          value={formatNumber(dashboardData.stats.solicitudes)}
+          change={calculateChange(dashboardData.stats.solicitudes, 'solicitudes')?.value}
+          changeType={calculateChange(dashboardData.stats.solicitudes, 'solicitudes')?.type}
+          icon={DocumentTextIcon}
+          color="orange"
+          link="/solicitudes"
+          tooltip="Solicitudes pendientes de aprobación."
+        />
+        <MetricCard
+          title="Tasa Recuperación"
+          value={`${dashboardData.stats.tasaRecuperacion}%`}
+          change={calculateChange(dashboardData.stats.tasaRecuperacion, 'tasaRecuperacion')?.value}
+          changeType={calculateChange(dashboardData.stats.tasaRecuperacion, 'tasaRecuperacion')?.type}
+          icon={CheckCircleIcon}
+          color="green"
+          link="/pagos"
+          tooltip="Porcentaje de capital recuperado sobre el total prestado."
         />
       </div>
 
@@ -1523,6 +1969,11 @@ const Dashboard = () => {
           type="bar"
           isVisible={chartVisibility.pagosPorMes !== false}
           onToggle={() => toggleChart('pagosPorMes')}
+          onExpand={() => openChartModal(
+            'Pagos por Mes', 
+            getBarData(dashboardData.graficos.pagosPorMes, 'pagosPorMes'),
+            'bar'
+          )}
           getChartOptions={getChartOptions}
         />
 
@@ -1533,6 +1984,11 @@ const Dashboard = () => {
           type="line"
           isVisible={chartVisibility.prestamosPorMes !== false}
           onToggle={() => toggleChart('prestamosPorMes')}
+          onExpand={() => openChartModal(
+            'Préstamos por Mes', 
+            getLineData(dashboardData.graficos.prestamosPorMes, 'Préstamos por Mes', '#10B981'),
+            'line'
+          )}
           getChartOptions={getChartOptions}
         />
 
@@ -1543,6 +1999,11 @@ const Dashboard = () => {
           type="line"
           isVisible={chartVisibility.gananciasPorMes !== false}
           onToggle={() => toggleChart('gananciasPorMes')}
+          onExpand={() => openChartModal(
+            'Ganancias por Mes', 
+            getLineData(dashboardData.graficos.gananciasPorMes, 'Ganancias por Mes', '#8B5CF6'),
+            'line'
+          )}
           getChartOptions={getChartOptions}
         />
 
@@ -1553,6 +2014,11 @@ const Dashboard = () => {
           type="doughnut"
           isVisible={chartVisibility.distribucionPagos !== false}
           onToggle={() => toggleChart('distribucionPagos')}
+          onExpand={() => openChartModal(
+            'Distribución de Pagos', 
+            getDoughnutData(dashboardData.graficos.distribucionPagos),
+            'doughnut'
+          )}
           getChartOptions={getChartOptions}
         />
 
@@ -1563,6 +2029,11 @@ const Dashboard = () => {
           type="pie"
           isVisible={chartVisibility.distribucionPrestamos !== false}
           onToggle={() => toggleChart('distribucionPrestamos')}
+          onExpand={() => openChartModal(
+            'Estado de Préstamos', 
+            getDoughnutData(dashboardData.graficos.distribucionPrestamos),
+            'pie'
+          )}
           getChartOptions={getChartOptions}
         />
 
@@ -1573,6 +2044,11 @@ const Dashboard = () => {
           type="doughnut"
           isVisible={chartVisibility.solicitudesPorEstado !== false}
           onToggle={() => toggleChart('solicitudesPorEstado')}
+          onExpand={() => openChartModal(
+            'Solicitudes por Estado', 
+            getDoughnutData(dashboardData.graficos.solicitudesPorEstado),
+            'doughnut'
+          )}
           getChartOptions={getChartOptions}
         />
 
@@ -1583,6 +2059,11 @@ const Dashboard = () => {
           type="doughnut"
           isVisible={chartVisibility.prestamosPorTipo !== false}
           onToggle={() => toggleChart('prestamosPorTipo')}
+          onExpand={() => openChartModal(
+            'Préstamos por Tipo', 
+            getDoughnutData(dashboardData.graficos.prestamosPorTipo),
+            'doughnut'
+          )}
           getChartOptions={getChartOptions}
         />
 
@@ -1593,6 +2074,11 @@ const Dashboard = () => {
           type="bar"
           isVisible={chartVisibility.clientesPorProvincia !== false}
           onToggle={() => toggleChart('clientesPorProvincia')}
+          onExpand={() => openChartModal(
+            'Clientes por Provincia', 
+            getBarData(dashboardData.graficos.clientesPorProvincia, 'clientesPorProvincia'),
+            'bar'
+          )}
           getChartOptions={getChartOptions}
         />
 
@@ -1603,16 +2089,26 @@ const Dashboard = () => {
           type="line"
           isVisible={chartVisibility.morosidadPorMes !== false}
           onToggle={() => toggleChart('morosidadPorMes')}
+          onExpand={() => openChartModal(
+            'Morosidad por Mes', 
+            getLineData(dashboardData.graficos.morosidadPorMes, 'Morosidad %', '#EF4444'),
+            'line'
+          )}
           getChartOptions={getChartOptions}
         />
 
         {/* Flujo de Caja */}
         <CustomizableChart
           title="Flujo de Caja"
-          data={getLineData(dashboardData.graficos.flujoCaja, 'Flujo de Caja', '#10B981')}
-          type="line"
+          data={getBarDataGrouped(dashboardData.graficos.flujoCaja)}
+          type="bar"
           isVisible={chartVisibility.flujoCaja !== false}
           onToggle={() => toggleChart('flujoCaja')}
+          onExpand={() => openChartModal(
+            'Flujo de Caja', 
+            getBarDataGrouped(dashboardData.graficos.flujoCaja),
+            'bar'
+          )}
           getChartOptions={getChartOptions}
         />
 
@@ -1623,16 +2119,26 @@ const Dashboard = () => {
           type="radar"
           isVisible={chartVisibility.radar !== false}
           onToggle={() => toggleChart('radar')}
+          onExpand={() => openChartModal(
+            'Rendimiento por Área', 
+            getRadarData(dashboardData),
+            'radar'
+          )}
           getChartOptions={getChartOptions}
         />
 
         {/* Ingresos vs Gastos */}
         <CustomizableChart
           title="Ingresos vs Gastos"
-          data={getBarDataGrouped(dashboardData.graficos.ingresosVsGastos)}
+          data={getBarDataGrouped(dashboardData.graficos.flujoCaja)}
           type="bar"
           isVisible={chartVisibility.ingresosVsGastos !== false}
           onToggle={() => toggleChart('ingresosVsGastos')}
+          onExpand={() => openChartModal(
+            'Ingresos vs Gastos', 
+            getBarDataGrouped(dashboardData.graficos.flujoCaja),
+            'bar'
+          )}
           getChartOptions={getChartOptions}
         />
 
@@ -1643,6 +2149,11 @@ const Dashboard = () => {
           type="line"
           isVisible={chartVisibility.proyecciones !== false}
           onToggle={() => toggleChart('proyecciones')}
+          onExpand={() => openChartModal(
+            'Proyecciones a 6 meses', 
+            getLineData(dashboardData.graficos.proyecciones, 'Proyección', '#8B5CF6'),
+            'line'
+          )}
           getChartOptions={getChartOptions}
         />
       </div>
@@ -1754,7 +2265,7 @@ const Dashboard = () => {
                 <h4 className={`text-base sm:text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                   Actividad Reciente
                 </h4>
-                <Link to="/pagos" className={`text-xs sm:text-sm ${theme === 'dark' ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'}`}>
+                <Link to="/actividad" className={`text-xs sm:text-sm ${theme === 'dark' ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'}`}>
                   Ver todo →
                 </Link>
               </div>
@@ -1762,6 +2273,38 @@ const Dashboard = () => {
                 {dashboardData.actividadReciente.length > 0 ? (
                   dashboardData.actividadReciente.map((actividad, index) => {
                     const IconComponent = iconMap[actividad.icono] || DocumentTextIcon;
+                    
+                    // Formatear la fecha correctamente
+                    let fechaMostrar = 'Fecha no disponible';
+                    let horaMostrar = '';
+                    
+                    if (actividad.fechaObj) {
+                      fechaMostrar = actividad.fechaObj.toLocaleDateString('es-DO', {
+                        year: '2-digit',
+                        month: '2-digit',
+                        day: '2-digit'
+                      }).replace(/\//g, '/');
+                      horaMostrar = actividad.fechaObj.toLocaleTimeString('es-DO', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true
+                      });
+                    } else if (actividad.fecha) {
+                      const fecha = convertTimestampToDate(actividad.fecha);
+                      if (fecha) {
+                        fechaMostrar = fecha.toLocaleDateString('es-DO', {
+                          year: '2-digit',
+                          month: '2-digit',
+                          day: '2-digit'
+                        }).replace(/\//g, '/');
+                        horaMostrar = fecha.toLocaleTimeString('es-DO', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: true
+                        });
+                      }
+                    }
+                    
                     return (
                       <motion.div
                         key={actividad.id}
@@ -1790,9 +2333,16 @@ const Dashboard = () => {
                               )}
                             </div>
                           </div>
-                          <span className={`text-xs whitespace-nowrap ml-2 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
-                            {new Date(actividad.fecha).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                          <div className="text-right ml-2 min-w-[70px]">
+                            <span className={`text-xs whitespace-nowrap block ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                              {fechaMostrar}
+                            </span>
+                            {horaMostrar && (
+                              <span className={`text-xs block ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                                {horaMostrar}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </motion.div>
                     );
@@ -1819,44 +2369,67 @@ const Dashboard = () => {
               </div>
               <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                 {dashboardData.prestamosProximosVencimiento.length > 0 ? (
-                  dashboardData.prestamosProximosVencimiento.map((prestamo, index) => (
-                    <motion.div
-                      key={prestamo.id}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      className={`p-2 sm:p-3 rounded-lg border-2 transition-all hover:border-red-600/50 ${
-                        theme === 'dark'
-                          ? 'bg-gray-800/50 border-gray-700'
-                          : 'bg-gray-50 border-gray-200'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="min-w-0 flex-1">
-                          <p className={`text-xs sm:text-sm font-medium truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                            {prestamo.cliente}
-                          </p>
-                          <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Vence: {new Date(prestamo.fechaVencimiento).toLocaleDateString('es-DO')}
-                          </p>
+                  dashboardData.prestamosProximosVencimiento.map((prestamo, index) => {
+                    // Formatear la fecha
+                    let fechaVencimiento = '';
+                    if (prestamo.fechaVencimientoObj) {
+                      fechaVencimiento = prestamo.fechaVencimientoObj.toLocaleDateString('es-DO', {
+                        year: '2-digit',
+                        month: '2-digit',
+                        day: '2-digit'
+                      }).replace(/\//g, '/');
+                    } else if (prestamo.fechaVencimiento) {
+                      const fecha = convertTimestampToDate(prestamo.fechaVencimiento);
+                      fechaVencimiento = fecha ? fecha.toLocaleDateString('es-DO', {
+                        year: '2-digit',
+                        month: '2-digit',
+                        day: '2-digit'
+                      }).replace(/\//g, '/') : 'Fecha no disponible';
+                    }
+                    
+                    const esVencido = prestamo.diasRestantes <= 0;
+                    
+                    return (
+                      <motion.div
+                        key={prestamo.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className={`p-2 sm:p-3 rounded-lg border-2 transition-all hover:border-red-600/50 ${
+                          theme === 'dark'
+                            ? 'bg-gray-800/50 border-gray-700'
+                            : 'bg-gray-50 border-gray-200'
+                        } ${esVencido ? 'border-red-600 bg-red-50/50 dark:bg-red-900/20' : ''}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="min-w-0 flex-1">
+                            <p className={`text-xs sm:text-sm font-medium truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                              {prestamo.cliente}
+                            </p>
+                            <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                              Vence: {fechaVencimiento}
+                            </p>
+                          </div>
+                          <div className="text-right ml-2">
+                            <p className={`text-xs sm:text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                              {formatCurrency(prestamo.monto)}
+                            </p>
+                            <p className={`text-xs font-bold ${
+                              esVencido 
+                                ? 'text-red-600 dark:text-red-400 animate-pulse' 
+                                : prestamo.diasRestantes <= 2 
+                                ? 'text-red-600 dark:text-red-400' 
+                                : prestamo.diasRestantes <= 5 
+                                ? 'text-yellow-600 dark:text-yellow-400' 
+                                : 'text-green-600 dark:text-green-400'
+                            }`}>
+                              {esVencido ? '¡COBRAR AHORA!' : `${prestamo.diasRestantes} días`}
+                            </p>
+                          </div>
                         </div>
-                        <div className="text-right ml-2">
-                          <p className={`text-xs sm:text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                            {formatCurrency(prestamo.monto)}
-                          </p>
-                          <p className={`text-xs ${
-                            prestamo.diasRestantes <= 2 
-                              ? 'text-red-600 dark:text-red-400' 
-                              : prestamo.diasRestantes <= 5 
-                              ? 'text-yellow-600 dark:text-yellow-400' 
-                              : 'text-green-600 dark:text-green-400'
-                          }`}>
-                            {prestamo.diasRestantes} días
-                          </p>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))
+                      </motion.div>
+                    );
+                  })
                 ) : (
                   <div className={`text-center py-6 text-xs sm:text-sm ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
                     No hay vencimientos próximos
@@ -1868,19 +2441,34 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Modal para guardar dashboard */}
-      <SaveDashboardModal
-        isOpen={showSaveModal}
-        onClose={() => {
-          setShowSaveModal(false);
-          setEditingDashboard(null);
-        }}
+      {/* Modal para gestionar dashboards */}
+      <DashboardManagerModal
+        isOpen={showDashboardManager}
+        onClose={() => setShowDashboardManager(false)}
+        dashboards={dashboardsGuardados}
+        currentDashboard={currentDashboard}
+        onSelect={handleLoadDashboard}
         onSave={handleSaveDashboard}
-        dashboard={editingDashboard}
+        onEdit={handleEditDashboard}
+        onDelete={handleDeleteDashboard}
       />
 
+      {/* Modal para ampliar gráfico */}
+      {selectedChart && (
+        <ChartModal
+          isOpen={modalOpen}
+          onClose={() => setModalOpen(false)}
+          title={selectedChart.title}
+          data={selectedChart.data}
+          type={selectedChart.type}
+          chartData={selectedChart.data}
+          filters={filtros}
+          onFilterChange={setFiltros}
+        />
+      )}
+
       {/* Estilos CSS para animaciones */}
-      <style jsx>{`
+      <style>{`
         @keyframes gradient-xy {
           0%, 100% {
             background-position: 0% 0%;

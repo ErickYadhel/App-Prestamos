@@ -24,10 +24,9 @@ import {
   RocketLaunchIcon,
   Bars3Icon,
   XMarkIcon,
-  // 👇 NUEVOS ICONOS
   PresentationChartLineIcon,
   LockClosedIcon,
-  FingerPrintIcon
+  InformationCircleIcon
 } from '@heroicons/react/24/outline';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../services/firebase';
@@ -43,6 +42,7 @@ const Sidebar = ({ children }) => {
   const [empresaNombre, setEmpresaNombre] = useState('EYS Inversiones');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isTablet, setIsTablet] = useState(false);
   const [permisosUsuario, setPermisosUsuario] = useState({});
   const [loadingPermisos, setLoadingPermisos] = useState(true);
   const [rolReal, setRolReal] = useState(null);
@@ -57,16 +57,23 @@ const Sidebar = ({ children }) => {
 
   const sidebarOpen = isFixed || isHovered || isOpen;
 
-  // Detectar si es móvil
+  // Detectar si es móvil o tablet
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+    const checkScreenSize = () => {
+      const width = window.innerWidth;
+      setIsMobile(width < 768);
+      setIsTablet(width >= 768 && width < 1024);
+      
+      // En tablet, la barra lateral se comporta como en móvil pero con overlay
+      if (width < 1024) {
+        setIsFixed(false);
+      }
     };
     
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
     
-    return () => window.removeEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
   // Cerrar menú móvil al cambiar de ruta
@@ -109,14 +116,11 @@ const Sidebar = ({ children }) => {
         setLoadingPermisos(true);
         console.log('🔄 Buscando usuario en Firebase:', user.email);
         
-        // Intentar con diferentes nombres de colección
         const posiblesColecciones = ['Usuarios', 'usuarios', 'Users', 'users'];
         let usuarioEncontrado = null;
-        let coleccionUsada = '';
 
         for (const nombreColeccion of posiblesColecciones) {
           try {
-            console.log(`🔍 Buscando en colección: ${nombreColeccion}`);
             const usuariosRef = collection(db, nombreColeccion);
             const q = query(usuariosRef, where('email', '==', user.email));
             const querySnapshot = await getDocs(q);
@@ -125,8 +129,6 @@ const Sidebar = ({ children }) => {
               querySnapshot.forEach(doc => {
                 usuarioEncontrado = { id: doc.id, ...doc.data() };
               });
-              coleccionUsada = nombreColeccion;
-              console.log(`✅ Usuario encontrado en colección: ${nombreColeccion}`);
               break;
             }
           } catch (error) {
@@ -135,18 +137,10 @@ const Sidebar = ({ children }) => {
         }
 
         if (!usuarioEncontrado) {
-          console.log('❌ Usuario no encontrado en ninguna colección');
-          
-          // Intentar buscar en la autenticación directamente
-          console.log('🔍 Usando datos del usuario de autenticación:', user);
-          
-          // Si el usuario tiene un rol en el contexto, usarlo
           if (user.rol && user.rol !== 'admin') {
-            console.log('✅ Usando rol del contexto de autenticación:', user.rol);
             const rolId = user.rol;
             setRolReal(rolId);
             
-            // Cargar información del rol
             try {
               const rolRef = doc(db, 'Roles', rolId);
               const rolSnap = await getDoc(rolRef);
@@ -176,7 +170,6 @@ const Sidebar = ({ children }) => {
             return;
           }
           
-          // Si no, asignar rol por defecto
           setRolReal('solicitante');
           setNombreRol('Solicitante');
           setColorRol('bg-gradient-to-br from-blue-500 to-blue-700');
@@ -186,32 +179,19 @@ const Sidebar = ({ children }) => {
           return;
         }
 
-        console.log('✅ Usuario encontrado:', usuarioEncontrado);
-        
-        // Obtener el rol del usuario
         const rolId = usuarioEncontrado.rol || 'solicitante';
         setRolReal(rolId);
 
-        // Cargar información del rol
         const rolRef = doc(db, 'Roles', rolId);
         const rolSnap = await getDoc(rolRef);
         
         if (rolSnap.exists()) {
           const data = rolSnap.data();
-          console.log('✅ Información del rol cargada:', data);
-          
           setNombreRol(data.nombre || rolId);
           setColorRol(data.color || getDefaultRoleColor(rolId));
           setPermisosUsuario(data.permisos || {});
-          
-          // Determinar el icono según el rol
-          if (data.icon) {
-            setIconoRol(data.icon);
-          } else {
-            setIconoRol(getDefaultRoleIcon(rolId));
-          }
+          setIconoRol(getDefaultRoleIcon(rolId));
         } else {
-          console.log('⚠️ No se encontró el documento del rol, usando valores por defecto');
           setNombreRol(rolId.charAt(0).toUpperCase() + rolId.slice(1));
           setColorRol(getDefaultRoleColor(rolId));
           setPermisosUsuario({});
@@ -232,22 +212,16 @@ const Sidebar = ({ children }) => {
     cargarRolReal();
   }, [user]);
 
-  // Definir esAdmin después de que rolReal tiene valor
   const esAdmin = rolReal === 'admin';
 
-  // Obtener el icono del rol
   const getRoleIconComponent = () => {
     if (iconoRol && typeof iconoRol === 'function') {
       const IconComponent = iconoRol;
       return <IconComponent className="h-5 w-5" />;
-    } else if (iconoRol) {
-      return getDefaultRoleIcon(rolReal);
-    } else {
-      return getDefaultRoleIcon(rolReal);
     }
+    return getDefaultRoleIcon(rolReal);
   };
 
-  // Obtener el color del rol
   const getRoleColorClass = () => {
     return colorRol;
   };
@@ -281,7 +255,7 @@ const Sidebar = ({ children }) => {
     };
   }, []);
 
-  // 👇 DEFINICIÓN DE ITEMS DEL MENÚ CON LOS NUEVOS MÓDULOS
+  // Items del menú
   const todosLosMenuItems = [
     { name: 'Dashboard', path: '/dashboard', icon: HomeIcon, modulo: 'dashboard', accion: 'ver' },
     { name: 'Clientes', path: '/clientes', icon: UsersIcon, modulo: 'clientes', accion: 'ver' },
@@ -291,82 +265,53 @@ const Sidebar = ({ children }) => {
     { name: 'Garantes', path: '/garantes', icon: UserGroupIcon, modulo: 'garantes', accion: 'ver' },
     { name: 'Usuarios', path: '/usuarios', icon: UsersIcon, modulo: 'usuarios', accion: 'ver' },
     { name: 'Notificaciones', path: '/notificaciones', icon: BellIcon, modulo: 'notificaciones', accion: 'ver' },
-    // 👇 NUEVOS MÓDULOS
     { name: 'Operaciones', path: '/operaciones', icon: PresentationChartLineIcon, modulo: 'operaciones', accion: 'ver' },
     { name: 'Seguridad', path: '/seguridad', icon: LockClosedIcon, modulo: 'seguridad', accion: 'ver' },
     { name: 'Configuración', path: '/configuracion', icon: CogIcon, modulo: 'configuracion', accion: 'ver' },
+    { name: 'Información', path: '/informacion', icon: InformationCircleIcon, modulo: 'informacion', accion: 'ver' },
   ];
 
-  // Filtrar menú según permisos del usuario
+  // Filtrar menú según permisos
   const filteredMenu = todosLosMenuItems.filter(item => {
-    // Si el usuario es admin (por rol real), mostrar todo
-    if (esAdmin) {
-      return true;
-    }
-    
-    // Si aún no hay permisos cargados, no mostrar nada
-    if (loadingPermisos) {
-      return false;
-    }
-    
-    // Verificar si el usuario tiene permiso para ver este módulo
+    if (esAdmin) return true;
+    if (loadingPermisos) return false;
     const tienePermiso = permisosUsuario[item.modulo]?.includes(item.accion);
-    
     return tienePermiso;
   });
 
-  // 👇 REDIRECCIÓN ELIMINADA - Ahora siempre muestra el Welcome sin importar el rol
-  useEffect(() => {
-    // Ya no redirigimos automáticamente, el usuario siempre ve la bienvenida
-    if (!loadingPermisos && location.pathname === '/') {
-      console.log('👋 Usuario en welcome, puede navegar manualmente desde el menú lateral');
-      // No hacemos nada, se queda en welcome
-    }
-  }, [loadingPermisos, location.pathname]);
-
-  // Debug: Mostrar resumen de permisos
-  useEffect(() => {
-    if (!loadingPermisos) {
-      console.log('📊 === RESUMEN DE USUARIO ===');
-      console.log('👤 Email:', user?.email);
-      console.log('🎭 Rol en Auth:', user?.rol);
-      console.log('🎯 Rol Real (desde Firebase):', rolReal);
-      console.log('📛 Nombre del Rol:', nombreRol);
-      console.log('👑 Es Admin:', esAdmin);
-      console.log('📋 Permisos:', permisosUsuario);
-      console.log('🔍 Menú visible:', filteredMenu.map(item => item.name));
-      console.log('📍 Ruta actual:', location.pathname);
-      console.log('=============================');
-    }
-  }, [loadingPermisos, permisosUsuario, user, filteredMenu, esAdmin, rolReal, nombreRol, location.pathname]);
-
-  // Sidebar para móvil (overlay)
+  // Sidebar para móvil y tablet (overlay con scroll invisible)
   const MobileSidebar = () => (
     <AnimatePresence>
       {isMobileMenuOpen && (
         <>
-          {/* Overlay oscuro */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            className="fixed inset-0 bg-black/70 z-[100]"
             onClick={() => setIsMobileMenuOpen(false)}
           />
           
-          {/* Sidebar móvil */}
           <motion.div
-            initial={{ x: -280 }}
+            initial={{ x: -300 }}
             animate={{ x: 0 }}
-            exit={{ x: -280 }}
+            exit={{ x: -300 }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className={`fixed left-0 top-0 h-full w-[280px] z-50 md:hidden ${
+            className={`fixed left-0 top-0 h-full w-[280px] z-[101] overflow-y-auto scrollbar-hide ${
               theme === 'dark' ? 'bg-gray-900' : 'bg-black'
             }`}
+            style={{ maxHeight: '100vh', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
+            {/* Ocultar scrollbar en navegadores WebKit */}
+            <style jsx>{`
+              div::-webkit-scrollbar {
+                display: none;
+              }
+            `}</style>
+            
             {/* Logo en móvil */}
-            <div className="h-16 flex items-center px-4 border-b border-gray-800">
+            <div className="sticky top-0 z-10 h-16 flex items-center px-4 border-b border-gray-800 bg-inherit">
               <div className="flex items-center space-x-3 flex-1">
                 {logoUrl ? (
                   <img src={logoUrl} alt="Logo" className="h-10 w-10 object-contain rounded-lg" />
@@ -387,8 +332,8 @@ const Sidebar = ({ children }) => {
               </button>
             </div>
 
-            {/* Navegación móvil */}
-            <nav className="mt-4 px-3 overflow-y-auto max-h-[calc(100vh-4rem)]">
+            {/* Navegación móvil con scroll invisible */}
+            <nav className="mt-4 px-3 pb-8 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               {loadingPermisos ? (
                 <div className="flex justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
@@ -406,8 +351,6 @@ const Sidebar = ({ children }) => {
                           className={`flex items-center px-3 py-3 text-sm font-medium rounded-lg transition-all ${
                             isActive
                               ? 'bg-gradient-to-r from-red-600 to-red-800 text-white'
-                              : theme === 'dark'
-                              ? 'text-gray-300 hover:bg-gray-800'
                               : 'text-gray-300 hover:bg-gray-800'
                           }`}
                         >
@@ -418,7 +361,6 @@ const Sidebar = ({ children }) => {
                     );
                   })}
                   
-                  {/* Mensaje si no hay permisos */}
                   {filteredMenu.length === 0 && !loadingPermisos && (
                     <li className="text-center py-8 px-4">
                       <p className="text-gray-500 text-sm">
@@ -437,12 +379,13 @@ const Sidebar = ({ children }) => {
 
   return (
     <>
-      {/* Sidebar para desktop (solo visible en md y superior) */}
-      {!isMobile && (
+      {/* Sidebar para desktop (solo visible en pantallas grandes) */}
+      {!isMobile && !isTablet && (
         <motion.div
-          className={`h-screen relative flex-shrink-0 hidden md:block ${
+          className={`h-screen relative flex-shrink-0 hidden lg:block overflow-y-auto scrollbar-hide ${
             theme === 'dark' ? 'bg-gray-900' : 'bg-black'
           }`}
+          style={{ zIndex: 50, scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           animate={{ width: sidebarOpen ? 280 : 80 }}
           transition={{ duration: 0.3, ease: "easeInOut" }}
           onMouseEnter={() => setIsHovered(true)}
@@ -451,6 +394,13 @@ const Sidebar = ({ children }) => {
             setShowUserMenu(false);
           }}
         >
+          {/* Ocultar scrollbar en navegadores WebKit */}
+          <style jsx>{`
+            div::-webkit-scrollbar {
+              display: none;
+            }
+          `}</style>
+          
           {/* Logo */}
           <div className={`h-16 flex items-center ${sidebarOpen ? 'justify-start pl-4' : 'justify-center'}`}>
             {sidebarOpen ? (
@@ -471,15 +421,15 @@ const Sidebar = ({ children }) => {
                 {logoUrl ? (
                   <img src={logoUrl} alt="Logo" className="h-8 w-8 object-contain" />
                 ) : (
-                  <span className="text-white text-2xl font-bold bg-gradient-to-br from-red-600 to-red-800 w-full h-full flex items-center justify-center">
+                  <div className="text-white text-2xl font-bold bg-gradient-to-br from-red-600 to-red-800 w-full h-full flex items-center justify-center">
                     {empresaNombre.charAt(0)}
-                  </span>
+                  </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* Botón fijar */}
+          {/* Botón fijar - con z-index más alto */}
           <AnimatePresence>
             {isHovered && sidebarOpen && (
               <motion.button
@@ -487,9 +437,9 @@ const Sidebar = ({ children }) => {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
                 onClick={() => setIsFixed(!isFixed)}
-                className={`absolute -right-3 top-14 ${
+                className={`absolute -right-0 top-14 ${
                   isFixed ? 'bg-red-600' : 'bg-gray-600'
-                } text-white rounded-full p-1 shadow-lg hover:bg-red-700 transition-colors z-50`}
+                } text-white rounded-full p-1 shadow-lg hover:bg-red-700 transition-colors z-[9999]`}
               >
                 {isFixed ? (
                   <ChevronLeftIcon className="h-4 w-4" />
@@ -500,8 +450,8 @@ const Sidebar = ({ children }) => {
             )}
           </AnimatePresence>
 
-          {/* Navegación */}
-          <nav className="mt-4">
+          {/* Navegación con scroll invisible */}
+          <nav className="mt-4 h-[calc(100vh-4rem)] overflow-y-auto scrollbar-hide pb-8" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {loadingPermisos ? (
               <div className="flex justify-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
@@ -535,7 +485,7 @@ const Sidebar = ({ children }) => {
                               animate={{ opacity: 1, width: 'auto' }}
                               exit={{ opacity: 0, width: 0 }}
                               transition={{ duration: 0.2 }}
-                              className="relative z-10 group-hover:text-white transition-colors"
+                              className="relative z-10 group-hover:text-white transition-colors whitespace-nowrap"
                             >
                               {item.name}
                             </motion.span>
@@ -546,7 +496,6 @@ const Sidebar = ({ children }) => {
                   );
                 })}
                 
-                {/* Mensaje si no hay permisos */}
                 {filteredMenu.length === 0 && !loadingPermisos && (
                   <li className="text-center py-8 px-4">
                     <p className="text-gray-500 text-sm">
@@ -560,7 +509,7 @@ const Sidebar = ({ children }) => {
         </motion.div>
       )}
 
-      {/* Sidebar móvil */}
+      {/* Sidebar móvil y tablet */}
       <MobileSidebar />
 
       {/* Header Superior */}
@@ -569,13 +518,13 @@ const Sidebar = ({ children }) => {
       }`}>
         <header className={`${
           theme === 'dark' ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-        } border-b sticky top-0 z-50`}>
+        } border-b sticky top-0 z-40`}>
           <div className="flex justify-between items-center px-4 md:px-6 py-3">
             <div className="flex items-center space-x-3">
-              {/* Botón menú móvil */}
+              {/* Botón menú móvil y tablet */}
               <button
                 onClick={() => setIsMobileMenuOpen(true)}
-                className="md:hidden p-2 rounded-lg transition-colors hover:bg-gray-800"
+                className="lg:hidden p-2 rounded-lg transition-colors hover:bg-gray-800"
               >
                 <Bars3Icon className={`h-6 w-6 ${
                   theme === 'dark' ? 'text-white' : 'text-gray-900'
@@ -610,7 +559,7 @@ const Sidebar = ({ children }) => {
                 <span className="absolute inset-0 border-2 border-red-600 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></span>
               </button>
 
-              {/* Notificaciones - Solo visible si tiene permiso o es admin */}
+              {/* Notificaciones */}
               {!loadingPermisos && (esAdmin || permisosUsuario['notificaciones']?.includes('ver')) && (
                 <button 
                   onClick={() => navigate('/notificaciones')}
@@ -661,7 +610,6 @@ const Sidebar = ({ children }) => {
                       <div className="relative p-5 backdrop-blur-sm">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-red-500 rounded-full filter blur-3xl opacity-20"></div>
                         
-                        {/* Info del usuario con el rol REAL */}
                         <div className="relative z-10">
                           <div className="flex items-center space-x-4">
                             <div className={`${getRoleColorClass()} w-14 h-14 rounded-xl flex items-center justify-center text-white shadow-xl transform -rotate-3 hover:rotate-0 transition-transform`}>
@@ -681,7 +629,6 @@ const Sidebar = ({ children }) => {
                           </div>
                         </div>
 
-                        {/* Separador */}
                         <div className="relative my-4">
                           <div className="absolute inset-0 flex items-center">
                             <div className="w-full border-t border-red-500/30"></div>
@@ -694,7 +641,6 @@ const Sidebar = ({ children }) => {
                           </div>
                         </div>
 
-                        {/* Opciones */}
                         <div className="space-y-2">
                           <motion.button
                             whileHover={{ x: 5 }}
@@ -710,7 +656,6 @@ const Sidebar = ({ children }) => {
                             <span className="absolute inset-0 border border-red-600/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></span>
                           </motion.button>
 
-                          {/* Configuración - Solo si tiene permiso o es admin */}
                           {!loadingPermisos && (esAdmin || permisosUsuario['configuracion']?.includes('ver')) && (
                             <motion.button
                               whileHover={{ x: 5 }}
@@ -726,6 +671,20 @@ const Sidebar = ({ children }) => {
                               <span className="absolute inset-0 border border-red-600/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></span>
                             </motion.button>
                           )}
+
+                          <motion.button
+                            whileHover={{ x: 5 }}
+                            onClick={() => {
+                              navigate('/informacion');
+                              setShowUserMenu(false);
+                            }}
+                            className="w-full text-left px-4 py-3 rounded-lg flex items-center space-x-3 transition-all relative overflow-hidden group bg-black/20 hover:bg-black/40"
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-r from-red-600/0 to-red-600/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                            <InformationCircleIcon className="h-5 w-5 text-red-400 group-hover:text-white transition-colors relative z-10" />
+                            <span className="text-gray-200 group-hover:text-white transition-colors relative z-10">Información del Sistema</span>
+                            <span className="absolute inset-0 border border-red-600/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></span>
+                          </motion.button>
 
                           <div className="relative my-2">
                             <div className="absolute inset-0 flex items-center">
@@ -748,7 +707,6 @@ const Sidebar = ({ children }) => {
                           </motion.button>
                         </div>
 
-                        {/* Versión */}
                         <div className="mt-4 text-center relative">
                           <div className="absolute inset-0 flex items-center justify-center">
                             <div className="w-full border-t border-red-500/30"></div>

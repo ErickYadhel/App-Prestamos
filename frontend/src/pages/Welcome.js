@@ -1,19 +1,46 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { db } from '../services/firebase';
+import { collection, addDoc, updateDoc, doc, getDoc } from 'firebase/firestore';
 import {
   SparklesIcon,
   RocketLaunchIcon,
   ChartBarIcon,
   ShieldCheckIcon,
-  ClockIcon
+  ClockIcon,
+  ComputerDesktopIcon,
+  GlobeAltIcon,
+  DevicePhoneMobileIcon,
+  InformationCircleIcon,
+  BuildingOfficeIcon,
+  TagIcon,
+  QuestionMarkCircleIcon,
+  UserIcon,
+  EnvelopeIcon,
+  CalendarIcon
 } from '@heroicons/react/24/outline';
 
+// Versión del sistema
+const SISTEMA_VERSION = {
+  version: '2.0.0',
+  fecha: '2024-03-20',
+  nombre: 'EYS Inversiones - Sistema de Gestión de Préstamos'
+};
+
 const Welcome = () => {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const { theme } = useTheme();
   const [fraseDelDia, setFraseDelDia] = useState('');
+  const [sessionLogged, setSessionLogged] = useState(false);
+  const [userInfo, setUserInfo] = useState({
+    ultimoAcceso: null,
+    ultimoNavegador: null,
+    ultimaPlataforma: null,
+    fechaRegistro: null
+  });
 
   // Obtener la hora del día para el saludo
   const getGreeting = () => {
@@ -35,10 +62,215 @@ const Welcome = () => {
     "El futuro pertenece a quienes creen en la belleza de sus sueños."
   ];
 
+  // Función para obtener la IP del usuario
+  const getUserIP = async () => {
+    try {
+      const response = await fetch('https://api.ipify.org?format=json');
+      const data = await response.json();
+      return data.ip;
+    } catch (error) {
+      console.error('Error obteniendo IP:', error);
+      return 'No disponible';
+    }
+  };
+
+  // Función para obtener información del navegador
+  const getBrowserInfo = () => {
+    const userAgent = navigator.userAgent;
+    let browser = 'Desconocido';
+    let plataforma = navigator.platform || 'Desconocida';
+    
+    // Detectar navegador
+    if (userAgent.indexOf('Chrome') > -1 && userAgent.indexOf('Edg') === -1) {
+      browser = 'Chrome';
+    } else if (userAgent.indexOf('Firefox') > -1) {
+      browser = 'Firefox';
+    } else if (userAgent.indexOf('Safari') > -1 && userAgent.indexOf('Chrome') === -1) {
+      browser = 'Safari';
+    } else if (userAgent.indexOf('Edg') > -1) {
+      browser = 'Edge';
+    } else if (userAgent.indexOf('Opera') > -1 || userAgent.indexOf('OPR') > -1) {
+      browser = 'Opera';
+    } else if (userAgent.indexOf('Brave') > -1) {
+      browser = 'Brave';
+    }
+    
+    // Detectar dispositivo
+    if (/Mobi|Android|iPhone|iPad|iPod/i.test(userAgent)) {
+      plataforma = /iPad|iPhone|iPod/.test(userAgent) ? 'iOS' : 'Android';
+    }
+    
+    return { browser, plataforma, dispositivo: userAgent };
+  };
+
+  // Función para formatear fecha local
+  const formatLocalDate = (date) => {
+    return date.toLocaleString('es-DO', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  };
+
+  // Formatear fecha de último acceso para mostrar
+  const formatUltimoAcceso = (fecha) => {
+    if (!fecha) return 'Primera vez';
+    try {
+      const date = new Date(fecha);
+      return date.toLocaleString('es-DO', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return fecha;
+    }
+  };
+
+  // Formatear fecha de registro
+  const formatFechaRegistro = (fecha) => {
+    if (!fecha) return 'No disponible';
+    try {
+      const date = new Date(fecha);
+      return date.toLocaleDateString('es-DO', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch {
+      return fecha;
+    }
+  };
+
+  // Cargar información del usuario desde Firestore
+  const cargarInfoUsuario = async () => {
+    if (!user || !user.id) return;
+    
+    try {
+      const userRef = doc(db, 'usuarios', user.id);
+      const userDoc = await getDoc(userRef);
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setUserInfo({
+          ultimoAcceso: data.ultimoAcceso || user.ultimoAcceso || null,
+          ultimoNavegador: data.ultimoNavegador || user.ultimoNavegador || null,
+          ultimaPlataforma: data.ultimaPlataforma || user.ultimaPlataforma || null,
+          fechaRegistro: data.fechaCreacion || user.fechaCreacion || null
+        });
+      } else {
+        setUserInfo({
+          ultimoAcceso: user.ultimoAcceso || null,
+          ultimoNavegador: user.ultimoNavegador || null,
+          ultimaPlataforma: user.ultimaPlataforma || null,
+          fechaRegistro: user.fechaCreacion || null
+        });
+      }
+    } catch (error) {
+      console.error('Error cargando información del usuario:', error);
+    }
+  };
+
+  // Registrar inicio de sesión
+  const registrarInicioSesion = async () => {
+    if (!user || sessionLogged) return;
+    
+    try {
+      const ip = await getUserIP();
+      const { browser, plataforma, dispositivo } = getBrowserInfo();
+      const ahora = new Date();
+      const fechaISO = ahora.toISOString();
+      const fechaLocal = formatLocalDate(ahora);
+      const hora = ahora.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+      
+      // Datos del registro
+      const registro = {
+        tipo: 'login',
+        usuarioId: user.id || user.uid,
+        usuarioEmail: user.email,
+        usuarioNombre: user.nombre || user.displayName || 'Usuario',
+        ip: ip,
+        navegador: browser,
+        plataforma: plataforma,
+        dispositivo: dispositivo,
+        fecha: fechaISO,
+        fechaLocal: fechaLocal,
+        hora: hora,
+        userAgent: navigator.userAgent,
+        screenResolution: `${window.screen.width}x${window.screen.height}`,
+        language: navigator.language,
+        timestamp: Date.now()
+      };
+      
+      console.log('📝 Registrando inicio de sesión:', registro);
+      
+      // Guardar en Firebase
+      const inicioSesionRef = collection(db, 'Inicio_Sesion');
+      await addDoc(inicioSesionRef, registro);
+      
+      console.log('✅ Inicio de sesión registrado correctamente');
+      
+      // Actualizar último acceso en el documento del usuario
+      if (user.id || user.uid) {
+        const userId = user.id || user.uid;
+        const userRef = doc(db, 'usuarios', userId);
+        await updateDoc(userRef, {
+          ultimoAcceso: fechaISO,
+          ultimoAccesoLocal: fechaLocal,
+          ultimaIP: ip,
+          ultimoNavegador: browser,
+          ultimaPlataforma: plataforma
+        });
+        console.log('✅ Último acceso actualizado para el usuario');
+        
+        // Actualizar estado local
+        setUserInfo(prev => ({
+          ...prev,
+          ultimoAcceso: fechaISO,
+          ultimoNavegador: browser,
+          ultimaPlataforma: plataforma
+        }));
+        
+        // Actualizar el contexto usando updateUser
+        if (updateUser) {
+          await updateUser({
+            ultimoAcceso: fechaISO,
+            ultimoAccesoLocal: fechaLocal,
+            ultimaIP: ip,
+            ultimoNavegador: browser,
+            ultimaPlataforma: plataforma
+          });
+        }
+      }
+      
+      setSessionLogged(true);
+    } catch (error) {
+      console.error('❌ Error registrando inicio de sesión:', error);
+    }
+  };
+
   // Seleccionar frase al azar al cargar el componente
   useEffect(() => {
     setFraseDelDia(frases[Math.floor(Math.random() * frases.length)]);
   }, []);
+
+  // Cargar información y registrar sesión cuando el usuario esté disponible
+  useEffect(() => {
+    if (user) {
+      cargarInfoUsuario();
+      
+      // Registrar inicio de sesión si no se ha registrado en esta sesión
+      if (!sessionLogged) {
+        registrarInicioSesion();
+      }
+    }
+  }, [user]);
 
   // Efecto de partículas para el fondo
   const particles = Array.from({ length: 30 });
@@ -79,13 +311,13 @@ const Welcome = () => {
         />
       ))}
 
-      {/* Contenido principal - Z-INDEX REDUCIDO A 1 para que quede por debajo del header */}
-      <div className="relative z-1 flex items-center justify-center min-h-screen p-4 md:p-8"> {/* 👈 Z-INDEX 1 */}
+      {/* Contenido principal */}
+      <div className="relative z-10 flex items-center justify-center min-h-screen p-4 md:p-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="max-w-4xl w-full"
+          className="max-w-5xl w-full"
         >
           {/* Tarjeta de bienvenida principal */}
           <motion.div
@@ -190,8 +422,9 @@ const Welcome = () => {
                 </div>
               </motion.div>
 
-              {/* Grid de información */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              {/* Primera fila de información */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                {/* Último acceso */}
                 <motion.div
                   whileHover={{ y: -5 }}
                   initial={{ opacity: 0, y: 20 }}
@@ -214,13 +447,11 @@ const Welcome = () => {
                   <p className={`text-sm ${
                     theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
                   }`}>
-                    {user?.ultimoAcceso 
-                      ? new Date(user.ultimoAcceso).toLocaleString()
-                      : 'Primera vez'
-                    }
+                    {formatUltimoAcceso(userInfo.ultimoAcceso || user?.ultimoAcceso)}
                   </p>
                 </motion.div>
 
+                {/* Sistema de préstamos */}
                 <motion.div
                   whileHover={{ y: -5 }}
                   initial={{ opacity: 0, y: 20 }}
@@ -232,21 +463,27 @@ const Welcome = () => {
                 >
                   <div className="flex justify-center mb-3">
                     <div className="p-3 bg-red-600/20 rounded-xl">
-                      <ChartBarIcon className="h-8 w-8 text-red-600" />
+                      <BuildingOfficeIcon className="h-8 w-8 text-red-600" />
                     </div>
                   </div>
                   <h3 className={`text-lg font-semibold mb-1 ${
                     theme === 'dark' ? 'text-white' : 'text-gray-900'
                   }`}>
-                    Bienvenido
+                    Sistema de Préstamos
                   </h3>
                   <p className={`text-sm ${
                     theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
                   }`}>
-                    Sistema de préstamos
+                    EYS Inversiones
+                  </p>
+                  <p className={`text-xs mt-1 ${
+                    theme === 'dark' ? 'text-gray-500' : 'text-gray-400'
+                  }`}>
+                    Soluciones financieras
                   </p>
                 </motion.div>
 
+                {/* Versión estable */}
                 <motion.div
                   whileHover={{ y: -5 }}
                   initial={{ opacity: 0, y: 20 }}
@@ -258,27 +495,138 @@ const Welcome = () => {
                 >
                   <div className="flex justify-center mb-3">
                     <div className="p-3 bg-red-600/20 rounded-xl">
-                      <RocketLaunchIcon className="h-8 w-8 text-red-600" />
+                      <TagIcon className="h-8 w-8 text-red-600" />
                     </div>
                   </div>
                   <h3 className={`text-lg font-semibold mb-1 ${
                     theme === 'dark' ? 'text-white' : 'text-gray-900'
                   }`}>
-                    Versión
+                    Versión Estable
                   </h3>
                   <p className={`text-sm ${
                     theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
                   }`}>
-                    2.0.0 - Estable
+                    v{SISTEMA_VERSION.version}
+                  </p>
+                  <p className={`text-xs mt-1 ${
+                    theme === 'dark' ? 'text-gray-500' : 'text-gray-400'
+                  }`}>
+                    {new Date(SISTEMA_VERSION.fecha).toLocaleDateString('es-DO')}
                   </p>
                 </motion.div>
+              </div>
+
+              {/* Segunda fila de información */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                {/* Dispositivo */}
+                <motion.div
+                  whileHover={{ y: -5 }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.9 }}
+                  className={`p-6 rounded-2xl ${
+                    theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-100/50'
+                  } border border-red-600/20 text-center`}
+                >
+                  <div className="flex justify-center mb-3">
+                    <div className="p-3 bg-red-600/20 rounded-xl">
+                      <DevicePhoneMobileIcon className="h-8 w-8 text-red-600" />
+                    </div>
+                  </div>
+                  <h3 className={`text-lg font-semibold mb-1 ${
+                    theme === 'dark' ? 'text-white' : 'text-gray-900'
+                  }`}>
+                    Dispositivo
+                  </h3>
+                  <p className={`text-sm ${
+                    theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                  }`}>
+                    {userInfo.ultimaPlataforma || user?.ultimaPlataforma || 'No disponible'}
+                  </p>
+                </motion.div>
+
+                {/* Navegador */}
+                <motion.div
+                  whileHover={{ y: -5 }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 1.0 }}
+                  className={`p-6 rounded-2xl ${
+                    theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-100/50'
+                  } border border-red-600/20 text-center`}
+                >
+                  <div className="flex justify-center mb-3">
+                    <div className="p-3 bg-red-600/20 rounded-xl">
+                      <ComputerDesktopIcon className="h-8 w-8 text-red-600" />
+                    </div>
+                  </div>
+                  <h3 className={`text-lg font-semibold mb-1 ${
+                    theme === 'dark' ? 'text-white' : 'text-gray-900'
+                  }`}>
+                    Navegador
+                  </h3>
+                  <p className={`text-sm ${
+                    theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                  }`}>
+                    {userInfo.ultimoNavegador || user?.ultimoNavegador || 'No disponible'}
+                  </p>
+                </motion.div>
+
+                {/* Botón Acerca de */}
+                <motion.div
+                  whileHover={{ y: -5, scale: 1.02 }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 1.1 }}
+                >
+                  <Link
+                    to="/informacion"
+                    className={`block p-6 rounded-2xl border-2 transition-all text-center ${
+                      theme === 'dark' 
+                        ? 'bg-gray-800/50 border-red-600/30 hover:border-red-600/70 hover:bg-gray-800/70' 
+                        : 'bg-gray-100/50 border-red-600/20 hover:border-red-600/50 hover:bg-gray-100/70'
+                    }`}
+                  >
+                    <div className="flex justify-center mb-3">
+                      <div className="p-3 bg-red-600/20 rounded-xl">
+                        <InformationCircleIcon className="h-8 w-8 text-red-600" />
+                      </div>
+                    </div>
+                    <h3 className={`text-lg font-semibold mb-1 ${
+                      theme === 'dark' ? 'text-white' : 'text-gray-900'
+                    }`}>
+                      Acerca de
+                    </h3>
+                    <p className={`text-sm ${
+                      theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                    }`}>
+                      Información del sistema
+                    </p>
+                    <div className="mt-2 flex justify-center">
+                      <QuestionMarkCircleIcon className="h-5 w-5 text-red-600" />
+                    </div>
+                  </Link>
+                </motion.div>
+              </div>
+
+              {/* Información adicional del usuario */}
+              <div className="grid grid-cols-1 md:grid-cols-100 gap-4 mb-8">
+                <div className={`flex items-center space-x-3 p-3 rounded-xl ${
+                  theme === 'dark' ? 'bg-gray-800/30' : 'bg-gray-100/30'
+                }`}>
+                  <EnvelopeIcon className="h-5 w-5 text-red-600" />
+                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                    <p>Correo electrónico</p>
+                    {user?.email || 'Email no disponible'}
+                  </span>
+                </div>
               </div>
 
               {/* Mensaje de navegación */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ delay: 0.9 }}
+                transition={{ delay: 1.2 }}
                 className={`text-center p-4 rounded-xl ${
                   theme === 'dark' ? 'bg-red-600/10' : 'bg-red-600/5'
                 }`}
@@ -289,6 +637,23 @@ const Welcome = () => {
                   Utiliza el menú lateral para navegar por las diferentes secciones del sistema.
                 </p>
               </motion.div>
+
+              {/* Información de sesión registrada */}
+              {sessionLogged && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 1.3 }}
+                  className="mt-4 text-center"
+                >
+                  <p className={`text-xs ${
+                    theme === 'dark' ? 'text-gray-500' : 'text-gray-400'
+                  }`}>
+                    <GlobeAltIcon className="h-3 w-3 inline mr-1" />
+                    Sesión registrada exitosamente
+                  </p>
+                </motion.div>
+              )}
             </div>
           </motion.div>
 
@@ -296,7 +661,7 @@ const Welcome = () => {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 1 }}
+            transition={{ delay: 1.4 }}
             className="text-center mt-8"
           >
             <p className={`text-sm ${

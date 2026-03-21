@@ -4,8 +4,8 @@ import {
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
-import { collection, query, where, getDocs } from 'firebase/firestore'; // Importar Firestore
-import { auth, db } from '../services/firebase'; // Importar db
+import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore'; // Agregar doc y updateDoc
+import { auth, db } from '../services/firebase';
 import api from '../services/api';
 
 const AuthContext = createContext();
@@ -52,6 +52,48 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Función para obtener usuario por ID
+  const obtenerUsuarioPorId = async (userId) => {
+    try {
+      const userRef = doc(db, 'usuarios', userId);
+      const userDoc = await getDocs(userRef);
+      if (userDoc.exists()) {
+        return { id: userDoc.id, ...userDoc.data() };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error obteniendo usuario por ID:', error);
+      return null;
+    }
+  };
+
+  // Función para actualizar usuario en Firestore y en el estado
+  const updateUser = async (userData) => {
+    if (!user || !user.id) {
+      console.error('No hay usuario autenticado para actualizar');
+      return false;
+    }
+    
+    try {
+      console.log('🔄 Actualizando usuario en Firestore:', userData);
+      
+      const userRef = doc(db, 'usuarios', user.id);
+      await updateDoc(userRef, userData);
+      
+      // Actualizar el estado local
+      setUser(prev => ({
+        ...prev,
+        ...userData
+      }));
+      
+      console.log('✅ Usuario actualizado correctamente');
+      return true;
+    } catch (error) {
+      console.error('❌ Error actualizando usuario:', error);
+      return false;
+    }
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -65,15 +107,19 @@ export const AuthProvider = ({ children }) => {
             // Usuario encontrado en Firestore - usar su rol real
             console.log('✅ Usando datos de Firestore. Rol:', firestoreUser.rol);
             setUser({
-              id: firebaseUser.uid,
+              id: firestoreUser.id,
+              uid: firebaseUser.uid,
               email: firebaseUser.email,
               nombre: firestoreUser.nombre || firebaseUser.displayName || firebaseUser.email.split('@')[0],
-              rol: firestoreUser.rol || 'solicitante', // Usar el rol de Firestore
+              rol: firestoreUser.rol || 'solicitante',
               telefono: firestoreUser.telefono,
               departamento: firestoreUser.departamento,
               color: firestoreUser.color,
               foto: firestoreUser.foto,
-              activo: firestoreUser.activo
+              activo: firestoreUser.activo,
+              ultimoAcceso: firestoreUser.ultimoAcceso,
+              ultimoNavegador: firestoreUser.ultimoNavegador,
+              ultimaPlataforma: firestoreUser.ultimaPlataforma
             });
           } else {
             // Usuario no encontrado en Firestore - usar datos básicos
@@ -85,7 +131,8 @@ export const AuthProvider = ({ children }) => {
               if (response.data && response.data.length > 0) {
                 const apiUser = response.data[0];
                 setUser({
-                  id: firebaseUser.uid,
+                  id: apiUser.id || firebaseUser.uid,
+                  uid: firebaseUser.uid,
                   email: firebaseUser.email,
                   nombre: apiUser.nombre || firebaseUser.email.split('@')[0],
                   rol: apiUser.rol || 'solicitante',
@@ -98,9 +145,10 @@ export const AuthProvider = ({ children }) => {
                 // Usuario por defecto
                 setUser({
                   id: firebaseUser.uid,
+                  uid: firebaseUser.uid,
                   email: firebaseUser.email,
                   nombre: firebaseUser.displayName || firebaseUser.email.split('@')[0],
-                  rol: 'solicitante', // Rol por defecto para usuarios no encontrados
+                  rol: 'solicitante',
                   activo: true
                 });
               }
@@ -108,6 +156,7 @@ export const AuthProvider = ({ children }) => {
               console.error('❌ Error consultando API:', apiError);
               setUser({
                 id: firebaseUser.uid,
+                uid: firebaseUser.uid,
                 email: firebaseUser.email,
                 nombre: firebaseUser.displayName || firebaseUser.email.split('@')[0],
                 rol: 'solicitante',
@@ -122,6 +171,7 @@ export const AuthProvider = ({ children }) => {
           // Fallback con datos básicos de Firebase
           setUser({
             id: firebaseUser.uid,
+            uid: firebaseUser.uid,
             email: firebaseUser.email,
             nombre: firebaseUser.displayName || 'Usuario',
             rol: 'solicitante',
@@ -152,7 +202,8 @@ export const AuthProvider = ({ children }) => {
       if (firestoreUser) {
         console.log('✅ Usuario autenticado con rol de Firestore:', firestoreUser.rol);
         userData = {
-          id: firebaseUser.uid,
+          id: firestoreUser.id,
+          uid: firebaseUser.uid,
           email: firebaseUser.email,
           nombre: firestoreUser.nombre || firebaseUser.displayName || firebaseUser.email.split('@')[0],
           rol: firestoreUser.rol || 'solicitante',
@@ -160,12 +211,16 @@ export const AuthProvider = ({ children }) => {
           departamento: firestoreUser.departamento,
           color: firestoreUser.color,
           foto: firestoreUser.foto,
-          activo: firestoreUser.activo
+          activo: firestoreUser.activo,
+          ultimoAcceso: firestoreUser.ultimoAcceso,
+          ultimoNavegador: firestoreUser.ultimoNavegador,
+          ultimaPlataforma: firestoreUser.ultimaPlataforma
         };
       } else {
         console.log('⚠️ Usuario autenticado pero no encontrado en Firestore');
         userData = {
           id: firebaseUser.uid,
+          uid: firebaseUser.uid,
           email: firebaseUser.email,
           nombre: firebaseUser.displayName || firebaseUser.email.split('@')[0],
           rol: 'solicitante',
@@ -217,6 +272,8 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user,
+    setUser,        // ← EXPONER setUser
+    updateUser,     // ← EXPONER updateUser
     login,
     logout,
     loading

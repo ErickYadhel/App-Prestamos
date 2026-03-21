@@ -18,6 +18,7 @@ import Configuracion from './pages/Configuracion';
 import Notificaciones from './pages/Notificaciones';
 import Perfil from './pages/Usuarios';
 import ErrorBoundary from './components/ErrorBoundary';
+import Informacion from './pages/Informacion'; // 👈 NUEVA IMPORTACIÓN
 
 // 👇 NUEVAS IMPORTACIONES
 import Operaciones from './pages/Operaciones';
@@ -168,6 +169,15 @@ function App() {
                       <ProtectedRoute allowedRoles={['admin']}>
                         <Layout>
                           <Configuracion />
+                        </Layout>
+                      </ProtectedRoute>
+                    } />
+                    
+                    {/* 👇 NUEVA RUTA - Información del Sistema */}
+                    <Route path="/informacion" element={
+                      <ProtectedRoute allowedRoles={['admin', 'consultor', 'solicitante', 'supervisor']}>
+                        <Layout>
+                          <Informacion />
                         </Layout>
                       </ProtectedRoute>
                     } />

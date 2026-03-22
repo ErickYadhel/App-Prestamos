@@ -2,10 +2,11 @@ class Solicitud {
   constructor({
     id,
     clienteNombre,
+    cedula,
     telefono,
     email,
     montoSolicitado,
-    plazoMeses = 0, // 0 significa sin plazo fijo
+    plazoMeses = 0,
     frecuencia,
     fechaSolicitud = new Date(),
     estado = 'pendiente',
@@ -19,14 +20,23 @@ class Solicitud {
     lugarTrabajo = '',
     puestoCliente = '',
     sueldoCliente = 0,
+    fechaIngreso = null,
     observaciones = '',
     documentosUrl = [],
     direccion = '',
     provincia = '',
-    scoreAnalisis = 50
+    garantia = '',
+    scoreAnalisis = 50,
+    prestamoId = null,
+    montoAprobado = null,
+    interesAprobado = null,
+    frecuenciaAprobada = null,
+    fechaAprobacionCliente = null,
+    evidenciaFirma = null
   }) {
     this.id = id;
     this.clienteNombre = clienteNombre;
+    this.cedula = cedula;
     this.telefono = telefono;
     this.email = email;
     this.montoSolicitado = montoSolicitado;
@@ -44,11 +54,19 @@ class Solicitud {
     this.lugarTrabajo = lugarTrabajo;
     this.puestoCliente = puestoCliente;
     this.sueldoCliente = sueldoCliente;
+    this.fechaIngreso = fechaIngreso;
     this.observaciones = observaciones;
     this.documentosUrl = documentosUrl;
     this.direccion = direccion;
     this.provincia = provincia;
+    this.garantia = garantia;
     this.scoreAnalisis = scoreAnalisis;
+    this.prestamoId = prestamoId;
+    this.montoAprobado = montoAprobado;
+    this.interesAprobado = interesAprobado;
+    this.frecuenciaAprobada = frecuenciaAprobada;
+    this.fechaAprobacionCliente = fechaAprobacionCliente;
+    this.evidenciaFirma = evidenciaFirma;
   }
 
   validar() {

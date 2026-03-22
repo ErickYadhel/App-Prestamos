@@ -17,6 +17,8 @@
     "file-saver": "^2.0.5",
     "firebase": "^12.4.0",
     "framer-motion": "^12.34.3",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
     "react": "^19.2.0",
@@ -25,7 +27,8 @@
     "react-error-boundary": "^6.1.1",
     "react-router-dom": "^7.9.4",
     "react-scripts": "5.0.1",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "xlsx": "^0.18.5"
   },
   "scripts": {
     "start": "react-scripts start",

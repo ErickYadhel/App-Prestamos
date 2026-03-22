@@ -25,17 +25,26 @@ import {
   RocketLaunchIcon,
   ArrowPathIcon,
   XMarkIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
   ShieldCheckIcon,
-  UserIcon
+  UserIcon,
+  IdentificationIcon,
+  BriefcaseIcon,
+  HomeIcon,
+  UserGroupIcon,
+  TableCellsIcon
 } from '@heroicons/react/24/outline';
 import api from '../services/api';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { db } from '../services/firebase';
+import { collection, addDoc, updateDoc, doc, getDocs, query, where, orderBy } from 'firebase/firestore';
 import SolicitudForm from '../components/Solicitudes/SolicitudForm';
 import SolicitudDetails from '../components/Solicitudes/SolicitudDetails';
 import AprobarSolicitudModal from '../components/Solicitudes/AprobarSolicitudModal';
 import { normalizeFirebaseData, firebaseTimestampToLocalString } from '../utils/firebaseUtils';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 // ============================================
 // COMPONENTE DE BORDE LUMINOSO
@@ -80,7 +89,6 @@ const SolicitudesSkeleton = () => {
   
   return (
     <div className="space-y-6">
-      {/* Header Skeleton */}
       <div className="flex justify-between items-center">
         <div>
           <div className={`h-8 w-64 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
@@ -91,16 +99,16 @@ const SolicitudesSkeleton = () => {
           <div className={`h-10 w-36 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
         </div>
       </div>
-
-      {/* Stats Skeleton */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[1, 2, 3, 4].map(i => (
           <div key={i} className={`h-24 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
         ))}
       </div>
-
-      {/* Table Skeleton */}
-      <div className={`h-96 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {[1, 2, 3, 4, 5, 6].map(i => (
+          <div key={i} className={`h-64 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -162,6 +170,172 @@ const StatsCard = ({ icon: Icon, label, value, subValue, gradient, trend }) => {
         )}
       </motion.div>
     </BorderGlow>
+  );
+};
+
+// ============================================
+// COMPONENTE DE TARJETA DE SOLICITUD (PARA MÓVIL/TABLET)
+// ============================================
+const SolicitudCard = ({ solicitud, onView, onEdit, onAprobar, onRechazar, getEstadoBadge, getScoreColor, getRecomendacion }) => {
+  const { theme } = useTheme();
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const ratioSueldo = solicitud.sueldoCliente ? (Number(solicitud.montoSolicitado) / Number(solicitud.sueldoCliente)) : 0;
+  const recomendacion = getRecomendacion(solicitud);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.02 }}
+      className={`relative overflow-hidden rounded-xl border-2 ${
+        theme === 'dark' 
+          ? 'bg-gray-800/90 border-gray-700 hover:border-red-600/50' 
+          : 'bg-white border-gray-200 hover:border-red-600/50'
+      } shadow-lg transition-all duration-300`}
+    >
+      <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-red-500 to-red-700" />
+      
+      <div className="p-4">
+        <div className="flex justify-between items-start mb-3">
+          <div className="flex-1">
+            <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+              {solicitud.clienteNombre || 'N/A'}
+            </h3>
+            <div className="flex items-center space-x-2 mt-1">
+              <span className={`text-xs flex items-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                <PhoneIcon className="h-3 w-3 mr-1" />
+                {solicitud.telefono || 'N/A'}
+              </span>
+              <span className={`text-xs flex items-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                <IdentificationIcon className="h-3 w-3 mr-1" />
+                {solicitud.cedula || 'Sin cédula'}
+              </span>
+            </div>
+          </div>
+          {getEstadoBadge(solicitud)}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div className={`p-2 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100'}`}>
+            <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Monto</p>
+            <p className={`text-lg font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+              RD$ {Number(solicitud.montoSolicitado).toLocaleString()}
+            </p>
+          </div>
+          <div className={`p-2 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100'}`}>
+            <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Score</p>
+            <div className={`inline-block px-2 py-1 rounded-full text-xs font-bold mt-1 ${getScoreColor(solicitud.scoreAnalisis)}`}>
+              {Number(solicitud.scoreAnalisis) || 50}/100
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className={`w-full flex items-center justify-center space-x-1 py-2 text-xs ${theme === 'dark' ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <span>{isExpanded ? 'Ver menos' : 'Ver más'}</span>
+          <svg className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        <AnimatePresence>
+          {isExpanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mt-3 space-y-3 pt-3 border-t border-gray-200 dark:border-gray-700"
+            >
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Frecuencia</p>
+                  <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{solicitud.frecuencia}</p>
+                </div>
+                <div>
+                  <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Plazo</p>
+                  <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    {solicitud.plazoMeses === 0 ? 'Sin plazo' : `${solicitud.plazoMeses} meses`}
+                  </p>
+                </div>
+                <div>
+                  <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Sueldo</p>
+                  <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    RD$ {Number(solicitud.sueldoCliente).toLocaleString()}
+                  </p>
+                </div>
+                <div>
+                  <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Ratio</p>
+                  <p className={`font-medium ${ratioSueldo <= 1 ? 'text-green-600' : ratioSueldo <= 2 ? 'text-yellow-600' : 'text-red-600'}`}>
+                    {ratioSueldo.toFixed(2)}x
+                  </p>
+                </div>
+                <div className="col-span-2">
+                  <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Recomendación</p>
+                  <p className={`text-xs px-2 py-1 rounded inline-block mt-1 ${recomendacion.color}`}>
+                    {recomendacion.texto}
+                  </p>
+                </div>
+                {solicitud.lugarTrabajo && (
+                  <div className="col-span-2">
+                    <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Trabajo</p>
+                    <p className={`text-xs ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      {solicitud.lugarTrabajo}
+                      {solicitud.puestoCliente && ` (${solicitud.puestoCliente})`}
+                    </p>
+                  </div>
+                )}
+                {solicitud.fechaIngreso && (
+                  <div className="col-span-2">
+                    <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Fecha Ingreso</p>
+                    <p className={`text-xs ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      {new Date(solicitud.fechaIngreso).toLocaleDateString()}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onView(solicitud); }}
+                  className="p-2 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                  title="Ver detalles"
+                >
+                  <EyeIcon className="h-4 w-4" />
+                </button>
+                {solicitud.estado === 'pendiente' && (
+                  <>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onAprobar(solicitud); }}
+                      className="p-2 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors"
+                      title="Aprobar"
+                    >
+                      <CheckCircleIcon className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onRechazar(solicitud.id); }}
+                      className="p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                      title="Rechazar"
+                    >
+                      <XCircleIcon className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onEdit(solicitud); }}
+                      className="p-2 text-yellow-600 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 rounded-lg transition-colors"
+                      title="Editar"
+                    >
+                      <PencilIcon className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
   );
 };
 
@@ -292,24 +466,244 @@ const AdvancedFilters = ({ isOpen, onClose, filtros, onFilterChange }) => {
 };
 
 // ============================================
-// COMPONENTE DE TARJETA DE ESTADÍSTICA AVANZADA
+// MODAL DE NOTIFICACIÓN DESPUÉS DE CREAR SOLICITUD
 // ============================================
-const StatCard = ({ title, children }) => {
+const NotificacionModal = ({ isOpen, onClose, solicitud, onNotificarCliente, onNotificarAdmin }) => {
   const { theme } = useTheme();
-  
+
+  if (!isOpen) return null;
+
   return (
-    <GlassCard>
-      <div className="p-4">
-        <h4 className={`text-sm font-medium mb-3 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
-          {title}
-        </h4>
-        {children}
-      </div>
-    </GlassCard>
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-xl"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.9, y: 20, opacity: 0 }}
+          animate={{ scale: 1, y: 0, opacity: 1 }}
+          exit={{ scale: 0.9, y: 20, opacity: 0 }}
+          className="relative w-full max-w-md mx-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-green-600 via-green-500 to-green-600 rounded-2xl blur-xl opacity-75" />
+          
+          <div className={`relative rounded-2xl shadow-2xl overflow-hidden border-2 border-green-600/30 ${
+            theme === 'dark' ? 'bg-gray-900' : 'bg-white'
+          }`}>
+            <div className={`p-6 border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} bg-gradient-to-r ${
+              theme === 'dark' ? 'from-gray-800 to-gray-900' : 'from-green-50 to-white'
+            }`}>
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-gradient-to-br from-green-600 to-green-800 rounded-lg">
+                  <CheckCircleIcon className="h-6 w-6 text-white" />
+                </div>
+                <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  ¡Solicitud Creada!
+                </h3>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className={`text-center ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                La solicitud de <strong>{solicitud?.clienteNombre}</strong> ha sido creada exitosamente.
+              </p>
+              <p className={`text-sm text-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                ¿Deseas notificar a alguien?
+              </p>
+
+              <div className="flex flex-col space-y-3 pt-4">
+                <button
+                  onClick={() => {
+                    onNotificarCliente();
+                    onClose();
+                  }}
+                  className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-all flex items-center justify-center space-x-2"
+                >
+                  <PhoneIcon className="h-5 w-5" />
+                  <span>Notificar al Cliente</span>
+                </button>
+                <button
+                  onClick={() => {
+                    onNotificarAdmin();
+                    onClose();
+                  }}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all flex items-center justify-center space-x-2"
+                >
+                  <ShieldCheckIcon className="h-5 w-5" />
+                  <span>Notificar al Administrador</span>
+                </button>
+                <button
+                  onClick={onClose}
+                  className="w-full py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-all hover:bg-gray-300 dark:hover:bg-gray-600"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 };
 
+// ============================================
+// FUNCIÓN DE ANÁLISIS DE RIESGO REAL
+// ============================================
+const calcularScoreRiesgo = (solicitud) => {
+  let score = 0;
+  const factores = [];
+
+  const monto = Number(solicitud.montoSolicitado) || 0;
+  const sueldo = Number(solicitud.sueldoCliente) || 0;
+  const capacidadPago = sueldo > 0 ? (monto / sueldo) : Infinity;
+  
+  if (capacidadPago <= 0.3) {
+    score += 40;
+    factores.push({ nombre: 'Capacidad de pago', puntaje: 40, detalle: 'Excelente' });
+  } else if (capacidadPago <= 0.5) {
+    score += 30;
+    factores.push({ nombre: 'Capacidad de pago', puntaje: 30, detalle: 'Buena' });
+  } else if (capacidadPago <= 0.7) {
+    score += 20;
+    factores.push({ nombre: 'Capacidad de pago', puntaje: 20, detalle: 'Aceptable' });
+  } else if (capacidadPago <= 1) {
+    score += 10;
+    factores.push({ nombre: 'Capacidad de pago', puntaje: 10, detalle: 'Limitada' });
+  } else {
+    score += 0;
+    factores.push({ nombre: 'Capacidad de pago', puntaje: 0, detalle: 'Crítica' });
+  }
+
+  if (solicitud.lugarTrabajo && solicitud.puestoCliente) {
+    score += 15;
+    factores.push({ nombre: 'Estabilidad laboral', puntaje: 15, detalle: 'Completa' });
+  } else if (solicitud.lugarTrabajo) {
+    score += 10;
+    factores.push({ nombre: 'Estabilidad laboral', puntaje: 10, detalle: 'Parcial' });
+  } else {
+    score += 0;
+    factores.push({ nombre: 'Estabilidad laboral', puntaje: 0, detalle: 'Sin información' });
+  }
+
+  if (solicitud.bancoCliente && solicitud.cuentaCliente && solicitud.tipoCuenta) {
+    score += 15;
+    factores.push({ nombre: 'Información bancaria', puntaje: 15, detalle: 'Completa' });
+  } else if (solicitud.bancoCliente) {
+    score += 10;
+    factores.push({ nombre: 'Información bancaria', puntaje: 10, detalle: 'Parcial' });
+  } else {
+    score += 0;
+    factores.push({ nombre: 'Información bancaria', puntaje: 0, detalle: 'Sin información' });
+  }
+
+  if (solicitud.garantia) {
+    const garantias = { 'hipotecaria': 15, 'prendaria': 12, 'fiduciaria': 10, 'personal': 8, 'ninguna': 5 };
+    const puntajeGarantia = garantias[solicitud.garantia?.toLowerCase()] || 5;
+    score += puntajeGarantia;
+    factores.push({ nombre: 'Garantía', puntaje: puntajeGarantia, detalle: solicitud.garantia });
+  } else {
+    score += 0;
+    factores.push({ nombre: 'Garantía', puntaje: 0, detalle: 'Sin garantía' });
+  }
+
+  const plazo = Number(solicitud.plazoMeses) || 0;
+  if (plazo === 0 || plazo <= 12) {
+    score += 15;
+    factores.push({ nombre: 'Plazo', puntaje: 15, detalle: plazo === 0 ? 'Flexible' : `${plazo} meses` });
+  } else if (plazo <= 24) {
+    score += 10;
+    factores.push({ nombre: 'Plazo', puntaje: 10, detalle: `${plazo} meses` });
+  } else {
+    score += 5;
+    factores.push({ nombre: 'Plazo', puntaje: 5, detalle: `${plazo} meses` });
+  }
+
+  if (solicitud.fechaIngreso) {
+    const fechaIngreso = new Date(solicitud.fechaIngreso);
+    const hoy = new Date();
+    const diffTime = Math.abs(hoy - fechaIngreso);
+    const anosAntiguedad = diffTime / (1000 * 60 * 60 * 24 * 365.25);
+    
+    if (anosAntiguedad >= 3) {
+      score += 5;
+      factores.push({ nombre: 'Antigüedad', puntaje: 5, detalle: `${anosAntiguedad.toFixed(1)} años` });
+    } else if (anosAntiguedad >= 1) {
+      score += 3;
+      factores.push({ nombre: 'Antigüedad', puntaje: 3, detalle: `${anosAntiguedad.toFixed(1)} años` });
+    } else if (anosAntiguedad > 0) {
+      score += 1;
+      factores.push({ nombre: 'Antigüedad', puntaje: 1, detalle: `${anosAntiguedad.toFixed(1)} años` });
+    }
+  }
+
+  score = Math.min(100, Math.max(0, score));
+  
+  return { score, factores };
+};
+
+// ============================================
+// FUNCIÓN PARA CREAR FORMULARIO Y DOCUMENTO AUTOMÁTICAMENTE
+// ============================================
+const crearFormularioYDocumento = async (solicitudData, solicitudId, user) => {
+  try {
+    const formularioData = {
+      tipo: 'solicitud',
+      cliente: solicitudData.clienteNombre,
+      email: solicitudData.email,
+      telefono: solicitudData.telefono,
+      direccion: solicitudData.direccion,
+      cedula: solicitudData.cedula,
+      monto: solicitudData.montoSolicitado,
+      plazo: solicitudData.plazoMeses,
+      interes: '10',
+      garantia: solicitudData.garantia || 'personal',
+      estado: 'pendiente',
+      solicitudId: solicitudId,
+      fechaCreacion: new Date().toISOString(),
+      creadoPor: user?.email || 'sistema',
+      observaciones: solicitudData.observaciones
+    };
+
+    const formulariosRef = collection(db, 'formularios');
+    const formularioDoc = await addDoc(formulariosRef, formularioData);
+
+    const documentoData = {
+      tipo: 'contrato',
+      nombre: `Contrato de Préstamo - ${solicitudData.clienteNombre}`,
+      categoria: 'contratos',
+      cliente: solicitudData.clienteNombre,
+      descripcion: `Contrato de préstamo por RD$ ${Number(solicitudData.montoSolicitado).toLocaleString()} a ${solicitudData.plazoMeses || 'sin plazo fijo'} meses con interés del 10%`,
+      estado: 'pendiente',
+      solicitudId: solicitudId,
+      formularioId: formularioDoc.id,
+      fechaCreacion: new Date().toISOString(),
+      creadoPor: user?.email || 'sistema',
+      etiquetas: ['préstamo', 'contrato', solicitudData.frecuencia],
+      formato: 'PDF',
+      tamano: '0 KB',
+      archivo: ''
+    };
+
+    const documentosRef = collection(db, 'documentos');
+    const documentoDoc = await addDoc(documentosRef, documentoData);
+
+    return { formularioId: formularioDoc.id, documentoId: documentoDoc.id };
+  } catch (error) {
+    console.error('Error creando formulario y documento:', error);
+    return null;
+  }
+};
+
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
 const Solicitudes = () => {
+  const { user } = useAuth();
   const [solicitudes, setSolicitudes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -317,7 +711,7 @@ const Solicitudes = () => {
   const [filtroFrecuencia, setFiltroFrecuencia] = useState('todos');
   const [showSearch, setShowSearch] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [hoveredRow, setHoveredRow] = useState(null);
+  const [isMobile, setIsMobile] = useState(false);
   const [filtrosAvanzados, setFiltrosAvanzados] = useState({
     fechaDesde: '',
     fechaHasta: '',
@@ -330,11 +724,14 @@ const Solicitudes = () => {
   const [solicitudParaAprobar, setSolicitudParaAprobar] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showNotificacionModal, setShowNotificacionModal] = useState(false);
+  const [solicitudReciente, setSolicitudReciente] = useState(null);
   const [stats, setStats] = useState({
     total: 0,
     pendientes: 0,
     aprobadas: 0,
     rechazadas: 0,
+    aprobadasCliente: 0,
     montoTotalSolicitado: 0,
     montoTotalAprobado: 0,
     tasaAprobacion: 0
@@ -344,26 +741,29 @@ const Solicitudes = () => {
 
   const { theme } = useTheme();
 
-  // Función segura para formatear números
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const safeToLocaleString = (value, defaultValue = '0') => {
-    if (value === null || value === undefined || isNaN(value)) {
-      return defaultValue;
-    }
+    if (value === null || value === undefined || isNaN(value)) return defaultValue;
     try {
       return Number(value).toLocaleString();
     } catch (error) {
-      console.error('Error formatting number:', error);
       return defaultValue;
     }
   };
 
-  // Función segura para formatear fechas
   const safeFirebaseTimestamp = (timestamp, defaultValue = 'N/A') => {
     if (!timestamp) return defaultValue;
     try {
       return firebaseTimestampToLocalString(timestamp);
     } catch (error) {
-      console.error('Error formatting timestamp:', error);
       return defaultValue;
     }
   };
@@ -379,7 +779,6 @@ const Solicitudes = () => {
       setLoading(true);
       setError('');
       
-      // Construir query parameters para filtros
       const params = new URLSearchParams();
       if (filtroEstado !== 'todos') params.append('estado', filtroEstado);
       if (filtrosAvanzados.fechaDesde) params.append('fechaDesde', filtrosAvanzados.fechaDesde);
@@ -390,9 +789,14 @@ const Solicitudes = () => {
       const response = await api.get(`/solicitudes?${params}`);
       
       if (response.success) {
-        const solicitudesNormalizadas = (response.data || []).map(solicitud => 
-          normalizeFirebaseData(solicitud)
-        );
+        const solicitudesNormalizadas = (response.data || []).map(solicitud => {
+          const scoreData = calcularScoreRiesgo(solicitud);
+          return {
+            ...normalizeFirebaseData(solicitud),
+            scoreAnalisis: scoreData.score,
+            factoresRiesgo: scoreData.factores
+          };
+        });
         setSolicitudes(solicitudesNormalizadas);
         calcularEstadisticas(solicitudesNormalizadas);
       } else {
@@ -400,65 +804,10 @@ const Solicitudes = () => {
       }
     } catch (error) {
       console.error('Error fetching solicitudes:', error);
-      setError(error.message);
-      // Datos de ejemplo para desarrollo
-      const mockData = getMockSolicitudes();
-      setSolicitudes(mockData);
-      calcularEstadisticas(mockData);
+      setError('Error al cargar las solicitudes. Por favor, intente de nuevo más tarde.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const getMockSolicitudes = () => {
-    return [
-      {
-        id: '1',
-        clienteNombre: 'Juan Pérez García',
-        cedula: '001-1234567-8',
-        telefono: '809-123-4567',
-        email: 'juan@email.com',
-        montoSolicitado: 50000,
-        plazoMeses: 0,
-        frecuencia: 'quincenal',
-        bancoCliente: 'Banco Popular Dominicano',
-        tipoCuenta: 'ahorro',
-        cuentaCliente: '123-456789-1',
-        lugarTrabajo: 'Empresa XYZ, S.A.',
-        puestoCliente: 'Gerente de Ventas',
-        sueldoCliente: 45000,
-        direccion: 'Calle Principal #123, Sector Norte',
-        provincia: 'Santo Domingo',
-        estado: 'pendiente',
-        fechaSolicitud: new Date('2024-01-15'),
-        scoreAnalisis: 85,
-        empleadoNombre: 'Carlos Rodríguez',
-        observaciones: 'Cliente con buen historial crediticio'
-      },
-      {
-        id: '2',
-        clienteNombre: 'María Rodríguez Santos',
-        cedula: '002-7654321-9',
-        telefono: '809-987-6543',
-        email: 'maria@email.com',
-        montoSolicitado: 25000,
-        plazoMeses: 0,
-        frecuencia: 'mensual',
-        bancoCliente: 'Banco de Reservas',
-        tipoCuenta: 'corriente',
-        cuentaCliente: '456-123456-2',
-        lugarTrabajo: 'Comerciante Independiente',
-        puestoCliente: 'Dueña de Negocio',
-        sueldoCliente: 30000,
-        direccion: 'Av. Independencia #456',
-        provincia: 'Distrito Nacional',
-        estado: 'pendiente',
-        fechaSolicitud: new Date('2024-01-14'),
-        scoreAnalisis: 72,
-        empleadoNombre: 'Ana Martínez',
-        observaciones: 'Emprendedora con negocio estable'
-      }
-    ];
   };
 
   const calcularEstadisticas = (solicitudesList) => {
@@ -466,6 +815,7 @@ const Solicitudes = () => {
     const pendientes = solicitudesList.filter(s => s.estado === 'pendiente').length || 0;
     const aprobadas = solicitudesList.filter(s => s.estado === 'aprobada').length || 0;
     const rechazadas = solicitudesList.filter(s => s.estado === 'rechazada').length || 0;
+    const aprobadasCliente = solicitudesList.filter(s => s.estado === 'aprobado_cliente').length || 0;
     
     const montoTotalSolicitado = (solicitudesList || []).reduce((sum, s) => sum + (Number(s.montoSolicitado) || 0), 0);
     const montoTotalAprobado = (solicitudesList || [])
@@ -479,6 +829,7 @@ const Solicitudes = () => {
       pendientes,
       aprobadas,
       rechazadas,
+      aprobadasCliente,
       montoTotalSolicitado,
       montoTotalAprobado,
       tasaAprobacion
@@ -493,24 +844,6 @@ const Solicitudes = () => {
       }
     } catch (error) {
       console.error('Error fetching estadísticas avanzadas:', error);
-      // Datos mock para desarrollo
-      setEstadisticasAvanzadas({
-        total: 15,
-        porEstado: {
-          pendientes: 8,
-          aprobadas: 5,
-          rechazadas: 2
-        },
-        montoTotalSolicitado: 450000,
-        montoTotalAprobado: 280000,
-        scorePromedio: 75,
-        porFrecuencia: {
-          diario: 1,
-          semanal: 3,
-          quincenal: 8,
-          mensual: 3
-        }
-      });
     }
   };
 
@@ -521,8 +854,6 @@ const Solicitudes = () => {
         setBancos(response.data);
       }
     } catch (error) {
-      console.error('Error fetching banks:', error);
-      // Bancos por defecto
       setBancos([
         'Banco de Reservas',
         'Banco Popular Dominicano',
@@ -546,7 +877,6 @@ const Solicitudes = () => {
     const matchesEstado = filtroEstado === 'todos' || solicitud.estado === filtroEstado;
     const matchesFrecuencia = filtroFrecuencia === 'todos' || solicitud.frecuencia === filtroFrecuencia;
 
-    // Filtros avanzados
     const montoSolicitado = Number(solicitud.montoSolicitado) || 0;
     const matchesMonto = 
       (!filtrosAvanzados.montoMin || montoSolicitado >= parseFloat(filtrosAvanzados.montoMin)) &&
@@ -582,7 +912,7 @@ const Solicitudes = () => {
   const handleRechazarSolicitud = async (solicitudId, observaciones = '') => {
     if (!observaciones.trim()) {
       observaciones = prompt('Ingrese el motivo del rechazo:');
-      if (observaciones === null) return; // Usuario canceló
+      if (observaciones === null) return;
       if (!observaciones.trim()) {
         alert('Debe ingresar un motivo para rechazar la solicitud');
         return;
@@ -599,7 +929,6 @@ const Solicitudes = () => {
       if (response.success) {
         setSuccess('Solicitud rechazada exitosamente');
         
-        // Mostrar enlace de WhatsApp para informar al cliente
         const solicitud = solicitudes.find(s => s.id === solicitudId);
         if (solicitud && response.notificaciones) {
           setTimeout(() => {
@@ -618,23 +947,6 @@ const Solicitudes = () => {
     } catch (error) {
       console.error('Error rejecting application:', error);
       setError(error.message);
-      
-      // En caso de error, actualizar localmente para desarrollo
-      const updatedSolicitudes = solicitudes.map(s =>
-        s.id === solicitudId 
-          ? { 
-              ...s, 
-              estado: 'rechazada',
-              aprobadoPor: 'Administrador',
-              fechaDecision: new Date(),
-              observaciones: observaciones
-            }
-          : s
-      );
-      setSolicitudes(updatedSolicitudes);
-      calcularEstadisticas(updatedSolicitudes);
-      setSuccess('Solicitud rechazada (modo desarrollo)');
-      setTimeout(() => setSuccess(''), 3000);
     }
   };
 
@@ -651,24 +963,34 @@ const Solicitudes = () => {
     try {
       setError('');
       let response;
+      let solicitudId;
 
       if (editingSolicitud) {
         response = await api.put(`/solicitudes/${editingSolicitud.id}`, solicitudData);
+        solicitudId = editingSolicitud.id;
       } else {
         response = await api.post('/solicitudes', solicitudData);
+        if (response.success && response.data?.id) {
+          solicitudId = response.data.id;
+        }
       }
 
       if (response.success) {
         const message = editingSolicitud ? 'Solicitud actualizada exitosamente' : 'Solicitud creada exitosamente';
         setSuccess(message);
         
-        // Mostrar enlaces de notificación para nuevas solicitudes
-        if (!editingSolicitud && response.notificaciones) {
-          setTimeout(() => {
-            if (window.confirm('¿Desea abrir WhatsApp para notificar al administrador?')) {
-              window.open(response.notificaciones.whatsapp, '_blank');
-            }
-          }, 1000);
+        if (!editingSolicitud && solicitudId) {
+          const resultado = await crearFormularioYDocumento(solicitudData, solicitudId, user);
+          
+          if (resultado) {
+            setSuccess(`${message} - Se ha creado el formulario y documento automáticamente`);
+            setSolicitudReciente({
+              ...solicitudData,
+              id: solicitudId,
+              documentoId: resultado.documentoId
+            });
+            setShowNotificacionModal(true);
+          }
         }
 
         setTimeout(() => setSuccess(''), 5000);
@@ -679,33 +1001,45 @@ const Solicitudes = () => {
     } catch (error) {
       console.error('Error saving application:', error);
       setError(error.message);
-      
-      // En caso de error, actualizar localmente para desarrollo
-      if (editingSolicitud) {
-        const updatedSolicitudes = solicitudes.map(s =>
-          s.id === editingSolicitud.id 
-            ? { ...solicitudData, id: editingSolicitud.id, fechaSolicitud: editingSolicitud.fechaSolicitud }
-            : s
-        );
-        setSolicitudes(updatedSolicitudes);
-        calcularEstadisticas(updatedSolicitudes);
-      } else {
-        const newSolicitud = {
-          ...solicitudData,
-          id: Date.now().toString(),
-          fechaSolicitud: new Date(),
-          estado: 'pendiente',
-          scoreAnalisis: Math.floor(Math.random() * 30) + 70
-        };
-        const updatedSolicitudes = [newSolicitud, ...solicitudes];
-        setSolicitudes(updatedSolicitudes);
-        calcularEstadisticas(updatedSolicitudes);
-      }
-      
-      setSuccess(editingSolicitud ? 'Solicitud actualizada (modo desarrollo)' : 'Solicitud creada (modo desarrollo)');
-      setTimeout(() => setSuccess(''), 3000);
-      handleBackToList();
     }
+  };
+
+  const notificarClienteWhatsApp = () => {
+    if (!solicitudReciente) return;
+    
+    const mensaje = `📋 SOLICITUD DE PRÉSTAMO REGISTRADA - EYS Inversiones
+
+Estimado(a) ${solicitudReciente.clienteNombre},
+
+Hemos recibido su solicitud de préstamo. Por favor, revise y firme el contrato en el siguiente enlace:
+
+https://eysinversiones.com/documentos/${solicitudReciente.documentoId}
+
+Para cualquier consulta, contáctenos al 829-447-0640.
+
+¡Gracias por confiar en EYS Inversiones!`;
+
+    const whatsappLink = `https://wa.me/1${solicitudReciente.telefono?.replace(/\D/g, '')}?text=${encodeURIComponent(mensaje)}`;
+    window.open(whatsappLink, '_blank');
+  };
+
+  const notificarAdminWhatsApp = () => {
+    if (!solicitudReciente) return;
+    
+    const mensaje = `📋 NUEVA SOLICITUD DE PRÉSTAMO - EYS Inversiones
+
+👤 Cliente: ${solicitudReciente.clienteNombre}
+📞 Teléfono: ${solicitudReciente.telefono}
+💰 Monto: RD$ ${Number(solicitudReciente.montoSolicitado).toLocaleString()}
+🏢 Trabajo: ${solicitudReciente.lugarTrabajo}
+📅 Fecha: ${new Date().toLocaleDateString()}
+
+Puede revisar la solicitud en el sistema.
+
+- Sistema EYS Inversiones`;
+
+    const whatsappLink = `https://wa.me/18294470640?text=${encodeURIComponent(mensaje)}`;
+    window.open(whatsappLink, '_blank');
   };
 
   const handleFiltrosChange = (key, value) => {
@@ -722,6 +1056,68 @@ const Solicitudes = () => {
     } else {
       setFiltrosAvanzados(prev => ({ ...prev, [key]: value }));
     }
+  };
+
+  const exportarPDF = () => {
+    if (filteredSolicitudes.length === 0) return;
+
+    const doc = new jsPDF();
+    
+    doc.setFontSize(18);
+    doc.setTextColor(139, 0, 0);
+    doc.text('Reporte de Solicitudes', 105, 20, { align: 'center' });
+    
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Fecha: ${new Date().toLocaleString()}`, 20, 30);
+    doc.text(`Total: ${filteredSolicitudes.length} solicitudes`, 20, 37);
+    
+    const tableData = filteredSolicitudes.map(s => [
+      s.clienteNombre || 'N/A',
+      s.cedula || 'N/A',
+      s.telefono || 'N/A',
+      `RD$ ${Number(s.montoSolicitado).toLocaleString()}`,
+      s.frecuencia || 'N/A',
+      s.estado || 'N/A',
+      `${Number(s.scoreAnalisis) || 50}/100`
+    ]);
+
+    doc.autoTable({
+      head: [['Cliente', 'Cédula', 'Teléfono', 'Monto', 'Frecuencia', 'Estado', 'Score']],
+      body: tableData,
+      startY: 45,
+      theme: 'striped',
+      headStyles: { fillColor: [139, 0, 0] },
+      alternateRowStyles: { fillColor: [245, 245, 245] }
+    });
+
+    doc.save(`solicitudes_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  const exportarExcel = () => {
+    if (filteredSolicitudes.length === 0) return;
+
+    const data = filteredSolicitudes.map(s => ({
+      'Cliente': s.clienteNombre || 'N/A',
+      'Cédula': s.cedula || 'N/A',
+      'Teléfono': s.telefono || 'N/A',
+      'Email': s.email || 'N/A',
+      'Monto Solicitado': Number(s.montoSolicitado) || 0,
+      'Frecuencia': s.frecuencia || 'N/A',
+      'Plazo (Meses)': s.plazoMeses === 0 ? 'Sin plazo' : s.plazoMeses,
+      'Estado': s.estado || 'N/A',
+      'Score': Number(s.scoreAnalisis) || 50,
+      'Empleado': s.empleadoNombre || 'N/A',
+      'Fecha Solicitud': safeFirebaseTimestamp(s.fechaSolicitud),
+      'Lugar Trabajo': s.lugarTrabajo || 'N/A',
+      'Sueldo': Number(s.sueldoCliente) || 0,
+      'Fecha Ingreso': s.fechaIngreso ? new Date(s.fechaIngreso).toLocaleDateString() : ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Solicitudes');
+    XLSX.writeFile(wb, `solicitudes_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const getEstadoBadge = (solicitud) => {
@@ -748,6 +1144,13 @@ const Solicitudes = () => {
           : 'bg-red-100 text-red-800 border-red-200',
         icon: XCircleIcon, 
         text: 'Rechazada' 
+      },
+      aprobado_cliente: {
+        color: theme === 'dark'
+          ? 'bg-blue-900/30 text-blue-400 border-blue-700'
+          : 'bg-blue-100 text-blue-800 border-blue-200',
+        icon: ShieldCheckIcon,
+        text: 'Aprobado por Cliente'
       }
     };
 
@@ -782,39 +1185,6 @@ const Solicitudes = () => {
     return { texto: 'NO RECOMENDADA', color: theme === 'dark' ? 'text-red-400 bg-red-900/30' : 'text-red-700 bg-red-100' };
   };
 
-  const exportarSolicitudes = () => {
-    if (filteredSolicitudes.length === 0) return;
-
-    const data = filteredSolicitudes.map(s => ({
-      'Cliente': s?.clienteNombre || 'N/A',
-      'Teléfono': s?.telefono || 'N/A',
-      'Cédula': s?.cedula || 'N/A',
-      'Monto Solicitado': Number(s?.montoSolicitado) || 0,
-      'Frecuencia': s?.frecuencia || 'N/A',
-      'Estado': s?.estado || 'N/A',
-      'Score': Number(s?.scoreAnalisis) || 0,
-      'Empleado': s?.empleadoNombre || 'N/A',
-      'Fecha Solicitud': safeFirebaseTimestamp(s?.fechaSolicitud)
-    }));
-
-    const csv = convertToCSV(data);
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `solicitudes-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
-
-  const convertToCSV = (data) => {
-    if (!data || data.length === 0) return '';
-    const headers = Object.keys(data[0]).join(',');
-    const rows = data.map(row => Object.values(row).join(','));
-    return [headers, ...rows].join('\n');
-  };
-
-  // Render different views
   if (viewMode === 'form') {
     return (
       <SolicitudForm
@@ -846,7 +1216,6 @@ const Solicitudes = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header Mejorado */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -905,16 +1274,45 @@ const Solicitudes = () => {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={exportarSolicitudes}
+                onClick={exportarPDF}
                 disabled={filteredSolicitudes.length === 0}
                 className={`p-3 rounded-lg transition-all ${
                   theme === 'dark'
                     ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 } disabled:opacity-50`}
-                title="Exportar"
+                title="Exportar PDF"
               >
-                <DocumentChartBarIcon className="h-5 w-5" />
+                <DocumentTextIcon className="h-5 w-5" />
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={exportarExcel}
+                disabled={filteredSolicitudes.length === 0}
+                className={`p-3 rounded-lg transition-all ${
+                  theme === 'dark'
+                    ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                } disabled:opacity-50`}
+                title="Exportar Excel"
+              >
+                <TableCellsIcon className="h-5 w-5" />
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={fetchSolicitudes}
+                className={`p-3 rounded-lg transition-all ${
+                  theme === 'dark'
+                    ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+                title="Refrescar datos"
+              >
+                <ArrowPathIcon className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
               </motion.button>
 
               <motion.button
@@ -931,7 +1329,6 @@ const Solicitudes = () => {
         </div>
       </motion.div>
 
-      {/* Mensajes */}
       <AnimatePresence>
         {error && (
           <motion.div
@@ -968,7 +1365,6 @@ const Solicitudes = () => {
         )}
       </AnimatePresence>
 
-      {/* Filtros Avanzados */}
       <AnimatePresence>
         {showFilters && (
           <AdvancedFilters
@@ -980,7 +1376,6 @@ const Solicitudes = () => {
         )}
       </AnimatePresence>
 
-      {/* Search Bar */}
       <AnimatePresence>
         {showSearch && (
           <motion.div
@@ -1021,7 +1416,6 @@ const Solicitudes = () => {
         )}
       </AnimatePresence>
 
-      {/* Stats Summary MEJORADO */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           icon={DocumentTextIcon}
@@ -1048,15 +1442,14 @@ const Solicitudes = () => {
         />
 
         <StatsCard
-          icon={ArrowTrendingUpIcon}
+          icon={UserGroupIcon}
           label="Estado Portfolio"
-          value={`${stats.aprobadas} / ${stats.total}`}
-          subValue={`${stats.rechazadas} rechazadas`}
+          value={`${stats.aprobadas} / ${stats.aprobadasCliente} / ${stats.pendientes} / ${stats.rechazadas}`}
+          subValue={`Aprobadas / Cliente / Pendientes / Rechazadas`}
           gradient="orange"
         />
       </div>
 
-      {/* Filtros Rápidos */}
       <GlassCard>
         <div className="p-4">
           <div className="flex flex-wrap gap-2">
@@ -1083,6 +1476,18 @@ const Solicitudes = () => {
               }`}
             >
               Pendientes
+            </button>
+            <button
+              onClick={() => setFiltroEstado('aprobado_cliente')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                filtroEstado === 'aprobado_cliente'
+                  ? 'bg-blue-600 text-white'
+                  : theme === 'dark'
+                  ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Aprobadas por Cliente
             </button>
             <button
               onClick={() => setFiltroEstado('aprobada')}
@@ -1178,216 +1583,10 @@ const Solicitudes = () => {
         </div>
       </GlassCard>
 
-      {/* Lista de Solicitudes MEJORADA */}
-      <GlassCard>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className={theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}>
-              <tr>
-                {['Cliente / Información', 'Solicitud', 'Análisis de Riesgo', 'Empleado / Fecha', 'Estado', 'Acciones'].map((header, index) => (
-                  <th
-                    key={index}
-                    className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                  >
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className={`divide-y divide-gray-200 dark:divide-gray-700 ${
-              theme === 'dark' ? 'bg-gray-800/50' : 'bg-white'
-            }`}>
-              <AnimatePresence>
-                {filteredSolicitudes.map((solicitud) => {
-                  if (!solicitud) return null;
-                  
-                  const recomendacion = getRecomendacion(solicitud);
-                  const ratioSueldo = solicitud.sueldoCliente ? (Number(solicitud.montoSolicitado) / Number(solicitud.sueldoCliente)) : 0;
-                  const isHovered = hoveredRow === solicitud.id;
-                  
-                  return (
-                    <motion.tr
-                      key={solicitud.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      onHoverStart={() => setHoveredRow(solicitud.id)}
-                      onHoverEnd={() => setHoveredRow(null)}
-                      className={`cursor-pointer transition-all duration-300 ${
-                        isHovered
-                          ? theme === 'dark'
-                            ? 'bg-gray-700/50'
-                            : 'bg-gray-100'
-                          : ''
-                      }`}
-                      onClick={() => handleViewSolicitud(solicitud)}
-                    >
-                      <td className="px-6 py-4">
-                        <div className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                          {solicitud.clienteNombre || 'N/A'}
-                        </div>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <span className={`text-xs flex items-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                            <PhoneIcon className="h-3 w-3 mr-1" />
-                            {solicitud.telefono || 'N/A'}
-                          </span>
-                          <span className={`text-xs flex items-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                            <EnvelopeIcon className="h-3 w-3 mr-1" />
-                            {solicitud.email || 'Sin email'}
-                          </span>
-                        </div>
-                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
-                          {solicitud.cedula || 'Sin cédula'}
-                        </div>
-                        {solicitud.lugarTrabajo && (
-                          <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-2 flex items-center`}>
-                            <BuildingOfficeIcon className="h-3 w-3 mr-1" />
-                            {solicitud.lugarTrabajo}
-                            {solicitud.puestoCliente && ` (${solicitud.puestoCliente})`}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                          RD$ {safeToLocaleString(solicitud.montoSolicitado)}
-                        </div>
-                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'} mt-1`}>
-                          {solicitud.plazoMeses === 0 ? 'Sin plazo' : `${solicitud.plazoMeses} meses`} • {solicitud.frecuencia || 'N/A'}
-                        </div>
-                        {solicitud.sueldoCliente && (
-                          <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'} mt-1`}>
-                            Sueldo: RD$ {safeToLocaleString(solicitud.sueldoCliente)} 
-                            {ratioSueldo > 0 && ` (${ratioSueldo.toFixed(1)}x)`}
-                          </div>
-                        )}
-                        {solicitud.bancoCliente && (
-                          <div className={`text-xs ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'} mt-2 flex items-center`}>
-                            🏦 {solicitud.bancoCliente}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Score:
-                          </span>
-                          <div className={`px-2 py-1 rounded-full text-xs font-bold ${getScoreColor(solicitud.scoreAnalisis)}`}>
-                            {Number(solicitud.scoreAnalisis) || 50}
-                          </div>
-                        </div>
-                        <div className={`text-xs px-2 py-1 rounded ${recomendacion.color}`}>
-                          {recomendacion.texto}
-                        </div>
-                        {solicitud.documentosUrl && solicitud.documentosUrl.length > 0 && (
-                          <div className={`text-xs ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'} mt-2 flex items-center`}>
-                            <DocumentTextIcon className="h-3 w-3 mr-1" />
-                            {solicitud.documentosUrl.length} documento(s)
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
-                          {solicitud.empleadoNombre || 'N/A'}
-                        </div>
-                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'} mt-1 flex items-center`}>
-                          <CalendarIcon className="h-3 w-3 mr-1" />
-                          {safeFirebaseTimestamp(solicitud.fechaSolicitud)}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        {getEstadoBadge(solicitud)}
-                        {solicitud.fechaDecision && (
-                          <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'} mt-2`}>
-                            {safeFirebaseTimestamp(solicitud.fechaDecision)}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm font-medium">
-                        <div className="flex justify-end space-x-1">
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleViewSolicitud(solicitud);
-                            }}
-                            className={`p-2 rounded-lg transition-colors ${
-                              theme === 'dark'
-                                ? 'hover:bg-gray-700 text-blue-400'
-                                : 'hover:bg-blue-50 text-blue-600'
-                            }`}
-                            title="Ver análisis completo"
-                          >
-                            <EyeIcon className="h-4 w-4" />
-                          </motion.button>
-                          
-                          {solicitud.estado === 'pendiente' && (
-                            <>
-                              <motion.button
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.9 }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAprobarSolicitud(solicitud);
-                                }}
-                                className={`p-2 rounded-lg transition-colors ${
-                                  theme === 'dark'
-                                    ? 'hover:bg-gray-700 text-green-400'
-                                    : 'hover:bg-green-50 text-green-600'
-                                }`}
-                                title="Aprobar solicitud"
-                              >
-                                <CheckCircleIcon className="h-4 w-4" />
-                              </motion.button>
-                              <motion.button
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.9 }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRechazarSolicitud(solicitud.id);
-                                }}
-                                className={`p-2 rounded-lg transition-colors ${
-                                  theme === 'dark'
-                                    ? 'hover:bg-gray-700 text-red-400'
-                                    : 'hover:bg-red-50 text-red-600'
-                                }`}
-                                title="Rechazar solicitud"
-                              >
-                                <XCircleIcon className="h-4 w-4" />
-                              </motion.button>
-                              <motion.button
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.9 }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditSolicitud(solicitud);
-                                }}
-                                className={`p-2 rounded-lg transition-colors ${
-                                  theme === 'dark'
-                                    ? 'hover:bg-gray-700 text-yellow-400'
-                                    : 'hover:bg-yellow-50 text-yellow-600'
-                                }`}
-                                title="Editar solicitud"
-                              >
-                                <PencilIcon className="h-4 w-4" />
-                              </motion.button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </motion.tr>
-                  );
-                })}
-              </AnimatePresence>
-            </tbody>
-          </table>
-
-          {filteredSolicitudes.length === 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-12"
-            >
+      {isMobile ? (
+        <div className="grid grid-cols-1 gap-4">
+          {filteredSolicitudes.length === 0 ? (
+            <div className="text-center py-12">
               <div className={`text-6xl mb-4 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-300'}`}>📋</div>
               <p className={`text-lg font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                 {searchTerm || filtroEstado !== 'todos' || filtroFrecuencia !== 'todos'
@@ -1406,124 +1605,245 @@ const Solicitudes = () => {
                   <span>Crear Primera Solicitud</span>
                 </motion.button>
               )}
-            </motion.div>
+            </div>
+          ) : (
+            filteredSolicitudes.map((solicitud) => (
+              <SolicitudCard
+                key={solicitud.id}
+                solicitud={solicitud}
+                onView={handleViewSolicitud}
+                onEdit={handleEditSolicitud}
+                onAprobar={handleAprobarSolicitud}
+                onRechazar={handleRechazarSolicitud}
+                getEstadoBadge={getEstadoBadge}
+                getScoreColor={getScoreColor}
+                getRecomendacion={getRecomendacion}
+              />
+            ))
           )}
         </div>
-      </GlassCard>
-
-      {/* Panel de Estadísticas Avanzadas */}
-      {estadisticasAvanzadas && (
+      ) : (
         <GlassCard>
-          <div className="p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="p-2 bg-gradient-to-br from-purple-600 to-purple-800 rounded-lg shadow-lg">
-                <ChartBarIcon className="h-5 w-5 text-white" />
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className={theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}>
+                <tr>
+                  {['Cliente / Información', 'Solicitud', 'Análisis de Riesgo', 'Empleado / Fecha', 'Estado', 'Acciones'].map((header, index) => (
+                    <th
+                      key={index}
+                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                    >
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className={`divide-y divide-gray-200 dark:divide-gray-700 ${
+                theme === 'dark' ? 'bg-gray-800/50' : 'bg-white'
+              }`}>
+                <AnimatePresence>
+                  {filteredSolicitudes.map((solicitud) => {
+                    if (!solicitud) return null;
+                    
+                    const recomendacion = getRecomendacion(solicitud);
+                    const ratioSueldo = solicitud.sueldoCliente ? (Number(solicitud.montoSolicitado) / Number(solicitud.sueldoCliente)) : 0;
+                    
+                    return (
+                      <motion.tr
+                        key={solicitud.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className={`cursor-pointer transition-all duration-300 hover:bg-gray-100 dark:hover:bg-gray-700/50`}
+                        onClick={() => handleViewSolicitud(solicitud)}
+                      >
+                        <td className="px-6 py-4">
+                          <div className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                            {solicitud.clienteNombre || 'N/A'}
+                          </div>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <span className={`text-xs flex items-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                              <PhoneIcon className="h-3 w-3 mr-1" />
+                              {solicitud.telefono || 'N/A'}
+                            </span>
+                            <span className={`text-xs flex items-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                              <IdentificationIcon className="h-3 w-3 mr-1" />
+                              {solicitud.cedula || 'Sin cédula'}
+                            </span>
+                          </div>
+                          <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                            {solicitud.email || 'Sin email'}
+                          </div>
+                          {solicitud.lugarTrabajo && (
+                            <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-2 flex items-center`}>
+                              <BuildingOfficeIcon className="h-3 w-3 mr-1" />
+                              {solicitud.lugarTrabajo}
+                              {solicitud.puestoCliente && ` (${solicitud.puestoCliente})`}
+                            </div>
+                          )}
+                          {solicitud.fechaIngreso && (
+                            <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                              Ingreso: {new Date(solicitud.fechaIngreso).toLocaleDateString()}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                            RD$ {safeToLocaleString(solicitud.montoSolicitado)}
+                          </div>
+                          <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'} mt-1`}>
+                            {solicitud.plazoMeses === 0 ? 'Sin plazo' : `${solicitud.plazoMeses} meses`} • {solicitud.frecuencia || 'N/A'}
+                          </div>
+                          {solicitud.sueldoCliente && (
+                            <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'} mt-1`}>
+                              Sueldo: RD$ {safeToLocaleString(solicitud.sueldoCliente)} 
+                              {ratioSueldo > 0 && ` (${ratioSueldo.toFixed(2)}x)`}
+                            </div>
+                          )}
+                          {solicitud.bancoCliente && (
+                            <div className={`text-xs ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'} mt-2 flex items-center`}>
+                              🏦 {solicitud.bancoCliente}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <span className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                              Score:
+                            </span>
+                            <div className={`px-2 py-1 rounded-full text-xs font-bold ${getScoreColor(solicitud.scoreAnalisis)}`}>
+                              {Number(solicitud.scoreAnalisis) || 50}/100
+                            </div>
+                          </div>
+                          <div className={`text-xs px-2 py-1 rounded ${recomendacion.color}`}>
+                            {recomendacion.texto}
+                          </div>
+                          {solicitud.factoresRiesgo && (
+                            <div className="mt-2">
+                              <div className="text-xs text-gray-500 mb-1">Factores:</div>
+                              {solicitud.factoresRiesgo.slice(0, 2).map((factor, idx) => (
+                                <div key={idx} className={`text-xs ${factor.puntaje >= 10 ? 'text-green-600' : 'text-yellow-600'} flex items-center`}>
+                                  • {factor.nombre}: {factor.puntaje} pts
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
+                            {solicitud.empleadoNombre || 'N/A'}
+                          </div>
+                          <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'} mt-1 flex items-center`}>
+                            <CalendarIcon className="h-3 w-3 mr-1" />
+                            {safeFirebaseTimestamp(solicitud.fechaSolicitud)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          {getEstadoBadge(solicitud)}
+                          {solicitud.fechaDecision && (
+                            <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'} mt-2`}>
+                              {safeFirebaseTimestamp(solicitud.fechaDecision)}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-right text-sm font-medium">
+                          <div className="flex justify-end space-x-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewSolicitud(solicitud);
+                              }}
+                              className={`p-2 rounded-lg transition-colors ${
+                                theme === 'dark'
+                                  ? 'hover:bg-gray-700 text-blue-400'
+                                  : 'hover:bg-blue-50 text-blue-600'
+                              }`}
+                              title="Ver análisis completo"
+                            >
+                              <EyeIcon className="h-4 w-4" />
+                            </button>
+                            
+                            {solicitud.estado === 'pendiente' && (
+                              <>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAprobarSolicitud(solicitud);
+                                  }}
+                                  className={`p-2 rounded-lg transition-colors ${
+                                    theme === 'dark'
+                                      ? 'hover:bg-gray-700 text-green-400'
+                                      : 'hover:bg-green-50 text-green-600'
+                                  }`}
+                                  title="Aprobar solicitud"
+                                >
+                                  <CheckCircleIcon className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRechazarSolicitud(solicitud.id);
+                                  }}
+                                  className={`p-2 rounded-lg transition-colors ${
+                                    theme === 'dark'
+                                      ? 'hover:bg-gray-700 text-red-400'
+                                      : 'hover:bg-red-50 text-red-600'
+                                  }`}
+                                  title="Rechazar solicitud"
+                                >
+                                  <XCircleIcon className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditSolicitud(solicitud);
+                                  }}
+                                  className={`p-2 rounded-lg transition-colors ${
+                                    theme === 'dark'
+                                      ? 'hover:bg-gray-700 text-yellow-400'
+                                      : 'hover:bg-yellow-50 text-yellow-600'
+                                  }`}
+                                  title="Editar solicitud"
+                                >
+                                  <PencilIcon className="h-4 w-4" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+                </AnimatePresence>
+              </tbody>
+            </table>
+
+            {filteredSolicitudes.length === 0 && (
+              <div className="text-center py-12">
+                <div className={`text-6xl mb-4 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-300'}`}>📋</div>
+                <p className={`text-lg font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {searchTerm || filtroEstado !== 'todos' || filtroFrecuencia !== 'todos'
+                    ? 'No se encontraron solicitudes' 
+                    : 'No hay solicitudes registradas'
+                  }
+                </p>
+                {!searchTerm && filtroEstado === 'todos' && filtroFrecuencia === 'todos' && (
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleCreateSolicitud}
+                    className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all inline-flex items-center space-x-2"
+                  >
+                    <PlusIcon className="h-5 w-5" />
+                    <span>Crear Primera Solicitud</span>
+                  </motion.button>
+                )}
               </div>
-              <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                Estadísticas Avanzadas
-              </h3>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard title="Distribución por Estado">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>Aprobadas:</span>
-                    <span className={`font-semibold ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>
-                      {estadisticasAvanzadas.porEstado?.aprobadas || 0}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>Pendientes:</span>
-                    <span className={`font-semibold ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}`}>
-                      {estadisticasAvanzadas.porEstado?.pendientes || 0}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>Rechazadas:</span>
-                    <span className={`font-semibold ${theme === 'dark' ? 'text-red-400' : 'text-red-600'}`}>
-                      {estadisticasAvanzadas.porEstado?.rechazadas || 0}
-                    </span>
-                  </div>
-                </div>
-              </StatCard>
-              
-              <StatCard title="Análisis de Montos">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>Total Solicitado:</span>
-                    <span className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      RD$ {safeToLocaleString(estadisticasAvanzadas.montoTotalSolicitado)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>Total Aprobado:</span>
-                    <span className={`font-semibold ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>
-                      RD$ {safeToLocaleString(estadisticasAvanzadas.montoTotalAprobado)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>Score Promedio:</span>
-                    <span className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      {Number(estadisticasAvanzadas.scorePromedio || 0).toFixed(1)}/100
-                    </span>
-                  </div>
-                </div>
-              </StatCard>
-              
-              <StatCard title="Preferencia de Frecuencia">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>Quincenal:</span>
-                    <span className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      {estadisticasAvanzadas.porFrecuencia?.quincenal || 0}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>Mensual:</span>
-                    <span className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      {estadisticasAvanzadas.porFrecuencia?.mensual || 0}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>Semanal:</span>
-                    <span className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      {estadisticasAvanzadas.porFrecuencia?.semanal || 0}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>Diario:</span>
-                    <span className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      {estadisticasAvanzadas.porFrecuencia?.diario || 0}
-                    </span>
-                  </div>
-                </div>
-              </StatCard>
-              
-              <StatCard title="Resumen General">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>Total:</span>
-                    <span className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      {estadisticasAvanzadas.total || 0}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}>Tasa Aprobación:</span>
-                    <span className={`font-semibold ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>
-                      {estadisticasAvanzadas.total > 0 
-                        ? ((estadisticasAvanzadas.porEstado?.aprobadas || 0) / estadisticasAvanzadas.total * 100).toFixed(1) 
-                        : '0'}%
-                    </span>
-                  </div>
-                </div>
-              </StatCard>
-            </div>
+            )}
           </div>
         </GlassCard>
       )}
 
-      {/* Modal para aprobar solicitud */}
       <AnimatePresence>
         {solicitudParaAprobar && (
           <AprobarSolicitudModal
@@ -1534,6 +1854,14 @@ const Solicitudes = () => {
           />
         )}
       </AnimatePresence>
+
+      <NotificacionModal
+        isOpen={showNotificacionModal}
+        onClose={() => setShowNotificacionModal(false)}
+        solicitud={solicitudReciente}
+        onNotificarCliente={notificarClienteWhatsApp}
+        onNotificarAdmin={notificarAdminWhatsApp}
+      />
     </div>
   );
 };

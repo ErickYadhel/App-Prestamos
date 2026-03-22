@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   DocumentTextIcon,
   FolderIcon,
@@ -24,11 +25,18 @@ import {
   FolderOpenIcon,
   DocumentIcon,
   TableCellsIcon,
-  PresentationChartBarIcon
+  PresentationChartBarIcon,
+  SparklesIcon,
+  RocketLaunchIcon,
+  LinkIcon,
+  ClockIcon,
+  UserIcon,
+  EnvelopeIcon
 } from '@heroicons/react/24/outline';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy, where, getDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
-import { useAuth } from '../../context/AuthContext';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 
 // ============================================
 // MODAL PRINCIPAL PARA DOCUMENTOS
@@ -104,7 +112,9 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
     tamano: '',
     formato: '',
     etiquetas: [],
-    estado: 'activo',
+    estado: 'pendiente',
+    solicitudId: '',
+    formularioId: '',
     fechaCreacion: new Date().toISOString(),
     ...documento
   });
@@ -112,12 +122,33 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
   const [errors, setErrors] = useState({});
   const [guardando, setGuardando] = useState(false);
   const [etiquetaInput, setEtiquetaInput] = useState('');
+  const [solicitudes, setSolicitudes] = useState([]);
+  const [cargandoSolicitudes, setCargandoSolicitudes] = useState(false);
 
   useEffect(() => {
     if (documento) {
       setFormData(documento);
     }
+    cargarSolicitudes();
   }, [documento]);
+
+  const cargarSolicitudes = async () => {
+    try {
+      setCargandoSolicitudes(true);
+      const solicitudesRef = collection(db, 'solicitudes');
+      const q = query(solicitudesRef, where('estado', 'in', ['pendiente', 'aprobado_cliente', 'aprobada']));
+      const querySnapshot = await getDocs(q);
+      const solicitudesList = [];
+      querySnapshot.forEach((doc) => {
+        solicitudesList.push({ id: doc.id, ...doc.data() });
+      });
+      setSolicitudes(solicitudesList);
+    } catch (error) {
+      console.error('Error cargando solicitudes:', error);
+    } finally {
+      setCargandoSolicitudes(false);
+    }
+  };
 
   const validateForm = () => {
     const newErrors = {};
@@ -141,7 +172,18 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
 
     setGuardando(true);
     try {
-      await onSave(formData);
+      const dataToSave = {
+        ...formData,
+        fechaActualizacion: new Date().toISOString(),
+        actualizadoPor: user?.email
+      };
+      
+      if (!formData.id) {
+        dataToSave.fechaCreacion = new Date().toISOString();
+        dataToSave.creadoPor = user?.email;
+      }
+      
+      await onSave(dataToSave);
       onClose();
     } catch (error) {
       console.error('Error guardando documento:', error);
@@ -264,6 +306,26 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
                         placeholder="Nombre del cliente"
                       />
                       {errors.cliente && <p className="text-red-500 text-xs mt-1">{errors.cliente}</p>}
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Asociado a Solicitud (opcional)
+                      </label>
+                      <select
+                        value={formData.solicitudId}
+                        onChange={(e) => setFormData({ ...formData, solicitudId: e.target.value })}
+                        className={`w-full px-3 py-2 rounded-lg border ${
+                          theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300'
+                        } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all`}
+                      >
+                        <option value="">Ninguna</option>
+                        {solicitudes.map(sol => (
+                          <option key={sol.id} value={sol.id}>
+                            {sol.clienteNombre} - RD$ {sol.montoSolicitado?.toLocaleString()}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div className="md:col-span-2">
@@ -401,9 +463,10 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
                         theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300'
                       } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all`}
                     >
+                      <option value="pendiente">Pendiente de firma</option>
+                      <option value="aprobado_cliente">Aprobado por Cliente</option>
                       <option value="activo">Activo</option>
                       <option value="archivado">Archivado</option>
-                      <option value="eliminado">Eliminado</option>
                     </select>
                   </div>
                 </div>
@@ -445,8 +508,11 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
 // ============================================
 // MODAL PARA VER DETALLE DE DOCUMENTO
 // ============================================
-const DetalleDocumentoModal = ({ isOpen, onClose, documento }) => {
+const DetalleDocumentoModal = ({ isOpen, onClose, documento, onAprobarCliente }) => {
   const { theme } = useTheme();
+  const { user } = useAuth();
+  const [evidenciaFirma, setEvidenciaFirma] = useState(null);
+  const [mostrarFirma, setMostrarFirma] = useState(false);
 
   if (!isOpen) return null;
 
@@ -470,13 +536,66 @@ const DetalleDocumentoModal = ({ isOpen, onClose, documento }) => {
   const Icono = getIconoPorFormato(documento?.formato);
 
   const formatearFecha = (fecha) => {
-    return new Date(fecha).toLocaleDateString('es-DO', {
+    if (!fecha) return 'No disponible';
+    const date = new Date(fecha);
+    return date.toLocaleDateString('es-DO', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const handleAprobarCliente = async () => {
+    if (!evidenciaFirma) {
+      alert('Por favor, suba la evidencia de la firma del cliente');
+      return;
+    }
+
+    try {
+      // Actualizar documento
+      const documentoRef = doc(db, 'documentos', documento.id);
+      await updateDoc(documentoRef, {
+        estado: 'aprobado_cliente',
+        fechaAprobacionCliente: new Date().toISOString(),
+        evidenciaFirma: evidenciaFirma,
+        aprobadoPor: user?.email
+      });
+
+      // Actualizar solicitud asociada si existe
+      if (documento.solicitudId) {
+        const solicitudRef = doc(db, 'solicitudes', documento.solicitudId);
+        await updateDoc(solicitudRef, {
+          estado: 'aprobado_cliente',
+          fechaAprobacionCliente: new Date().toISOString(),
+          evidenciaFirma: evidenciaFirma
+        });
+      }
+
+      // Enviar WhatsApp al administrador
+      const mensaje = `✅ DOCUMENTO APROBADO POR EL CLIENTE - EYS Inversiones
+
+El cliente ${documento.cliente} ha firmado y aprobado el documento:
+
+• 📄 Documento: ${documento.nombre}
+• 🆔 ID: ${documento.id}
+• 📅 Fecha: ${formatearFecha(new Date())}
+
+Puede revisar el documento en el sistema.
+
+- Sistema EYS Inversiones`;
+
+      const whatsappLink = `https://wa.me/18294470640?text=${encodeURIComponent(mensaje)}`;
+      window.open(whatsappLink, '_blank');
+      
+      alert('✅ Documento aprobado por el cliente. Se ha notificado al administrador.');
+      onAprobarCliente?.();
+      onClose();
+    } catch (error) {
+      console.error('Error aprobando documento:', error);
+      alert('Error al aprobar el documento. Intente de nuevo.');
+    }
   };
 
   return (
@@ -492,7 +611,7 @@ const DetalleDocumentoModal = ({ isOpen, onClose, documento }) => {
           initial={{ scale: 0.9, y: 20, opacity: 0 }}
           animate={{ scale: 1, y: 0, opacity: 1 }}
           exit={{ scale: 0.9, y: 20, opacity: 0 }}
-          className="relative w-full max-w-3xl mx-4"
+          className="relative w-full max-w-4xl mx-4"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-600 via-purple-500 to-purple-600 rounded-2xl blur-xl opacity-75" />
@@ -546,6 +665,27 @@ const DetalleDocumentoModal = ({ isOpen, onClose, documento }) => {
                   </div>
                 </div>
 
+                {/* Estado */}
+                <div className={`p-4 rounded-lg ${
+                  documento?.estado === 'aprobado_cliente' 
+                    ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700'
+                    : documento?.estado === 'pendiente'
+                    ? 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700'
+                    : 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700'
+                } border`}>
+                  <div className="flex items-center">
+                    <div className={`w-3 h-3 rounded-full mr-2 ${
+                      documento?.estado === 'aprobado_cliente' ? 'bg-green-500' :
+                      documento?.estado === 'pendiente' ? 'bg-yellow-500' : 'bg-blue-500'
+                    }`} />
+                    <p className="text-sm font-medium">
+                      Estado: {documento?.estado === 'aprobado_cliente' ? 'Aprobado por Cliente' :
+                                documento?.estado === 'pendiente' ? 'Pendiente de firma' :
+                                documento?.estado === 'activo' ? 'Activo' : 'Archivado'}
+                    </p>
+                  </div>
+                </div>
+
                 {/* Información del documento */}
                 <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'} border border-purple-600/20`}>
                   <h4 className={`text-lg font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
@@ -561,6 +701,12 @@ const DetalleDocumentoModal = ({ isOpen, onClose, documento }) => {
                       <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Fecha de creación</p>
                       <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{formatearFecha(documento?.fechaCreacion)}</p>
                     </div>
+                    {documento?.solicitudId && (
+                      <div className="md:col-span-2">
+                        <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Solicitud Asociada</p>
+                        <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento.solicitudId}</p>
+                      </div>
+                    )}
                     <div className="md:col-span-2">
                       <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Descripción</p>
                       <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento?.descripcion}</p>
@@ -584,16 +730,8 @@ const DetalleDocumentoModal = ({ isOpen, onClose, documento }) => {
                       <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento?.tamano || 'No especificado'}</p>
                     </div>
                     <div>
-                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Estado</p>
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                        documento?.estado === 'activo' 
-                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                          : documento?.estado === 'archivado'
-                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                          : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
-                      }`}>
-                        {documento?.estado?.charAt(0).toUpperCase() + documento?.estado?.slice(1)}
-                      </span>
+                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Creado por</p>
+                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento?.creadoPor || 'Sistema'}</p>
                     </div>
                   </div>
 
@@ -604,9 +742,10 @@ const DetalleDocumentoModal = ({ isOpen, onClose, documento }) => {
                         href={documento.archivo}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-purple-600 hover:text-purple-700 dark:text-purple-400 break-all"
+                        className="text-purple-600 hover:text-purple-700 dark:text-purple-400 break-all flex items-center space-x-1"
                       >
-                        {documento.archivo}
+                        <LinkIcon className="h-4 w-4" />
+                        <span>{documento.archivo}</span>
                       </a>
                     </div>
                   )}
@@ -628,6 +767,76 @@ const DetalleDocumentoModal = ({ isOpen, onClose, documento }) => {
                           {etiqueta}
                         </span>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sección de firma para clientes */}
+                {documento?.estado === 'pendiente' && !mostrarFirma && (
+                  <div className={`p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800`}>
+                    <div className="flex items-start">
+                      <ShieldCheckIcon className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 mr-3 flex-shrink-0" />
+                      <div className="flex-1">
+                        <h4 className="text-sm font-medium text-blue-800 dark:text-blue-400">
+                          Este documento requiere su firma
+                        </h4>
+                        <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                          Por favor, revise el documento y confirme su aprobación subiendo la evidencia de firma.
+                        </p>
+                        <button
+                          onClick={() => setMostrarFirma(true)}
+                          className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                        >
+                          Firmar Documento
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Formulario de firma */}
+                {mostrarFirma && (
+                  <div className={`p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800`}>
+                    <h4 className={`text-sm font-medium mb-3 ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-800'}`}>
+                      Aprobación del Documento
+                    </h4>
+                    <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
+                      Por favor, suba la evidencia de la firma (PDF, imagen del contrato firmado, o captura de pantalla)
+                    </p>
+                    
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Evidencia de Firma *
+                      </label>
+                      <input
+                        type="file"
+                        onChange={(e) => setEvidenciaFirma(e.target.files[0]?.name)}
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        className={`w-full px-3 py-2 rounded-lg border ${
+                          theme === 'dark'
+                            ? 'bg-gray-800 border-gray-700 text-white'
+                            : 'bg-white border-gray-300 text-gray-900'
+                        } focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/20 outline-none transition-all`}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Formatos aceptados: PDF, JPG, PNG
+                      </p>
+                    </div>
+                    
+                    <div className="flex space-x-3">
+                      <button
+                        onClick={() => setMostrarFirma(false)}
+                        className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleAprobarCliente}
+                        disabled={!evidenciaFirma}
+                        className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+                      >
+                        Confirmar Firma
+                      </button>
                     </div>
                   </div>
                 )}
@@ -663,7 +872,7 @@ const DetalleDocumentoModal = ({ isOpen, onClose, documento }) => {
 // ============================================
 // TARJETA DE DOCUMENTO
 // ============================================
-const DocumentoCard = ({ documento, onVer, onEditar, onEliminar }) => {
+const DocumentoCard = ({ documento, onVer, onEditar, onEliminar, onFirmar }) => {
   const { theme } = useTheme();
 
   const getIconoPorCategoria = (categoria) => {
@@ -678,6 +887,7 @@ const DocumentoCard = ({ documento, onVer, onEditar, onEliminar }) => {
 
   const Icono = getIconoPorCategoria(documento.categoria);
   const formatearFecha = (fecha) => new Date(fecha).toLocaleDateString();
+  const necesitaFirma = documento.estado === 'pendiente';
 
   return (
     <motion.div
@@ -694,11 +904,14 @@ const DocumentoCard = ({ documento, onVer, onEditar, onEliminar }) => {
             <Icono className="h-5 w-5 text-white" />
           </div>
           <span className={`text-xs px-2 py-1 rounded-full ${
-            documento.estado === 'activo'
+            documento.estado === 'aprobado_cliente'
               ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-              : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+              : documento.estado === 'pendiente'
+              ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
           }`}>
-            {documento.estado}
+            {documento.estado === 'aprobado_cliente' ? 'Firmado' :
+             documento.estado === 'pendiente' ? 'Pendiente' : 'Activo'}
           </span>
         </div>
 
@@ -712,25 +925,16 @@ const DocumentoCard = ({ documento, onVer, onEditar, onEliminar }) => {
           {formatearFecha(documento.fechaCreacion)}
         </p>
 
-        {documento.etiquetas?.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-3">
-            {documento.etiquetas.slice(0, 2).map((tag, i) => (
-              <span
-                key={i}
-                className="px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded text-xs"
-              >
-                {tag}
-              </span>
-            ))}
-            {documento.etiquetas.length > 2 && (
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                +{documento.etiquetas.length - 2}
-              </span>
-            )}
-          </div>
+        {necesitaFirma && (
+          <button
+            onClick={() => onFirmar(documento)}
+            className="mt-3 w-full py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            Firmar Documento
+          </button>
         )}
 
-        <div className="flex justify-end space-x-2 mt-4">
+        <div className="flex justify-end space-x-2 mt-3">
           <button
             onClick={() => onVer(documento)}
             className="p-1 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
@@ -768,7 +972,6 @@ const Documentos = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [exito, setExito] = useState('');
-  const [modalAbierto, setModalAbierto] = useState(null);
   const [editorAbierto, setEditorAbierto] = useState(false);
   const [detalleAbierto, setDetalleAbierto] = useState(false);
   const [documentoSeleccionado, setDocumentoSeleccionado] = useState(null);
@@ -806,22 +1009,12 @@ const Documentos = () => {
   const guardarDocumento = async (formData) => {
     try {
       if (formData.id) {
-        // Actualizar
         const documentoRef = doc(db, 'documentos', formData.id);
-        await updateDoc(documentoRef, {
-          ...formData,
-          fechaActualizacion: new Date().toISOString(),
-          actualizadoPor: user?.email
-        });
+        await updateDoc(documentoRef, formData);
         setExito('Documento actualizado exitosamente');
       } else {
-        // Crear nuevo
         const documentosRef = collection(db, 'documentos');
-        await addDoc(documentosRef, {
-          ...formData,
-          fechaCreacion: new Date().toISOString(),
-          creadoPor: user?.email
-        });
+        await addDoc(documentosRef, formData);
         setExito('Documento creado exitosamente');
       }
       
@@ -847,6 +1040,12 @@ const Documentos = () => {
       console.error('Error eliminando documento:', error);
       setError('Error al eliminar el documento');
     }
+  };
+
+  // Aprobar documento por cliente
+  const handleAprobarCliente = async (documento) => {
+    setDocumentoSeleccionado(documento);
+    setDetalleAbierto(true);
   };
 
   // Filtrar documentos
@@ -875,7 +1074,7 @@ const Documentos = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center space-x-3">
           <div className="p-3 bg-gradient-to-br from-purple-600 to-purple-800 rounded-xl shadow-lg">
             <DocumentTextIcon className="h-6 w-6 text-white" />
@@ -1001,8 +1200,10 @@ const Documentos = () => {
           } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all`}
         >
           <option value="todos">Todos los estados</option>
-          <option value="activo">Activo</option>
-          <option value="archivado">Archivado</option>
+          <option value="pendiente">Pendiente de firma</option>
+          <option value="aprobado_cliente">Firmados</option>
+          <option value="activo">Activos</option>
+          <option value="archivado">Archivados</option>
         </select>
 
         <button
@@ -1027,6 +1228,16 @@ const Documentos = () => {
           <p className={`text-lg ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
             No hay documentos para mostrar
           </p>
+          <button
+            onClick={() => {
+              setDocumentoSeleccionado(null);
+              setEditorAbierto(true);
+            }}
+            className="mt-4 px-6 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg font-medium hover:shadow-lg transition-all inline-flex items-center space-x-2"
+          >
+            <PlusIcon className="h-5 w-5" />
+            <span>Crear Primer Documento</span>
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1043,6 +1254,7 @@ const Documentos = () => {
                 setEditorAbierto(true);
               }}
               onEliminar={eliminarDocumento}
+              onFirmar={handleAprobarCliente}
             />
           ))}
         </div>
@@ -1066,6 +1278,10 @@ const Documentos = () => {
           setDocumentoSeleccionado(null);
         }}
         documento={documentoSeleccionado}
+        onAprobarCliente={() => {
+          cargarDocumentos();
+          setDetalleAbierto(false);
+        }}
       />
     </div>
   );

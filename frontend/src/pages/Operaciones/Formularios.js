@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   ClipboardDocumentListIcon,
   DocumentTextIcon,
@@ -25,11 +26,12 @@ import {
   HomeIcon,
   BriefcaseIcon,
   BanknotesIcon,
-  ClockIcon
+  ClockIcon,
+  SparklesIcon,
+  RocketLaunchIcon
 } from '@heroicons/react/24/outline';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../../services/firebase';
-import { useAuth } from '../../context/AuthContext';
 
 // ============================================
 // MODAL PRINCIPAL PARA FORMULARIOS
@@ -94,6 +96,7 @@ const FormularioModal = ({ isOpen, onClose, titulo, children }) => {
 // ============================================
 const FormularioEditorModal = ({ isOpen, onClose, formulario, onSave, tipo }) => {
   const { theme } = useTheme();
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     tipo: tipo || 'solicitud',
     cliente: '',
@@ -103,21 +106,39 @@ const FormularioEditorModal = ({ isOpen, onClose, formulario, onSave, tipo }) =>
     cedula: '',
     monto: '',
     plazo: '',
-    interes: '',
-    garantia: '',
+    interes: '10',
+    garantia: 'personal',
     estado: 'pendiente',
+    solicitudId: '',
     fechaCreacion: new Date().toISOString(),
     ...formulario
   });
 
   const [errors, setErrors] = useState({});
   const [guardando, setGuardando] = useState(false);
+  const [solicitudes, setSolicitudes] = useState([]);
 
   useEffect(() => {
     if (formulario) {
       setFormData(formulario);
     }
+    cargarSolicitudes();
   }, [formulario]);
+
+  const cargarSolicitudes = async () => {
+    try {
+      const solicitudesRef = collection(db, 'solicitudes');
+      const q = query(solicitudesRef, orderBy('fechaCreacion', 'desc'));
+      const querySnapshot = await getDocs(q);
+      const solicitudesList = [];
+      querySnapshot.forEach((doc) => {
+        solicitudesList.push({ id: doc.id, ...doc.data() });
+      });
+      setSolicitudes(solicitudesList);
+    } catch (error) {
+      console.error('Error cargando solicitudes:', error);
+    }
+  };
 
   const validateForm = () => {
     const newErrors = {};
@@ -154,7 +175,21 @@ const FormularioEditorModal = ({ isOpen, onClose, formulario, onSave, tipo }) =>
 
     setGuardando(true);
     try {
-      await onSave(formData);
+      const dataToSave = {
+        ...formData,
+        monto: formData.monto ? parseFloat(formData.monto) : 0,
+        plazo: formData.plazo ? parseInt(formData.plazo) : 0,
+        interes: parseFloat(formData.interes),
+        fechaActualizacion: new Date().toISOString(),
+        actualizadoPor: user?.email
+      };
+      
+      if (!formData.id) {
+        dataToSave.fechaCreacion = new Date().toISOString();
+        dataToSave.creadoPor = user?.email;
+      }
+      
+      await onSave(dataToSave);
       onClose();
     } catch (error) {
       console.error('Error guardando formulario:', error);
@@ -288,6 +323,26 @@ const FormularioEditorModal = ({ isOpen, onClose, formulario, onSave, tipo }) =>
                         } focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all`}
                         placeholder="Calle, número, sector, ciudad"
                       />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Asociado a Solicitud (opcional)
+                      </label>
+                      <select
+                        value={formData.solicitudId}
+                        onChange={(e) => setFormData({ ...formData, solicitudId: e.target.value })}
+                        className={`w-full px-3 py-2 rounded-lg border ${
+                          theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300'
+                        } focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all`}
+                      >
+                        <option value="">Ninguna</option>
+                        {solicitudes.map(sol => (
+                          <option key={sol.id} value={sol.id}>
+                            {sol.clienteNombre} - RD$ {sol.montoSolicitado?.toLocaleString()}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -433,6 +488,7 @@ const FormularioEditorModal = ({ isOpen, onClose, formulario, onSave, tipo }) =>
 // ============================================
 const DetalleFormularioModal = ({ isOpen, onClose, formulario }) => {
   const { theme } = useTheme();
+  const { user } = useAuth();
 
   if (!isOpen) return null;
 
@@ -448,6 +504,18 @@ const DetalleFormularioModal = ({ isOpen, onClose, formulario }) => {
 
   const formatearMonto = (monto) => {
     return new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP' }).format(monto || 0);
+  };
+
+  const formatearFecha = (fecha) => {
+    if (!fecha) return 'No disponible';
+    const date = new Date(fecha);
+    return date.toLocaleDateString('es-DO', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   return (
@@ -481,7 +549,7 @@ const DetalleFormularioModal = ({ isOpen, onClose, formulario }) => {
                     {formulario?.tipo === 'solicitud' ? 'Solicitud de Préstamo' : 'Formulario de Cliente'}
                   </h3>
                   <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                    ID: {formulario?.id}
+                    ID: {formulario?.id?.slice(0, 8)}...
                   </p>
                 </div>
               </div>
@@ -505,11 +573,7 @@ const DetalleFormularioModal = ({ isOpen, onClose, formulario }) => {
                 </span>
                 <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'} flex items-center`}>
                   <CalendarIcon className="h-4 w-4 mr-1" />
-                  {new Date(formulario?.fechaCreacion).toLocaleDateString('es-DO', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
+                  {formatearFecha(formulario?.fechaCreacion)}
                 </span>
               </div>
 
@@ -541,6 +605,12 @@ const DetalleFormularioModal = ({ isOpen, onClose, formulario }) => {
                     <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Dirección</p>
                     <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{formulario?.direccion || 'No especificada'}</p>
                   </div>
+                  {formulario?.solicitudId && (
+                    <div className="md:col-span-2">
+                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Solicitud Asociada</p>
+                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{formulario.solicitudId}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -582,6 +652,31 @@ const DetalleFormularioModal = ({ isOpen, onClose, formulario }) => {
                   )}
                 </div>
               )}
+
+              {/* Información de creación */}
+              <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'} border border-blue-600/20`}>
+                <h4 className={`text-lg font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  <ClockIcon className="h-5 w-5 text-blue-600 mr-2" />
+                  Información de Creación
+                </h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Creado por</p>
+                    <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{formulario?.creadoPor || 'Sistema'}</p>
+                  </div>
+                  <div>
+                    <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Fecha de creación</p>
+                    <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{formatearFecha(formulario?.fechaCreacion)}</p>
+                  </div>
+                  {formulario?.fechaActualizacion && (
+                    <div className="md:col-span-2">
+                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Última actualización</p>
+                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{formatearFecha(formulario?.fechaActualizacion)}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className={`p-6 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} flex justify-end`}>
@@ -642,7 +737,6 @@ const Formularios = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [exito, setExito] = useState('');
-  const [modalAbierto, setModalAbierto] = useState(null);
   const [editorAbierto, setEditorAbierto] = useState(false);
   const [detalleAbierto, setDetalleAbierto] = useState(false);
   const [formularioSeleccionado, setFormularioSeleccionado] = useState(null);
@@ -709,22 +803,12 @@ const Formularios = () => {
   const guardarFormulario = async (formData) => {
     try {
       if (formData.id) {
-        // Actualizar
         const formularioRef = doc(db, 'formularios', formData.id);
-        await updateDoc(formularioRef, {
-          ...formData,
-          fechaActualizacion: new Date().toISOString(),
-          actualizadoPor: user?.email
-        });
+        await updateDoc(formularioRef, formData);
         setExito('Formulario actualizado exitosamente');
       } else {
-        // Crear nuevo
         const formulariosRef = collection(db, 'formularios');
-        await addDoc(formulariosRef, {
-          ...formData,
-          fechaCreacion: new Date().toISOString(),
-          creadoPor: user?.email
-        });
+        await addDoc(formulariosRef, formData);
         setExito('Formulario creado exitosamente');
       }
       
@@ -813,7 +897,7 @@ const Formularios = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center space-x-3">
           <div className="p-3 bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl shadow-lg">
             <ClipboardDocumentListIcon className="h-6 w-6 text-white" />
@@ -876,7 +960,7 @@ const Formularios = () => {
             label={tipo.nombre}
             value={tipo.estadisticas.total}
             color={tipo.color}
-            onClick={() => setModalAbierto(tipo.id)}
+            onClick={() => setFiltroTipo(tipo.id === 'solicitudes' ? 'solicitud' : tipo.id === 'clientes' ? 'cliente' : 'garantia')}
           />
         ))}
       </div>
@@ -964,6 +1048,16 @@ const Formularios = () => {
                     <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
                       No hay formularios para mostrar
                     </p>
+                    <button
+                      onClick={() => {
+                        setFormularioSeleccionado(null);
+                        setEditorAbierto(true);
+                      }}
+                      className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors inline-flex items-center space-x-2"
+                    >
+                      <PlusIcon className="h-4 w-4" />
+                      <span>Crear Primer Formulario</span>
+                    </button>
                   </td>
                 </tr>
               ) : (
@@ -1038,58 +1132,6 @@ const Formularios = () => {
       </div>
 
       {/* Modales */}
-      <FormularioModal
-        isOpen={modalAbierto !== null}
-        onClose={() => setModalAbierto(null)}
-        titulo={tiposFormulario.find(t => t.id === modalAbierto)?.nombre || 'Formularios'}
-      >
-        <div className="space-y-4">
-          <h4 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-            {tiposFormulario.find(t => t.id === modalAbierto)?.descripcion}
-          </h4>
-          
-          <div className="grid grid-cols-1 gap-3">
-            {formulariosFiltrados
-              .filter(f => {
-                if (modalAbierto === 'solicitudes') return f.tipo === 'solicitud';
-                if (modalAbierto === 'clientes') return f.tipo === 'cliente';
-                if (modalAbierto === 'garantias') return f.tipo === 'garantia';
-                return true;
-              })
-              .slice(0, 5)
-              .map((formulario) => (
-                <div
-                  key={formulario.id}
-                  className={`p-3 rounded-lg border ${
-                    theme === 'dark' ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'
-                  } flex justify-between items-center`}
-                >
-                  <div>
-                    <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      {formulario.cliente}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(formulario.fechaCreacion).toLocaleDateString()}
-                    </p>
-                  </div>
-                  {getEstadoBadge(formulario.estado)}
-                </div>
-              ))}
-          </div>
-
-          <button
-            onClick={() => {
-              setModalAbierto(null);
-              setEditorAbierto(true);
-            }}
-            className="w-full mt-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-medium hover:shadow-lg transition-all"
-          >
-            Nuevo {modalAbierto === 'solicitudes' ? 'Solicitud' : 
-                   modalAbierto === 'clientes' ? 'Cliente' : 'Garantía'}
-          </button>
-        </div>
-      </FormularioModal>
-
       <FormularioEditorModal
         isOpen={editorAbierto}
         onClose={() => {
@@ -1098,7 +1140,6 @@ const Formularios = () => {
         }}
         formulario={formularioSeleccionado}
         onSave={guardarFormulario}
-        tipo={formularioSeleccionado?.tipo}
       />
 
       <DetalleFormularioModal

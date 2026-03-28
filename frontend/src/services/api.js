@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://eys-backend.onrender.com/api';
+const API_BASE_URL = 'http://localhost:5001/api';
 
+// Configuración global de axios
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -11,7 +12,7 @@ const api = axios.create({
   timeoutErrorMessage: 'La solicitud está tomando demasiado tiempo. Verifica tu conexión.',
 });
 
-// Interceptor para requests - MEJORADO
+// Interceptor para requests
 api.interceptors.request.use(
   (config) => {
     // Agregar timestamp para evitar cache
@@ -22,13 +23,12 @@ api.interceptors.request.use(
       };
     }
 
-    // Agregar token de autenticación
+    // Agregar token de autenticación si existe
     const token = localStorage.getItem('authToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // Log para desarrollo (opcional)
     if (process.env.NODE_ENV === 'development') {
       console.log(`🔄 API Call: ${config.method?.toUpperCase()} ${config.url}`, config.params || config.data);
     }
@@ -41,10 +41,9 @@ api.interceptors.request.use(
   }
 );
 
-// Interceptor para responses - MEJORADO
+// Interceptor para responses
 api.interceptors.response.use(
   (response) => {
-    // Log para desarrollo (opcional)
     if (process.env.NODE_ENV === 'development') {
       console.log(`✅ API Success: ${response.config.method?.toUpperCase()} ${response.config.url}`, response.data);
     }
@@ -52,7 +51,6 @@ api.interceptors.response.use(
     return response.data;
   },
   (error) => {
-    // Log detallado del error
     console.error('❌ API Error Details:', {
       url: error.config?.url,
       method: error.config?.method,
@@ -71,16 +69,13 @@ api.interceptors.response.use(
       errorMessage = 'La solicitud tardó demasiado tiempo. Intenta nuevamente.';
       errorCode = 'TIMEOUT_ERROR';
     } else if (error.response) {
-      // El servidor respondió con un código de error
       const serverError = error.response.data;
       errorMessage = serverError?.error || serverError?.message || `Error ${error.response.status}`;
       errorCode = `HTTP_${error.response.status}`;
       
-      // Manejo específico por código de estado
       switch (error.response.status) {
         case 401:
           errorMessage = 'No autorizado. Por favor, inicia sesión nuevamente.';
-          // Opcional: redirigir al login
           localStorage.removeItem('authToken');
           window.location.href = '/login';
           break;
@@ -97,16 +92,13 @@ api.interceptors.response.use(
           break;
       }
     } else if (error.request) {
-      // La request fue hecha pero no se recibió respuesta
       errorMessage = 'No se pudo conectar con el servidor. Verifica que el backend esté corriendo en el puerto 5001.';
       errorCode = 'SERVER_UNREACHABLE';
     } else {
-      // Algo pasó al configurar la request
       errorMessage = error.message || 'Error de configuración en la solicitud.';
       errorCode = 'REQUEST_ERROR';
     }
     
-    // Crear un error más informativo
     const detailedError = new Error(errorMessage);
     detailedError.code = errorCode;
     detailedError.status = error.response?.status;
@@ -117,7 +109,7 @@ api.interceptors.response.use(
   }
 );
 
-// Funciones helper para métodos HTTP comunes
+// Funciones helper para métodos HTTP
 export const apiClient = {
   get: (url, config = {}) => api.get(url, config),
   post: (url, data = {}, config = {}) => api.post(url, data, config),
@@ -233,9 +225,4 @@ export const notificacionesService = {
   },
 };
 
-
-
 export default api;
-
-
-

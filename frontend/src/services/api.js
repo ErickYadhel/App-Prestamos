@@ -1,6 +1,16 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5001/api';
+// Detectar entorno: producción o desarrollo
+const isProduction = process.env.NODE_ENV === 'production';
+
+// URL base del backend
+// En desarrollo: localhost
+// En producción: URL de Render
+const API_BASE_URL = isProduction 
+  ? 'https://eys-backend.onrender.com/api'
+  : 'http://localhost:5001/api';
+
+console.log(`🔧 API Config: ${isProduction ? 'PRODUCCIÓN' : 'DESARROLLO'} - URL: ${API_BASE_URL}`);
 
 // Configuración global de axios
 const api = axios.create({
@@ -8,7 +18,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000,
+  timeout: 30000, // Aumentado para producción
   timeoutErrorMessage: 'La solicitud está tomando demasiado tiempo. Verifica tu conexión.',
 });
 
@@ -56,7 +66,8 @@ api.interceptors.response.use(
       method: error.config?.method,
       status: error.response?.status,
       message: error.message,
-      data: error.response?.data
+      data: error.response?.data,
+      isProduction: isProduction
     });
     
     let errorMessage = 'Error de conexión';
@@ -92,7 +103,7 @@ api.interceptors.response.use(
           break;
       }
     } else if (error.request) {
-      errorMessage = 'No se pudo conectar con el servidor. Verifica que el backend esté corriendo en el puerto 5001.';
+      errorMessage = `No se pudo conectar con el servidor. Verifica que el backend esté corriendo en: ${API_BASE_URL}`;
       errorCode = 'SERVER_UNREACHABLE';
     } else {
       errorMessage = error.message || 'Error de configuración en la solicitud.';
@@ -124,12 +135,14 @@ export const checkServerHealth = async () => {
     const response = await api.get('/health');
     return {
       status: 'connected',
-      data: response
+      data: response,
+      url: API_BASE_URL
     };
   } catch (error) {
     return {
       status: 'disconnected',
-      error: error.message
+      error: error.message,
+      url: API_BASE_URL
     };
   }
 };
@@ -142,7 +155,7 @@ export const handleApiError = (error, defaultMessage = 'Ocurrió un error inespe
     return {
       success: false,
       error: 'Error de conexión',
-      details: 'No se pudo conectar con el servidor. Verifica tu conexión y que el backend esté ejecutándose.',
+      details: `No se pudo conectar con el servidor (${API_BASE_URL}). Verifica tu conexión y que el backend esté ejecutándose.`,
       code: error.code
     };
   }

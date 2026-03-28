@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { XMarkIcon, CalculatorIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, CalculatorIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
 import api from '../../services/api';
+import { calcularDistribucionPago, getConfiguracionMora } from '../../utils/loanCalculations';
+import { formatFecha } from '../../utils/firebaseUtils';
 
 const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
   const [formData, setFormData] = useState({
@@ -16,33 +18,34 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
     interes: 0,
     capital: 0,
     capitalAnterior: 0,
-    capitalNuevo: 0
+    capitalNuevo: 0,
+    prestamoCompletado: false
   });
+
+  const configMora = getConfiguracionMora();
 
   useEffect(() => {
     if (formData.prestamoID) {
       const prestamo = prestamos.find(p => p.id === formData.prestamoID);
       setPrestamoSeleccionado(prestamo);
-      if (prestamo && formData.montoTotal) {
-        calcularDistribucion(prestamo, parseFloat(formData.montoTotal));
-      }
     }
-  }, [formData.prestamoID, formData.montoTotal, prestamos]);
+  }, [formData.prestamoID, prestamos]);
 
-  const calcularDistribucion = (prestamo, montoTotal) => {
-    const interesCalculado = (prestamo.capitalRestante * prestamo.interesPercent) / 100;
-    const interes = Math.min(interesCalculado, montoTotal);
-    const capital = montoTotal - interes;
-    const capitalAnterior = prestamo.capitalRestante;
-    const capitalNuevo = Math.max(0, capitalAnterior - capital);
-
-    setCalculo({
-      interes,
-      capital,
-      capitalAnterior,
-      capitalNuevo
-    });
-  };
+  // Calcular distribución para vista previa
+  useEffect(() => {
+    if (prestamoSeleccionado && formData.montoTotal) {
+      const monto = parseFloat(formData.montoTotal) || 0;
+      const distribucion = calcularDistribucionPago(prestamoSeleccionado, monto);
+      
+      setCalculo({
+        interes: distribucion.interes,
+        capital: distribucion.capital,
+        capitalAnterior: prestamoSeleccionado.capitalRestante,
+        capitalNuevo: distribucion.nuevoCapital,
+        prestamoCompletado: distribucion.prestamoCompletado
+      });
+    }
+  }, [prestamoSeleccionado, formData.montoTotal]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -79,9 +82,14 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
     setError('');
 
     try {
+      // IMPORTANTE: NO enviamos fechas calculadas
+      // El backend se encarga de calcular la nueva fecha de próximo pago
       const pagoData = {
-        ...formData,
-        montoTotal: parseFloat(formData.montoTotal)
+        prestamoID: formData.prestamoID,
+        montoTotal: parseFloat(formData.montoTotal),
+        nota: formData.nota,
+        tipoPago: formData.tipoPago,
+        modoCalculo: 'automatico'
       };
 
       const response = await api.post('/pagos', pagoData);
@@ -98,6 +106,10 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
       setLoading(false);
     }
   };
+
+  const interesSugerido = prestamoSeleccionado 
+    ? ((prestamoSeleccionado.capitalRestante * prestamoSeleccionado.interesPercent) / 100).toLocaleString()
+    : '0';
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -159,11 +171,15 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
                 </div>
                 <div>
                   <span className="text-blue-600">Interés a Pagar:</span>
-                  <p className="font-semibold">RD$ {((prestamoSeleccionado.capitalRestante * prestamoSeleccionado.interesPercent) / 100).toLocaleString()}</p>
+                  <p className="font-semibold">RD$ {interesSugerido}</p>
                 </div>
                 <div>
-                  <span className="text-blue-600">Frecuencia:</span>
-                  <p className="font-semibold capitalize">{prestamoSeleccionado.frecuencia}</p>
+                  <span className="text-blue-600">Próximo Pago:</span>
+                  <p className="font-semibold">
+                    {prestamoSeleccionado.fechaProximoPago ? 
+                      formatFecha(prestamoSeleccionado.fechaProximoPago) : 
+                      'Por definir'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -186,6 +202,12 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
                 min="0"
                 required
               />
+              <div className="flex items-center space-x-1 mt-1">
+                <InformationCircleIcon className="h-3 w-3 text-gray-400" />
+                <p className="text-xs text-gray-500">
+                  Monto sugerido: RD$ {interesSugerido}
+                </p>
+              </div>
             </div>
 
             <div>
@@ -233,7 +255,7 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
                   <p className="font-semibold">RD$ {calculo.capitalNuevo.toLocaleString()}</p>
                 </div>
               </div>
-              {calculo.capitalNuevo === 0 && (
+              {calculo.prestamoCompletado && (
                 <div className="mt-2 p-2 bg-yellow-100 border border-yellow-200 rounded">
                   <p className="text-xs text-yellow-800">
                     ⚠️ Este pago completará el préstamo
@@ -257,6 +279,16 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
               placeholder="Observaciones sobre el pago..."
             />
           </div>
+
+          {/* Info adicional */}
+          {configMora.enabled && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-xs text-yellow-700">
+                ⚠️ La mora está activada ({configMora.porcentaje}% con {configMora.diasGracia} días de gracia).
+                Los pagos atrasados generarán mora automática.
+              </p>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">

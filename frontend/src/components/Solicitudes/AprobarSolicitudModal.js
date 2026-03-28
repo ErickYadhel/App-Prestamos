@@ -1,4 +1,4 @@
-import React, { useState } from 'react';  // ← Solo una vez
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   XMarkIcon,
@@ -16,7 +16,7 @@ import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { db } from '../../services/firebase';
-import { doc, updateDoc, collection, addDoc } from 'firebase/firestore';
+import { doc, updateDoc, getDoc } from 'firebase/firestore';
 
 const AprobarSolicitudModal = ({ solicitud, onClose, onAprobado, onError }) => {
   const { user } = useAuth();
@@ -24,8 +24,7 @@ const AprobarSolicitudModal = ({ solicitud, onClose, onAprobado, onError }) => {
   const [formData, setFormData] = useState({
     montoAprobado: solicitud.montoSolicitado,
     interesPercent: 10,
-    frecuencia: solicitud.frecuencia,
-    plazoMeses: solicitud.plazoMeses,
+    frecuencia: solicitud.frecuencia || 'quincenal',
     observaciones: '',
     enviarWhatsApp: true
   });
@@ -33,31 +32,9 @@ const AprobarSolicitudModal = ({ solicitud, onClose, onAprobado, onError }) => {
 
   const calcularPagoEstimado = () => {
     const monto = parseFloat(formData.montoAprobado) || 0;
-    const plazo = formData.plazoMeses || solicitud.plazoMeses || 12;
     const tasaInteres = formData.interesPercent;
-
-    const interesTotal = (monto * tasaInteres * plazo) / 100;
-    const totalPagar = monto + interesTotal;
-
-    let pagosPorMes = 1;
-    switch (formData.frecuencia) {
-      case 'diario': pagosPorMes = 30; break;
-      case 'semanal': pagosPorMes = 4; break;
-      case 'quincenal': pagosPorMes = 2; break;
-      case 'mensual': pagosPorMes = 1; break;
-    }
-
-    const pagoPorPeriodo = totalPagar / (plazo * pagosPorMes);
-
-    return {
-      interesTotal,
-      totalPagar,
-      pagoPorPeriodo,
-      pagosTotales: plazo * pagosPorMes
-    };
+    return (monto * tasaInteres) / 100;
   };
-
-  const calculos = calcularPagoEstimado();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -67,64 +44,10 @@ const AprobarSolicitudModal = ({ solicitud, onClose, onAprobado, onError }) => {
     }));
   };
 
-  // Función para crear el préstamo automáticamente
-  const crearPrestamoAutomatico = async () => {
-    const fechaActual = new Date();
-    const fechaProximoPago = new Date(fechaActual);
-    
-    switch(formData.frecuencia) {
-      case 'diario':
-        fechaProximoPago.setDate(fechaProximoPago.getDate() + 1);
-        break;
-      case 'semanal':
-        fechaProximoPago.setDate(fechaProximoPago.getDate() + 7);
-        break;
-      case 'quincenal':
-        fechaProximoPago.setDate(fechaProximoPago.getDate() + 15);
-        break;
-      case 'mensual':
-        fechaProximoPago.setMonth(fechaProximoPago.getMonth() + 1);
-        break;
-      default:
-        fechaProximoPago.setDate(fechaProximoPago.getDate() + 30);
-    }
-
-    const prestamoData = {
-      clienteID: solicitud.clienteID || solicitud.id,
-      clienteNombre: solicitud.clienteNombre,
-      montoPrestado: parseFloat(formData.montoAprobado),
-      capitalRestante: parseFloat(formData.montoAprobado),
-      interesPercent: parseFloat(formData.interesPercent),
-      frecuencia: formData.frecuencia,
-      plazoMeses: formData.plazoMeses || 12,
-      estado: 'activo',
-      fechaPrestamo: fechaActual.toISOString(),
-      fechaProximoPago: fechaProximoPago.toISOString(),
-      fechaUltimoPago: null,
-      fechaActualizacion: fechaActual.toISOString(),
-      creadoPor: user?.email,
-      solicitudId: solicitud.id
-    };
-
-    const prestamosRef = collection(db, 'prestamos');
-    const prestamoDoc = await addDoc(prestamosRef, prestamoData);
-    
-    // Actualizar la solicitud con el ID del préstamo
-    const solicitudRef = doc(db, 'solicitudes', solicitud.id);
-    await updateDoc(solicitudRef, {
-      prestamoId: prestamoDoc.id,
-      montoAprobado: parseFloat(formData.montoAprobado),
-      interesAprobado: parseFloat(formData.interesPercent),
-      frecuenciaAprobada: formData.frecuencia
-    });
-
-    return prestamoDoc.id;
-  };
-
-  // Función para enviar WhatsApp
   const enviarWhatsAppAprobacion = () => {
     if (!formData.enviarWhatsApp) return;
     
+    const pagoEstimado = calcularPagoEstimado();
     const mensaje = `✅ SOLICITUD APROBADA - EYS Inversiones
 
 ¡Felicidades ${solicitud.clienteNombre}!
@@ -134,7 +57,7 @@ Su solicitud de préstamo ha sido *APROBADA*:
 • 💰 Monto Aprobado: RD$ ${formData.montoAprobado?.toLocaleString()}
 • 📈 Tasa de Interés: ${formData.interesPercent}%
 • 🔄 Frecuencia de Pago: ${formData.frecuencia}
-• 💵 Pago estimado: RD$ ${Math.round(calculos.pagoPorPeriodo).toLocaleString()} por ${formData.frecuencia}
+• 💵 Pago estimado: RD$ ${Math.round(pagoEstimado).toLocaleString()} por ${formData.frecuencia}
 
 📋 El contrato ha sido generado y está disponible en el sistema.
 
@@ -150,30 +73,77 @@ Su solicitud de préstamo ha sido *APROBADA*:
     e.preventDefault();
     setLoading(true);
 
+    console.log('🚀 [AprobarSolicitudModal] Iniciando aprobación...');
+    console.log('📋 Datos de la solicitud:', {
+      id: solicitud.id,
+      cliente: solicitud.clienteNombre,
+      estadoActual: solicitud.estado
+    });
+    console.log('📝 Datos del formulario:', formData);
+    console.log('👤 Usuario aprobador:', user?.email);
+
     try {
-      // 1. Crear el préstamo en Firebase
-      const prestamoId = await crearPrestamoAutomatico();
-      
-      // 2. Actualizar la solicitud en la API
+      // Llamar al backend para aprobar la solicitud y crear el préstamo
+      console.log('📡 [API] Enviando solicitud a /solicitudes/${solicitud.id}/aprobar');
       const response = await api.put(`/solicitudes/${solicitud.id}/aprobar`, {
-        ...formData,
         montoAprobado: parseFloat(formData.montoAprobado),
         interesPercent: parseFloat(formData.interesPercent),
-        prestamoId: prestamoId,
-        aprobadoPor: user?.email,
-        fechaAprobacion: new Date().toISOString()
+        frecuencia: formData.frecuencia,
+        observaciones: formData.observaciones,
+        aprobadoPor: user?.email
       });
 
+      console.log('📡 [API] Respuesta del backend:', response);
+
       if (response.success) {
-        // 3. Enviar WhatsApp si está activado
-        enviarWhatsAppAprobacion();
+        console.log('✅ [Backend] Solicitud aprobada exitosamente');
+        console.log('📦 Datos recibidos:', response.data);
         
+        // Verificar que el préstamo se creó
+        if (response.data.prestamoId) {
+          console.log('💰 Préstamo creado con ID:', response.data.prestamoId);
+          
+          // Verificar en Firestore que el préstamo existe
+          const prestamoDoc = await getDoc(doc(db, 'prestamos', response.data.prestamoId));
+          if (prestamoDoc.exists()) {
+            console.log('✅ Préstamo verificado en Firestore:', prestamoDoc.data());
+          } else {
+            console.warn('⚠️ Préstamo no encontrado en Firestore después de creación');
+          }
+        } else {
+          console.warn('⚠️ No se recibió prestamoId en la respuesta');
+        }
+        
+        // Actualizar la solicitud en Firestore localmente
+        console.log('🔄 Actualizando solicitud en Firestore...');
+        const solicitudRef = doc(db, 'solicitudes', solicitud.id);
+        await updateDoc(solicitudRef, {
+          estado: 'aprobada',
+          clienteID: response.data.clienteID,
+          prestamoId: response.data.prestamoId,
+          montoAprobado: parseFloat(formData.montoAprobado),
+          interesAprobado: parseFloat(formData.interesPercent),
+          frecuenciaAprobada: formData.frecuencia,
+          fechaDecision: new Date().toISOString(),
+          aprobadoPor: user?.email
+        });
+        
+        console.log('✅ Solicitud actualizada en Firestore');
+        
+        // Enviar WhatsApp
+        enviarWhatsAppAprobacion();
+        console.log('📱 WhatsApp enviado al cliente');
+        
+        // Notificar éxito al componente padre
+        console.log('🎉 Proceso completado, cerrando modal y recargando...');
         onAprobado();
       } else {
+        console.error('❌ [Backend] Error en la respuesta:', response);
         throw new Error(response.error || 'Error al aprobar la solicitud');
       }
     } catch (error) {
-      console.error('Error approving application:', error);
+      console.error('❌ [AprobarSolicitudModal] Error en el proceso:', error);
+      console.error('Stack trace:', error.stack);
       onError(error.message);
     } finally {
       setLoading(false);
@@ -193,7 +163,8 @@ Su solicitud de préstamo ha sido *APROBADA*:
     return Math.min(20, Math.max(5, baseRate + (scoreAdjustment * 5)) * (frequencyMultiplier[formData.frecuencia] || 1));
   };
 
-  const ratioPagoSueldo = calculos.pagoPorPeriodo / (solicitud.sueldoCliente || 1) * 100;
+  const pagoEstimado = calcularPagoEstimado();
+  const ratioPagoSueldo = (pagoEstimado / (solicitud.sueldoCliente || 1)) * 100;
   const capacidadPagoOk = ratioPagoSueldo <= 40;
 
   return (
@@ -234,6 +205,9 @@ Su solicitud de préstamo ha sido *APROBADA*:
                     </h3>
                     <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
                       Configura los términos del préstamo para {solicitud.clienteNombre}
+                    </p>
+                    <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                      Estado actual: {solicitud.estado === 'aprobado_cliente' ? '✅ Aprobado por cliente' : '📝 Pendiente'}
                     </p>
                   </div>
                 </div>
@@ -298,7 +272,6 @@ Su solicitud de préstamo ha sido *APROBADA*:
                           : 'bg-white border-gray-200 text-gray-900 focus:border-green-500'
                       } focus:ring-2 focus:ring-green-500/20 outline-none transition-all`}
                       min="1000"
-                      max={solicitud.montoSolicitado * 1.2}
                       step="1000"
                     />
                   </div>
@@ -346,28 +319,6 @@ Su solicitud de préstamo ha sido *APROBADA*:
                       <option value="mensual">Mensual</option>
                     </select>
                   </div>
-
-                  <div>
-                    <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                      Plazo (Meses)
-                    </label>
-                    <input
-                      type="number"
-                      name="plazoMeses"
-                      value={formData.plazoMeses}
-                      onChange={handleChange}
-                      className={`w-full px-4 py-2 rounded-lg border-2 text-sm ${
-                        theme === 'dark'
-                          ? 'bg-gray-800 border-gray-700 text-white focus:border-green-500'
-                          : 'bg-white border-gray-200 text-gray-900 focus:border-green-500'
-                      } focus:ring-2 focus:ring-green-500/20 outline-none transition-all`}
-                      min="0"
-                      max="60"
-                    />
-                    <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>
-                      0 = Sin plazo fijo (pago flexible)
-                    </p>
-                  </div>
                 </div>
               </div>
 
@@ -379,28 +330,18 @@ Su solicitud de préstamo ha sido *APROBADA*:
                     Resumen del Préstamo
                   </h3>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <span className={`text-xs ${theme === 'dark' ? 'text-green-300' : 'text-green-700'}`}>Interés Total:</span>
-                    <p className={`font-semibold ${theme === 'dark' ? 'text-green-400' : 'text-green-900'}`}>
-                      RD$ {calculos.interesTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div>
-                    <span className={`text-xs ${theme === 'dark' ? 'text-green-300' : 'text-green-700'}`}>Total a Pagar:</span>
-                    <p className={`font-semibold ${theme === 'dark' ? 'text-green-400' : 'text-green-900'}`}>
-                      RD$ {calculos.totalPagar.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  </div>
+                <div className="grid grid-cols-2 md:grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className={`text-xs ${theme === 'dark' ? 'text-green-300' : 'text-green-700'}`}>Pago por Periodo:</span>
                     <p className={`font-semibold ${theme === 'dark' ? 'text-green-400' : 'text-green-900'}`}>
-                      RD$ {calculos.pagoPorPeriodo.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      RD$ {pagoEstimado.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div>
-                    <span className={`text-xs ${theme === 'dark' ? 'text-green-300' : 'text-green-700'}`}>Total de Pagos:</span>
-                    <p className={`font-semibold ${theme === 'dark' ? 'text-green-400' : 'text-green-900'}`}>{calculos.pagosTotales}</p>
+                    <span className={`text-xs ${theme === 'dark' ? 'text-green-300' : 'text-green-700'}`}>Frecuencia:</span>
+                    <p className={`font-semibold ${theme === 'dark' ? 'text-green-400' : 'text-green-900'}`}>
+                      {formData.frecuencia}
+                    </p>
                   </div>
                 </div>
               </div>

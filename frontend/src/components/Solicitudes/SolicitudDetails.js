@@ -34,6 +34,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { db } from '../../services/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import AprobarSolicitudModal from './AprobarSolicitudModal';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -44,15 +45,10 @@ const SolicitudDetails = ({ solicitud, onBack, onEdit, onAprobar, onRechazar, ba
   const [showRechazarModal, setShowRechazarModal] = useState(false);
   const [motivoRechazo, setMotivoRechazo] = useState('');
   const [showAprobarModal, setShowAprobarModal] = useState(false);
-  const [datosAprobacion, setDatosAprobacion] = useState({
-    montoAprobado: solicitud.montoSolicitado,
-    interesPercent: 10,
-    frecuencia: solicitud.frecuencia,
-    observaciones: ''
-  });
   const [showClienteAprobado, setShowClienteAprobado] = useState(solicitud.estado === 'aprobado_cliente');
   const [evidenciaFirma, setEvidenciaFirma] = useState(null);
   const [showEvidenciaModal, setShowEvidenciaModal] = useState(false);
+  const [error, setError] = useState('');
 
   const InfoRow = ({ label, value, icon: Icon, color = 'text-gray-600', important = false }) => (
     <div className="flex items-start space-x-3 py-3 border-b border-gray-100 dark:border-gray-700">
@@ -79,10 +75,6 @@ const SolicitudDetails = ({ solicitud, onBack, onEdit, onAprobar, onRechazar, ba
     if (score >= 50) return { texto: 'EVALUAR CON PRECAUCIÓN', tipo: 'warning' };
     if (score >= 30) return { texto: 'RIESGO MODERADO - RECHAZAR', tipo: 'danger' };
     return { texto: 'ALTO RIESGO - RECHAZAR', tipo: 'danger' };
-  };
-
-  const calcularPagoEstimado = () => {
-    return (datosAprobacion.montoAprobado * datosAprobacion.interesPercent) / 100;
   };
 
   const calcularAntiguedad = (fechaIngreso) => {
@@ -251,6 +243,7 @@ const SolicitudDetails = ({ solicitud, onBack, onEdit, onAprobar, onRechazar, ba
     }
 
     try {
+      console.log('📝 [SolicitudDetails] Marcando como aprobado por cliente...');
       const solicitudRef = doc(db, 'solicitudes', solicitud.id);
       await updateDoc(solicitudRef, {
         estado: 'aprobado_cliente',
@@ -283,6 +276,24 @@ Puede revisar la solicitud en el sistema para proceder con la aprobación final.
       console.error('Error actualizando estado:', error);
       alert('Error al actualizar el estado. Intente de nuevo.');
     }
+  };
+
+  // Función para manejar la aprobación final
+  const handleAprobarFinal = () => {
+    console.log('🚀 [SolicitudDetails] handleAprobarFinal llamado');
+    console.log('📋 Solicitud a aprobar:', {
+      id: solicitud.id,
+      cliente: solicitud.clienteNombre,
+      estado: solicitud.estado
+    });
+    setShowAprobarModal(true);
+  };
+
+  // Función para manejar el rechazo
+  const handleRechazar = (id, motivo) => {
+    console.log('❌ [SolicitudDetails] handleRechazar llamado');
+    console.log('📋 Solicitud a rechazar:', { id, motivo });
+    onRechazar(id, motivo);
   };
 
   const score = solicitud.scoreAnalisis || 50;
@@ -358,7 +369,7 @@ Puede revisar la solicitud en el sistema para proceder con la aprobación final.
           )}
           {solicitud.estado === 'aprobado_cliente' && (
             <button
-              onClick={() => onAprobar(solicitud)}
+              onClick={handleAprobarFinal}
               className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
             >
               <CheckCircleIcon className="h-4 w-4" />
@@ -685,135 +696,26 @@ Puede revisar la solicitud en el sistema para proceder con la aprobación final.
         </div>
       )}
 
-      {/* Modal de Aprobación */}
+      {/* Modal de Aprobación - Usando el componente centralizado */}
       <AnimatePresence>
         {showAprobarModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className={`rounded-lg max-w-md w-full ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
-              <div className="p-6">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Aprobar Solicitud</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                  Configura los detalles del préstamo para <strong>{solicitud.clienteNombre}</strong>
-                </p>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Monto Aprobado (RD$)
-                    </label>
-                    <input
-                      type="number"
-                      value={datosAprobacion.montoAprobado}
-                      onChange={(e) => setDatosAprobacion(prev => ({
-                        ...prev,
-                        montoAprobado: parseFloat(e.target.value)
-                      }))}
-                      className={`w-full px-3 py-2 rounded-lg border ${
-                        theme === 'dark'
-                          ? 'bg-gray-700 border-gray-600 text-white'
-                          : 'bg-white border-gray-300 text-gray-900'
-                      } focus:border-green-500 focus:ring-2 focus:ring-green-500/20 outline-none transition-all`}
-                      min="1000"
-                      step="1000"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Tasa de Interés (%)
-                    </label>
-                    <input
-                      type="number"
-                      value={datosAprobacion.interesPercent}
-                      onChange={(e) => setDatosAprobacion(prev => ({
-                        ...prev,
-                        interesPercent: parseFloat(e.target.value)
-                      }))}
-                      className={`w-full px-3 py-2 rounded-lg border ${
-                        theme === 'dark'
-                          ? 'bg-gray-700 border-gray-600 text-white'
-                          : 'bg-white border-gray-300 text-gray-900'
-                      } focus:border-green-500 focus:ring-2 focus:ring-green-500/20 outline-none transition-all`}
-                      min="1"
-                      max="50"
-                      step="0.5"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Frecuencia de Pago
-                    </label>
-                    <select
-                      value={datosAprobacion.frecuencia}
-                      onChange={(e) => setDatosAprobacion(prev => ({
-                        ...prev,
-                        frecuencia: e.target.value
-                      }))}
-                      className={`w-full px-3 py-2 rounded-lg border ${
-                        theme === 'dark'
-                          ? 'bg-gray-700 border-gray-600 text-white'
-                          : 'bg-white border-gray-300 text-gray-900'
-                      } focus:border-green-500 focus:ring-2 focus:ring-green-500/20 outline-none transition-all`}
-                    >
-                      <option value="diario">Diario</option>
-                      <option value="semanal">Semanal</option>
-                      <option value="quincenal">Quincenal</option>
-                      <option value="mensual">Mensual</option>
-                    </select>
-                  </div>
-
-                  <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20">
-                    <p className="text-sm text-green-700 dark:text-green-400">
-                      <strong>Pago Estimado:</strong> RD$ {calcularPagoEstimado()?.toLocaleString()} por {datosAprobacion.frecuencia}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Observaciones (Opcional)
-                    </label>
-                    <textarea
-                      value={datosAprobacion.observaciones}
-                      onChange={(e) => setDatosAprobacion(prev => ({
-                        ...prev,
-                        observaciones: e.target.value
-                      }))}
-                      rows="3"
-                      className={`w-full px-3 py-2 rounded-lg border ${
-                        theme === 'dark'
-                          ? 'bg-gray-700 border-gray-600 text-white'
-                          : 'bg-white border-gray-300 text-gray-900'
-                      } focus:border-green-500 focus:ring-2 focus:ring-green-500/20 outline-none transition-all`}
-                      placeholder="Observaciones adicionales..."
-                    />
-                  </div>
-                </div>
-                
-                <div className="flex justify-end space-x-3 mt-6">
-                  <button
-                    onClick={() => setShowAprobarModal(false)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                      theme === 'dark'
-                        ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowAprobarModal(false);
-                      onAprobar(solicitud);
-                    }}
-                    className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all"
-                  >
-                    Aprobar
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <AprobarSolicitudModal
+            solicitud={solicitud}
+            onClose={() => {
+              console.log('❌ [SolicitudDetails] Modal de aprobación cerrado');
+              setShowAprobarModal(false);
+            }}
+            onAprobado={() => {
+              console.log('✅ [SolicitudDetails] onAprobado ejecutado');
+              setShowAprobarModal(false);
+              onBack();
+            }}
+            onError={(errorMsg) => {
+              console.error('❌ [SolicitudDetails] Error en aprobación:', errorMsg);
+              setError(errorMsg);
+              setTimeout(() => setError(''), 5000);
+            }}
+          />
         )}
       </AnimatePresence>
 
@@ -855,7 +757,7 @@ Puede revisar la solicitud en el sistema para proceder con la aprobación final.
                   <button
                     onClick={() => {
                       setShowRechazarModal(false);
-                      onRechazar(solicitud.id, motivoRechazo);
+                      handleRechazar(solicitud.id, motivoRechazo);
                     }}
                     disabled={!motivoRechazo.trim()}
                     className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
@@ -925,6 +827,15 @@ Puede revisar la solicitud en el sistema para proceder con la aprobación final.
           </div>
         )}
       </AnimatePresence>
+
+      {/* Mensaje de error */}
+      {error && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div className="bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg">
+            {error}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

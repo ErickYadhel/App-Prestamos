@@ -7,11 +7,60 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-// Middleware
-app.use(cors());
+// ============================================
+// 🌐 CONFIGURACIÓN DE CORS MEJORADA
+// ============================================
+
+// Orígenes permitidos
+const allowedOrigins = [
+  'http://localhost:3000',           // Desarrollo local
+  'http://localhost:5173',           // Vite (si usas)
+  'https://eys-frontend.onrender.com', // Tu frontend en Render
+  'https://eys-frontend.vercel.app',   // Si usas Vercel
+  'https://prestamos-eys.vercel.app',  // Alternativa
+  'https://eysinversiones.com'         // Dominio personalizado (si tienes)
+];
+
+// Opciones de CORS
+const corsOptions = {
+  origin: function(origin, callback) {
+    // Permitir solicitudes sin origen (como Postman, apps móviles)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log(`⚠️ CORS bloqueado para origen: ${origin}`);
+      callback(new Error('No permitido por CORS'), false);
+    }
+  },
+  credentials: true, // Permitir cookies y headers de autenticación
+  optionsSuccessStatus: 200
+};
+
+// Aplicar CORS con la configuración mejorada
+app.use(cors(corsOptions));
+
+// Middleware adicional para logging de CORS (opcional)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin);
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  // Manejar preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
+
 app.use(express.json());
 
-// Inicializar Firebase Admin
+// ============================================
+// 🔥 INICIALIZAR FIREBASE ADMIN
+// ============================================
+
 const serviceAccount = {
   type: "service_account",
   project_id: "eysinversiones-2071c",
@@ -32,7 +81,10 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
-// Importar rutas
+// ============================================
+// 📦 IMPORTAR RUTAS
+// ============================================
+
 const authRoutes = require('./routes/auth');
 const clientesRoutes = require('./routes/clientes');
 const prestamosRoutes = require('./routes/prestamos');
@@ -47,9 +99,12 @@ const {
   router: notificacionesRoutes, 
   generarRecordatoriosAutomaticos 
 } = require('./routes/notificaciones');
-app.use('/api/notificaciones', notificacionesRoutes);
 
-// Usar rutas
+// ============================================
+// 🔗 USAR RUTAS
+// ============================================
+
+app.use('/api/notificaciones', notificacionesRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/prestamos', prestamosRoutes);
@@ -59,9 +114,9 @@ app.use('/api/garantes', garantesRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/usuarios', usuarioRoutes);
 
-// ===========================
-// 🔧 CONFIGURACIÓN DE ENVÍO AUTOMÁTICO
-// ===========================
+// ============================================
+// 🔧 CONFIGURACIÓN DE ENVÍO AUTOMÁTICO DE NOTIFICACIONES
+// ============================================
 
 async function obtenerConfiguracionNotificaciones() {
   try {
@@ -70,8 +125,8 @@ async function obtenerConfiguracionNotificaciones() {
       console.warn('⚙️ No hay configuración de notificaciones, usando valores por defecto.');
       return {
         habilitado: true,
-        diasAntesVencimiento: 1, // enviar 1 día antes
-        horaEjecucion: '8:00',   // formato 24h
+        diasAntesVencimiento: 1,
+        horaEjecucion: '8:00',
         zonaHoraria: 'America/Santo_Domingo'
       };
     }
@@ -87,9 +142,6 @@ async function obtenerConfiguracionNotificaciones() {
   }
 }
 
-/**
- * Iniciar el job de notificaciones automáticas
- */
 async function iniciarJobNotificaciones() {
   const config = await obtenerConfiguracionNotificaciones();
 
@@ -99,7 +151,7 @@ async function iniciarJobNotificaciones() {
   }
 
   const [hora, minuto] = config.horaEjecucion.split(':').map(Number);
-  const cronExpresion = `${minuto} ${hora} * * *`; // todos los días a la hora configurada
+  const cronExpresion = `${minuto} ${hora} * * *`;
 
   console.log(`📅 Programando job de notificaciones automáticas a las ${config.horaEjecucion} (${config.zonaHoraria})`);
 
@@ -109,14 +161,15 @@ async function iniciarJobNotificaciones() {
   }, { timezone: config.zonaHoraria });
 }
 
-// ===========================
+// ============================================
 // 🔄 RUTAS BÁSICAS Y ESTADO
-// ===========================
+// ============================================
 
 app.get('/', (req, res) => {
   res.json({
     message: '🚀 Sistema de Préstamos EYS Inversiones funcionando!',
     version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
     endpoints: {
       auth: '/api/auth',
       clientes: '/api/clientes',
@@ -135,31 +188,46 @@ app.get('/health', (req, res) => {
     status: 'OK',
     timestamp: new Date().toISOString(),
     database: 'Firebase Firestore',
-    authentication: 'Firebase Auth'
+    authentication: 'Firebase Auth',
+    cors: allowedOrigins
   });
 });
 
-// ===========================
+// ============================================
 // ⚠️ ERRORES GLOBALES
-// ===========================
+// ============================================
+
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
-    error: 'Endpoint no encontrado'
+    error: 'Endpoint no encontrado',
+    path: req.originalUrl
   });
 });
 
 app.use((error, req, res, next) => {
   console.error('Error global:', error);
+  
+  // Manejar errores de CORS específicamente
+  if (error.message === 'No permitido por CORS') {
+    return res.status(403).json({
+      success: false,
+      error: 'Acceso no permitido desde este origen',
+      origin: req.headers.origin
+    });
+  }
+  
   res.status(500).json({
     success: false,
-    error: 'Error interno del servidor'
+    error: 'Error interno del servidor',
+    message: process.env.NODE_ENV === 'development' ? error.message : undefined
   });
 });
 
-// ===========================
+// ============================================
 // 🚀 INICIAR SERVIDOR
-// ===========================
+// ============================================
+
 app.listen(PORT, () => {
   console.log('='.repeat(50));
   console.log('🚀 SISTEMA DE PRÉSTAMOS EYS INVERSIONES');
@@ -167,6 +235,7 @@ app.listen(PORT, () => {
   console.log(`🎯 Servidor ejecutándose en puerto ${PORT}`);
   console.log(`📊 Firebase Project: eysinversiones-2071c`);
   console.log(`🔗 http://localhost:${PORT}`);
+  console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
   console.log('');
   console.log('📋 ENDPOINTS DISPONIBLES:');
   console.log(`🔐 Auth        → /api/auth`);
@@ -179,7 +248,7 @@ app.listen(PORT, () => {
   console.log(`🔔 Notificaciones → /api/notificaciones`);
   console.log('');
   console.log('🎨 Colores: Rojo y Negro');
-  console.log('⚡ Modo: Producción');
+  console.log(`🔐 CORS Orígenes permitidos: ${allowedOrigins.join(', ')}`);
   console.log('='.repeat(50));
 });
 

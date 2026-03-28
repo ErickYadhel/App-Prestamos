@@ -27,6 +27,93 @@ const BANCOS_DOMINICANOS = [
   'Banco de Desarrollo Empresarial'
 ];
 
+// ============================================
+// FUNCIONES AUXILIARES
+// ============================================
+
+// Calcular la primera fecha de pago para un préstamo
+function calcularPrimeraFechaPago(fechaPrestamo, frecuencia, config = {}) {
+  const fecha = new Date(fechaPrestamo);
+  const dia = fecha.getDate();
+  const mes = fecha.getMonth();
+  const año = fecha.getFullYear();
+  
+  console.log('📅 Calculando primera fecha de pago:');
+  console.log('  Fecha préstamo:', fecha.toLocaleDateString());
+  console.log('  Día:', dia);
+  console.log('  Frecuencia:', frecuencia);
+  
+  switch (frecuencia) {
+    case 'diario':
+      const fechaDiaria = new Date(fecha);
+      fechaDiaria.setDate(dia + 1);
+      console.log('  Resultado (diario):', fechaDiaria.toLocaleDateString());
+      return fechaDiaria;
+      
+    case 'semanal':
+      const fechaSemanal = new Date(fecha);
+      fechaSemanal.setDate(dia + 7);
+      console.log('  Resultado (semanal):', fechaSemanal.toLocaleDateString());
+      return fechaSemanal;
+      
+    case 'quincenal':
+      // LOGICA PARA PRIMERA FECHA DE PAGO:
+      // Si la fecha del préstamo es menor a 15 -> primera fecha es 15 del mismo mes
+      // Si la fecha del préstamo es 15 o mayor pero menor a 30 -> primera fecha es 30 del mismo mes
+      // Si la fecha del préstamo es 30 o mayor -> primera fecha es 15 del mes siguiente
+      
+      if (dia < 15) {
+        const fecha15 = new Date(año, mes, 15);
+        console.log(`  → Día ${dia} < 15, primera fecha: 15 del mismo mes (${fecha15.toLocaleDateString()})`);
+        return fecha15;
+      } 
+      else if (dia >= 15 && dia < 30) {
+        const fecha30 = new Date(año, mes, 30);
+        console.log(`  → Día ${dia} >= 15 y < 30, primera fecha: 30 del mismo mes (${fecha30.toLocaleDateString()})`);
+        return fecha30;
+      } 
+      else {
+        const fecha15Prox = new Date(año, mes + 1, 15);
+        console.log(`  → Día ${dia} >= 30, primera fecha: 15 del mes siguiente (${fecha15Prox.toLocaleDateString()})`);
+        return fecha15Prox;
+      }
+      
+    case 'mensual':
+      let diaPago = config.diaPagoPersonalizado || dia;
+      let fechaMensual = new Date(año, mes + 1, diaPago);
+      if (fechaMensual.getMonth() !== (mes + 1) % 12) {
+        fechaMensual = new Date(año, mes + 2, 0);
+      }
+      console.log('  Resultado (mensual):', fechaMensual.toLocaleDateString());
+      return fechaMensual;
+      
+    case 'personalizado':
+      if (config.fechasPersonalizadas && config.fechasPersonalizadas.length > 0) {
+        const fechas = config.fechasPersonalizadas.map(f => new Date(f));
+        fechas.sort((a, b) => a - b);
+        for (const fechaPago of fechas) {
+          if (fechaPago > fecha) {
+            console.log('  Resultado (personalizado):', fechaPago.toLocaleDateString());
+            return fechaPago;
+          }
+        }
+        const primeraFecha = new Date(fechas[0]);
+        primeraFecha.setFullYear(primeraFecha.getFullYear() + 1);
+        console.log('  Resultado (personalizado - próximo año):', primeraFecha.toLocaleDateString());
+        return primeraFecha;
+      }
+      const fechaDefault = new Date(fecha);
+      fechaDefault.setDate(dia + 30);
+      console.log('  Resultado (default):', fechaDefault.toLocaleDateString());
+      return fechaDefault;
+      
+    default:
+      const fechaDefault2 = new Date(fecha);
+      fechaDefault2.setDate(dia + 30);
+      return fechaDefault2;
+  }
+}
+
 // GET /api/solicitudes/bancos - Obtener lista de bancos
 router.get('/bancos', (req, res) => {
   res.json({
@@ -35,13 +122,12 @@ router.get('/bancos', (req, res) => {
   });
 });
 
-// GET /api/solicitudes - Listar solicitudes (con filtros mejorados)
+// GET /api/solicitudes - Listar solicitudes
 router.get('/', async (req, res) => {
   try {
     const { estado, empleadoID, fechaDesde, fechaHasta, montoMin, montoMax } = req.query;
     let query = db.collection('solicitudes');
 
-    // Aplicar filtros
     if (estado && estado !== 'todos') {
       query = query.where('estado', '==', estado);
     }
@@ -49,7 +135,6 @@ router.get('/', async (req, res) => {
       query = query.where('empleadoID', '==', empleadoID);
     }
 
-    // Ordenar por fecha más reciente
     query = query.orderBy('fechaSolicitud', 'desc');
 
     const solicitudesSnapshot = await query.get();
@@ -59,7 +144,6 @@ router.get('/', async (req, res) => {
       solicitudes.push({ id: doc.id, ...doc.data() });
     });
 
-    // Aplicar filtros en memoria (para filtros que no son directos en Firestore)
     let filtradas = solicitudes;
     
     if (fechaDesde) {
@@ -119,7 +203,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// ✅ NUEVO: PUT /api/solicitudes/:id - Actualizar solicitud
+// PUT /api/solicitudes/:id - Actualizar solicitud
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -137,7 +221,6 @@ router.put('/:id', async (req, res) => {
     
     const solicitudActual = solicitudDoc.data();
     
-    // No permitir editar solicitudes ya procesadas
     if (solicitudActual.estado !== 'pendiente') {
       return res.status(400).json({
         success: false,
@@ -145,10 +228,8 @@ router.put('/:id', async (req, res) => {
       });
     }
     
-    // Asegurar que la fecha de actualización se establece
     updateData.fechaActualizacion = new Date().toISOString();
     
-    // Recalcular score si se actualizan campos relevantes
     if (updateData.montoSolicitado || updateData.sueldoCliente || updateData.lugarTrabajo || updateData.puestoCliente) {
       const solicitudActualizada = { ...solicitudActual, ...updateData };
       updateData.scoreAnalisis = await calcularScoreSolicitud(solicitudActualizada);
@@ -156,7 +237,6 @@ router.put('/:id', async (req, res) => {
     
     await solicitudRef.update(updateData);
     
-    // Obtener la solicitud actualizada
     const updatedDoc = await solicitudRef.get();
     
     res.json({
@@ -173,13 +253,12 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// POST /api/solicitudes - Crear nueva solicitud (MEJORADO)
+// POST /api/solicitudes - Crear nueva solicitud
 router.post('/', async (req, res) => {
   try {
     const solicitudData = req.body;
     const solicitud = new Solicitud(solicitudData);
     
-    // Validación de campos requeridos
     if (!solicitud.clienteNombre || !solicitud.telefono || !solicitud.montoSolicitado) {
       return res.status(400).json({
         success: false,
@@ -194,7 +273,6 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Crear en Firestore
     const docRef = db.collection('solicitudes').doc();
     solicitud.id = docRef.id;
     solicitud.fechaSolicitud = new Date();
@@ -203,11 +281,9 @@ router.post('/', async (req, res) => {
 
     await docRef.set({ ...solicitud });
 
-    // Generar enlaces de notificación para el administrador
     const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const enlaceSolicitud = `${baseUrl}/solicitudes/${solicitud.id}`;
 
-    // Notificación por WhatsApp al administrador (número configurable)
     const mensajeWhatsApp = `📋 NUEVA SOLICITUD DE PRÉSTAMO
 
 👤 Cliente: ${solicitud.clienteNombre}
@@ -250,16 +326,21 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/solicitudes/:id/aprobar - Aprobar solicitud (MEJORADO)
+// PUT /api/solicitudes/:id/aprobar - Aprobar solicitud y crear préstamo
 router.put('/:id/aprobar', async (req, res) => {
   try {
     const { id } = req.params;
     const { aprobadoPor, observaciones, montoAprobado, interesPercent, frecuencia } = req.body;
 
+    console.log('🚀 [BACKEND] /aprobar llamado');
+    console.log('📋 ID Solicitud:', id);
+    console.log('📝 Datos recibidos:', { montoAprobado, interesPercent, frecuencia, aprobadoPor });
+
     const solicitudRef = db.collection('solicitudes').doc(id);
     const solicitudDoc = await solicitudRef.get();
 
     if (!solicitudDoc.exists) {
+      console.log('❌ Solicitud no encontrada');
       return res.status(404).json({
         success: false,
         error: 'Solicitud no encontrada'
@@ -267,10 +348,15 @@ router.put('/:id/aprobar', async (req, res) => {
     }
 
     const solicitudData = solicitudDoc.data();
-    const solicitud = new Solicitud(solicitudData);
+    console.log('📄 Datos de la solicitud:', {
+      id: solicitudData.id,
+      cliente: solicitudData.clienteNombre,
+      estado: solicitudData.estado,
+      montoSolicitado: solicitudData.montoSolicitado
+    });
 
-    // Permitir aprobar si está pendiente o aprobado por cliente
-    if (solicitud.estado !== 'pendiente' && solicitud.estado !== 'aprobado_cliente') {
+    if (solicitudData.estado !== 'pendiente' && solicitudData.estado !== 'aprobado_cliente') {
+      console.log('❌ Estado incorrecto para aprobar:', solicitudData.estado);
       return res.status(400).json({
         success: false,
         error: 'La solicitud no puede ser aprobada en su estado actual'
@@ -280,6 +366,7 @@ router.put('/:id/aprobar', async (req, res) => {
     // Crear el cliente si no existe
     let clienteID = solicitudData.clienteID;
     if (!clienteID) {
+      console.log('🏢 Creando nuevo cliente...');
       const clienteRef = db.collection('clientes').doc();
       clienteID = clienteRef.id;
       
@@ -300,14 +387,28 @@ router.put('/:id/aprobar', async (req, res) => {
       };
 
       await clienteRef.set(clienteData);
-      console.log(`✅ Cliente creado: ${clienteData.nombre}`);
+      console.log(`✅ Cliente creado con ID: ${clienteID}`);
+    } else {
+      console.log(`✅ Cliente existente con ID: ${clienteID}`);
     }
 
-    // Crear el préstamo
+    // Crear el préstamo con la fecha correcta
+    console.log('💰 Creando préstamo...');
     const prestamoRef = db.collection('prestamos').doc();
-    const montoFinal = montoAprobado || solicitudData.montoSolicitado;
-    const interesFinal = interesPercent || 10;
+    const montoFinal = parseFloat(montoAprobado) || parseFloat(solicitudData.montoSolicitado);
+    const interesFinal = parseFloat(interesPercent) || 10;
     const frecuenciaFinal = frecuencia || solicitudData.frecuencia || 'quincenal';
+    const fechaPrestamo = new Date();
+    
+    // Calcular la primera fecha de pago usando la función correcta
+    const primeraFechaPago = calcularPrimeraFechaPago(fechaPrestamo, frecuenciaFinal, {});
+    
+    console.log('📊 Datos del préstamo a crear:');
+    console.log('  - Monto:', montoFinal);
+    console.log('  - Interés:', interesFinal);
+    console.log('  - Frecuencia:', frecuenciaFinal);
+    console.log('  - Fecha préstamo:', fechaPrestamo.toLocaleDateString());
+    console.log('  - Primera fecha pago:', primeraFechaPago.toLocaleDateString());
     
     const prestamoData = {
       id: prestamoRef.id,
@@ -317,9 +418,9 @@ router.put('/:id/aprobar', async (req, res) => {
       capitalRestante: montoFinal,
       interesPercent: interesFinal,
       frecuencia: frecuenciaFinal,
-      fechaPrestamo: new Date(),
+      fechaPrestamo: fechaPrestamo,
       estado: 'activo',
-      fechaProximoPago: calcularFechaProximoPago(frecuenciaFinal),
+      fechaProximoPago: primeraFechaPago,
       fechaUltimoPago: null,
       solicitudID: id,
       telefonoCliente: solicitudData.telefono,
@@ -328,12 +429,16 @@ router.put('/:id/aprobar', async (req, res) => {
       puestoCliente: solicitudData.puestoCliente,
       bancoCliente: solicitudData.bancoCliente,
       cuentaCliente: solicitudData.cuentaCliente,
-      tipoCuenta: solicitudData.tipoCuenta
+      tipoCuenta: solicitudData.tipoCuenta,
+      historialPagos: [],
+      fechaActualizacion: new Date()
     };
 
     await prestamoRef.set(prestamoData);
+    console.log(`✅ Préstamo creado con ID: ${prestamoRef.id}`);
 
     // Actualizar la solicitud
+    console.log('🔄 Actualizando solicitud...');
     const actualizaciones = {
       estado: 'aprobada',
       aprobadoPor: aprobadoPor || 'admin',
@@ -347,6 +452,7 @@ router.put('/:id/aprobar', async (req, res) => {
     };
 
     await solicitudRef.update(actualizaciones);
+    console.log('✅ Solicitud actualizada');
 
     // Generar notificación de aprobación para informar al cliente
     const pagoEstimado = (montoFinal * interesFinal) / 100;
@@ -363,7 +469,7 @@ Su solicitud de préstamo ha sido APROBADA:
 📋 Detalles del préstamo:
 • Capital Inicial: RD$ ${montoFinal?.toLocaleString()}
 • Interés por periodo: RD$ ${pagoEstimado?.toLocaleString()}
-• Próximo pago: ${calcularFechaProximoPago(frecuenciaFinal).toLocaleDateString()}
+• Próximo pago: ${primeraFechaPago.toLocaleDateString()}
 
 💡 Recuerde: Cada pago cubre primero los intereses y luego reduce el capital.
 
@@ -393,15 +499,17 @@ Su solicitud de préstamo ha sido APROBADA:
     });
 
   } catch (error) {
-    console.error('Error approving solicitud:', error);
+    console.error('❌ Error approving solicitud:', error);
+    console.error('Stack trace:', error.stack);
     res.status(400).json({
       success: false,
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
   }
 });
 
-// PUT /api/solicitudes/:id/rechazar - Rechazar solicitud (MEJORADO)
+// PUT /api/solicitudes/:id/rechazar - Rechazar solicitud
 router.put('/:id/rechazar', async (req, res) => {
   try {
     const { id } = req.params;
@@ -435,7 +543,6 @@ router.put('/:id/rechazar', async (req, res) => {
 
     await solicitudRef.update(actualizaciones);
 
-    // Generar notificación de rechazo para informar al cliente
     const mensajeCliente = `❌ SOLICITUD RECHAZADA - EYS INVERSIONES
 
 Sr(a) ${solicitudData.clienteNombre},
@@ -491,7 +598,6 @@ router.delete('/:id', async (req, res) => {
     
     const solicitudData = solicitudDoc.data();
     
-    // No permitir eliminar solicitudes aprobadas
     if (solicitudData.estado === 'aprobada') {
       return res.status(400).json({
         success: false,
@@ -514,7 +620,7 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// GET /api/solicitudes/estadisticas/avanzadas - Estadísticas avanzadas (MEJORADO)
+// GET /api/solicitudes/estadisticas/avanzadas - Estadísticas avanzadas
 router.get('/estadisticas/avanzadas', async (req, res) => {
   try {
     const solicitudesSnapshot = await db.collection('solicitudes').get();
@@ -567,11 +673,10 @@ router.get('/estadisticas/avanzadas', async (req, res) => {
   }
 });
 
-// Función para calcular score de la solicitud (MEJORADA)
+// Función para calcular score de la solicitud
 async function calcularScoreSolicitud(solicitud) {
   let score = 0;
   
-  // 1. Capacidad de pago (40%)
   const monto = Number(solicitud.montoSolicitado) || 0;
   const sueldo = Number(solicitud.sueldoCliente) || 0;
   const ratio = sueldo > 0 ? monto / sueldo : Infinity;
@@ -580,27 +685,21 @@ async function calcularScoreSolicitud(solicitud) {
   else if (ratio <= 0.5) score += 30;
   else if (ratio <= 0.7) score += 20;
   else if (ratio <= 1) score += 10;
-  // Si ratio > 1, no suma puntos
 
-  // 2. Estabilidad laboral (15%)
   if (solicitud.lugarTrabajo && solicitud.puestoCliente) score += 15;
   else if (solicitud.lugarTrabajo) score += 10;
 
-  // 3. Información bancaria (15%)
   if (solicitud.bancoCliente && solicitud.cuentaCliente && solicitud.tipoCuenta) score += 15;
   else if (solicitud.bancoCliente) score += 10;
 
-  // 4. Garantía (15%)
   const garantias = { 'hipotecaria': 15, 'prendaria': 12, 'fiduciaria': 10, 'personal': 8, 'ninguna': 5 };
   score += garantias[solicitud.garantia?.toLowerCase()] || 5;
 
-  // 5. Plazo (15%)
   const plazo = Number(solicitud.plazoMeses) || 0;
   if (plazo === 0 || plazo <= 12) score += 15;
   else if (plazo <= 24) score += 10;
   else score += 5;
 
-  // 6. Antigüedad laboral (bonus)
   if (solicitud.fechaIngreso) {
     const fechaIngreso = new Date(solicitud.fechaIngreso);
     const hoy = new Date();
@@ -612,34 +711,11 @@ async function calcularScoreSolicitud(solicitud) {
     else if (anosAntiguedad > 0) score += 1;
   }
 
-  // 7. Información de contacto (bonus)
   if (solicitud.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(solicitud.email)) score += 2;
   if (solicitud.direccion && solicitud.direccion.length > 5) score += 2;
   if (solicitud.provincia) score += 1;
 
   return Math.min(100, Math.max(0, score));
-}
-
-// Función para calcular fecha de próximo pago
-function calcularFechaProximoPago(frecuencia) {
-  const fecha = new Date();
-  switch (frecuencia) {
-    case 'diario':
-      fecha.setDate(fecha.getDate() + 1);
-      break;
-    case 'semanal':
-      fecha.setDate(fecha.getDate() + 7);
-      break;
-    case 'quincenal':
-      fecha.setDate(fecha.getDate() + 15);
-      break;
-    case 'mensual':
-      fecha.setMonth(fecha.getMonth() + 1);
-      break;
-    default:
-      fecha.setDate(fecha.getDate() + 15);
-  }
-  return fecha;
 }
 
 module.exports = router;

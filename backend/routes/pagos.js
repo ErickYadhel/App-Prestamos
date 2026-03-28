@@ -6,233 +6,44 @@ const router = express.Router();
 
 const db = admin.firestore();
 
-// Función para calcular próxima fecha (mejorada)
-function calcularProximaFecha(fechaBase, frecuencia) {
-  const fecha = new Date(fechaBase);
-  
-  switch (frecuencia) {
-    case 'diario':
-      fecha.setDate(fecha.getDate() + 1);
-      break;
-    case 'semanal':
-      fecha.setDate(fecha.getDate() + 7);
-      break;
-    case 'quincenal':
-      fecha.setDate(fecha.getDate() + 15);
-      break;
-    case 'mensual':
-      fecha.setMonth(fecha.getMonth() + 1);
-      break;
-    default:
-      fecha.setDate(fecha.getDate() + 30);
-  }
-  
-  return fecha;
-}
+// ============================================
+// FUNCIONES AUXILIARES
+// ============================================
 
-// Función para validar datos del pago
 function validarPago(datos) {
-  const { prestamoID, montoTotal, modoCalculo, montoInteres, montoCapital } = datos;
+  const { prestamoID, montoTotal, modoCalculo, montoInteres, montoCapital, montoMora } = datos;
   
   if (!prestamoID) {
     throw new Error('ID de préstamo es requerido');
   }
 
   if (modoCalculo === 'manual') {
-    if ((montoInteres === undefined && montoCapital === undefined) || 
-        (montoInteres <= 0 && montoCapital <= 0)) {
-      throw new Error('Debe especificar al menos interés o capital mayor a 0 en modo manual');
+    const tieneInteres = montoInteres && parseFloat(montoInteres) > 0;
+    const tieneCapital = montoCapital && parseFloat(montoCapital) > 0;
+    const tieneMora = montoMora && parseFloat(montoMora) > 0;
+    
+    if (!tieneInteres && !tieneCapital && !tieneMora) {
+      throw new Error('Debe especificar al menos interés, capital o mora mayor a 0 en modo manual');
     }
   } else {
-    if (!montoTotal || montoTotal <= 0) {
+    if (!montoTotal || parseFloat(montoTotal) <= 0) {
       throw new Error('Monto total debe ser mayor a 0 en modo automático');
     }
   }
 }
 
-// POST /api/pagos - Registrar un pago (automático o manual) - MEJORADO
-router.post('/', async (req, res) => {
-  try {
-    const { 
-      prestamoID, 
-      montoTotal, 
-      nota, 
-      tipoPago, 
-      fechaPago, 
-      modoCalculo, 
-      montoInteres, 
-      montoCapital 
-    } = req.body;
-
-    // Validar datos básicos
-    validarPago({ prestamoID, montoTotal, modoCalculo, montoInteres, montoCapital });
-
-    // Obtener el préstamo
-    const prestamoDoc = await db.collection('prestamos').doc(prestamoID).get();
-    if (!prestamoDoc.exists) {
-      return res.status(404).json({
-        success: false,
-        error: 'Préstamo no encontrado'
-      });
-    }
-
-    const prestamoData = prestamoDoc.data();
-    
-    // Validar que el préstamo esté activo
-    if (prestamoData.estado !== 'activo') {
-      return res.status(400).json({
-        success: false,
-        error: 'No se pueden registrar pagos en préstamos ' + prestamoData.estado
-      });
-    }
-
-    const prestamo = new Prestamo(prestamoData);
-    let distribucion;
-    let pagoData;
-
-    // MODO MANUAL
-    if (modoCalculo === 'manual') {
-      const interes = parseFloat(montoInteres) || 0;
-      const capital = parseFloat(montoCapital) || 0;
-      const montoTotalManual = interes + capital;
-
-      // Validar que no exceda el capital restante
-      if (capital > prestamo.capitalRestante) {
-        return res.status(400).json({
-          success: false,
-          error: `El capital (${capital}) no puede ser mayor al capital restante (${prestamo.capitalRestante})`
-        });
-      }
-
-      distribucion = {
-        interes: interes,
-        capital: capital,
-        resto: 0,
-        montoTotal: montoTotalManual
-      };
-
-      pagoData = {
-        prestamoID,
-        clienteID: prestamo.clienteID,
-        clienteNombre: prestamo.clienteNombre,
-        fechaPago: new Date(fechaPago || new Date()),
-        montoCapital: distribucion.capital,
-        montoInteres: distribucion.interes,
-        tipoPago: tipoPago || 'normal',
-        nota: nota || '',
-        capitalAnterior: prestamo.capitalRestante,
-        capitalNuevo: prestamo.capitalRestante - distribucion.capital,
-        modoManual: true,
-        montoTotal: distribucion.montoTotal
-      };
-
-    } 
-    // MODO AUTOMÁTICO
-    else {
-      // Calcular distribución del pago (interés primero, luego capital) - SISTEMA EYS
-      const interesCalculado = prestamo.calcularInteres();
-      distribucion = prestamo.calcularPagoTotal(parseFloat(montoTotal));
-
-      // Validar que no exceda el capital restante
-      if (distribucion.capital > prestamo.capitalRestante) {
-        distribucion.capital = prestamo.capitalRestante;
-        distribucion.resto = montoTotal - (distribucion.interes + distribucion.capital);
-      }
-
-      pagoData = {
-        prestamoID,
-        clienteID: prestamo.clienteID,
-        clienteNombre: prestamo.clienteNombre,
-        fechaPago: new Date(fechaPago || new Date()),
-        montoCapital: distribucion.capital,
-        montoInteres: distribucion.interes,
-        tipoPago: tipoPago || 'normal',
-        nota: nota || '',
-        capitalAnterior: prestamo.capitalRestante,
-        capitalNuevo: prestamo.capitalRestante - distribucion.capital,
-        modoManual: false,
-        montoTotal: parseFloat(montoTotal)
-      };
-    }
-
-    const pago = new Pago(pagoData);
-    
-    // Validar el pago
-    try {
-      pago.validar();
-    } catch (validationError) {
-      return res.status(400).json({
-        success: false,
-        error: validationError.message
-      });
-    }
-
-    // Actualizar el préstamo
-    const nuevoCapital = prestamo.capitalRestante - distribucion.capital;
-    const fechaPagoDate = new Date(fechaPago || new Date());
-    
-    const actualizacionesPrestamo = {
-      capitalRestante: nuevoCapital,
-      fechaUltimoPago: fechaPagoDate,
-      fechaProximoPago: calcularProximaFecha(fechaPagoDate, prestamo.frecuencia),
-      estado: nuevoCapital <= 0 ? 'completado' : 'activo',
-      fechaActualizacion: new Date()
-    };
-
-    // Si el préstamo se completó, agregar fecha de finalización
-    if (nuevoCapital <= 0) {
-      actualizacionesPrestamo.fechaFinalizacion = new Date();
-    }
-
-    // Transacción para asegurar consistencia
-    const batch = db.batch();
-    
-    // Agregar pago
-    const pagoRef = db.collection('pagos').doc();
-    pago.id = pagoRef.id;
-    batch.set(pagoRef, { ...pago });
-
-    // Actualizar préstamo
-    const prestamoRef = db.collection('prestamos').doc(prestamoID);
-    batch.update(prestamoRef, actualizacionesPrestamo);
-
-    await batch.commit();
-
-    // Si hay resto en modo automático, crear notificación
-    if (distribucion.resto > 0) {
-      await crearNotificacionResto(prestamo, distribucion.resto);
-    }
-
-    res.status(201).json({
-      success: true,
-      data: {
-        pago: pago,
-        prestamoActualizado: actualizacionesPrestamo,
-        distribucion: distribucion,
-        modo: modoCalculo === 'manual' ? 'manual' : 'automatico',
-        mensaje: nuevoCapital <= 0 ? '¡Préstamo completado!' : 'Pago registrado exitosamente'
-      },
-      message: getMensajeExito(modoCalculo, nuevoCapital <= 0)
-    });
-
-  } catch (error) {
-    console.error('Error en registro de pago:', error);
-    res.status(400).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Función auxiliar para mensajes de éxito
-function getMensajeExito(modoCalculo, prestamoCompletado) {
+function getMensajeExito(modoCalculo, prestamoCompletado, tieneMora = false) {
   if (prestamoCompletado) {
     return '¡Pago registrado y préstamo completado exitosamente!';
   }
-  return modoCalculo === 'manual' ? 'Pago manual registrado exitosamente' : 'Pago registrado exitosamente';
+  if (tieneMora) {
+    return 'Pago registrado con mora incluida. El préstamo ha sido regularizado.';
+  }
+  return modoCalculo === 'manual' 
+    ? 'Pago manual registrado exitosamente' 
+    : 'Pago registrado exitosamente';
 }
 
-// Función para crear notificación de resto
 async function crearNotificacionResto(prestamo, resto) {
   try {
     const notificacion = {
@@ -250,43 +61,293 @@ async function crearNotificacionResto(prestamo, resto) {
   }
 }
 
-// GET /api/pagos/prestamo/:prestamoID - Obtener pagos de un préstamo (MEJORADO)
+async function crearNotificacionCompletado(prestamo) {
+  try {
+    const notificacion = {
+      tipo: 'prestamo_completado',
+      destinatario: prestamo.clienteNombre,
+      prestamoID: prestamo.id,
+      mensaje: `¡Felicitaciones! Has completado el pago total de tu préstamo. Gracias por confiar en EYS Inversiones.`,
+      fechaCreacion: new Date(),
+      enviada: false
+    };
+    
+    await db.collection('notificaciones').add(notificacion);
+  } catch (error) {
+    console.error('Error creando notificación de completado:', error);
+  }
+}
+
+// ============================================
+// ENDPOINTS
+// ============================================
+
+// POST /api/pagos - Registrar un pago
+router.post('/', async (req, res) => {
+  try {
+    const { 
+      prestamoID, 
+      montoTotal, 
+      nota, 
+      tipoPago, 
+      fechaPago, 
+      modoCalculo, 
+      montoInteres, 
+      montoCapital,
+      montoMora
+    } = req.body;
+
+    console.log('📝 Registrando pago:', { prestamoID, montoTotal, fechaPago, modoCalculo });
+
+    validarPago({ prestamoID, montoTotal, modoCalculo, montoInteres, montoCapital, montoMora });
+
+    const prestamoDoc = await db.collection('prestamos').doc(prestamoID).get();
+    if (!prestamoDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        error: 'Préstamo no encontrado'
+      });
+    }
+
+    const prestamoData = prestamoDoc.data();
+    
+    if (prestamoData.estado !== 'activo') {
+      return res.status(400).json({
+        success: false,
+        error: `No se pueden registrar pagos en préstamos ${prestamoData.estado}`
+      });
+    }
+
+    const prestamo = new Prestamo({ id: prestamoDoc.id, ...prestamoData });
+    const fechaPagoDate = new Date(fechaPago || new Date());
+    let distribucion;
+    let pagoData;
+
+    if (modoCalculo === 'manual') {
+      const interes = parseFloat(montoInteres) || 0;
+      const capital = parseFloat(montoCapital) || 0;
+      const mora = parseFloat(montoMora) || 0;
+      const montoTotalManual = interes + capital + mora;
+
+      if (capital > prestamo.capitalRestante) {
+        return res.status(400).json({
+          success: false,
+          error: `El capital (RD$ ${capital.toLocaleString()}) no puede ser mayor al capital restante (RD$ ${prestamo.capitalRestante.toLocaleString()})`
+        });
+      }
+
+      distribucion = {
+        interes: interes,
+        capital: capital,
+        mora: mora,
+        restoInteres: 0,
+        nuevoCapital: prestamo.capitalRestante - capital,
+        prestamoCompletado: (prestamo.capitalRestante - capital) <= 0,
+        periodosPagados: 0,
+        diasCubiertos: 0
+      };
+
+      pagoData = {
+        prestamoID,
+        clienteID: prestamo.clienteID,
+        clienteNombre: prestamo.clienteNombre,
+        fechaPago: fechaPagoDate,
+        montoCapital: distribucion.capital,
+        montoInteres: distribucion.interes,
+        montoMora: distribucion.mora,
+        tipoPago: tipoPago || 'normal',
+        nota: nota || '',
+        capitalAnterior: prestamo.capitalRestante,
+        capitalNuevo: distribucion.nuevoCapital,
+        modoManual: true,
+        montoTotal: montoTotalManual,
+        modoCalculo: 'manual',
+        periodosPagados: 0,
+        diasCubiertos: 0
+      };
+
+    } else {
+      distribucion = prestamo.calcularDistribucionPago(parseFloat(montoTotal), fechaPagoDate);
+      
+      pagoData = {
+        prestamoID,
+        clienteID: prestamo.clienteID,
+        clienteNombre: prestamo.clienteNombre,
+        fechaPago: fechaPagoDate,
+        montoCapital: distribucion.capital,
+        montoInteres: distribucion.interes,
+        montoMora: distribucion.mora || 0,
+        tipoPago: tipoPago || 'normal',
+        nota: nota || '',
+        capitalAnterior: prestamo.capitalRestante,
+        capitalNuevo: distribucion.nuevoCapital,
+        modoManual: false,
+        montoTotal: parseFloat(montoTotal),
+        modoCalculo: 'automatico',
+        periodosPagados: distribucion.periodosPagados || 1,
+        diasCubiertos: distribucion.diasCubiertos || 0
+      };
+    }
+
+    const pago = new Pago(pagoData);
+    
+    try {
+      pago.validar();
+    } catch (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: validationError.message
+      });
+    }
+
+    prestamo.aplicarPago(pagoData.montoTotal, fechaPagoDate, distribucion);
+    
+    console.log('✅ Pago aplicado correctamente:');
+    console.log('  - Capital restante:', prestamo.capitalRestante);
+    console.log('  - Nueva fecha próximo pago:', prestamo.fechaProximoPago?.toLocaleDateString());
+    console.log('  - Estado:', prestamo.estado);
+
+    const batch = db.batch();
+    
+    const pagoRef = db.collection('pagos').doc();
+    pago.id = pagoRef.id;
+    batch.set(pagoRef, { ...pago });
+
+    const prestamoRef = db.collection('prestamos').doc(prestamoID);
+    batch.update(prestamoRef, {
+      capitalRestante: prestamo.capitalRestante,
+      estado: prestamo.estado,
+      fechaUltimoPago: prestamo.fechaUltimoPago,
+      fechaProximoPago: prestamo.fechaProximoPago,
+      historialPagos: prestamo.historialPagos,
+      fechaActualizacion: new Date()
+    });
+
+    await batch.commit();
+
+    if (distribucion.restoInteres > 0 && distribucion.restoInteres !== undefined) {
+      await crearNotificacionResto(prestamo, distribucion.restoInteres);
+    }
+
+    if (prestamo.capitalRestante <= 0) {
+      await crearNotificacionCompletado(prestamo);
+    }
+
+    const tieneMora = (distribucion.mora || 0) > 0;
+    const prestamoCompletado = prestamo.capitalRestante <= 0;
+
+    res.status(201).json({
+      success: true,
+      data: {
+        pago: pago,
+        prestamoActualizado: {
+          id: prestamo.id,
+          capitalRestante: prestamo.capitalRestante,
+          estado: prestamo.estado,
+          fechaProximoPago: prestamo.fechaProximoPago,
+          fechaUltimoPago: prestamo.fechaUltimoPago,
+          resumenDeuda: prestamo.obtenerResumenDeuda()
+        },
+        distribucion: distribucion,
+        modo: modoCalculo === 'manual' ? 'manual' : 'automatico',
+        mensaje: getMensajeExito(modoCalculo, prestamoCompletado, tieneMora)
+      },
+      message: getMensajeExito(modoCalculo, prestamoCompletado, tieneMora)
+    });
+
+  } catch (error) {
+    console.error('Error en registro de pago:', error);
+    res.status(400).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// GET /api/pagos/prestamo/:prestamoID - Obtener pagos de un préstamo (CORREGIDO)
 router.get('/prestamo/:prestamoID', async (req, res) => {
   try {
-    const { limit = 50, offset = 0 } = req.query;
+    const { limit = 50 } = req.query;
+    const prestamoID = req.params.prestamoID;
+    
+    console.log('📋 Buscando pagos para préstamo:', prestamoID);
+    
+    // Verificar que el préstamo existe
+    const prestamoDoc = await db.collection('prestamos').doc(prestamoID).get();
+    if (!prestamoDoc.exists) {
+      console.log('❌ Préstamo no encontrado:', prestamoID);
+      return res.status(404).json({
+        success: false,
+        error: 'Préstamo no encontrado'
+      });
+    }
     
     let query = db.collection('pagos')
-      .where('prestamoID', '==', req.params.prestamoID)
+      .where('prestamoID', '==', prestamoID)
       .orderBy('fechaPago', 'desc')
       .limit(parseInt(limit));
 
     const pagosSnapshot = await query.get();
     
+    console.log(`✅ Encontrados ${pagosSnapshot.size} pagos para préstamo ${prestamoID}`);
+    
     const pagos = [];
-    let totalMonto = 0;
-    let totalInteres = 0;
-    let totalCapital = 0;
+    let totalMonto = 0, totalInteres = 0, totalCapital = 0, totalMora = 0;
 
-    pagosSnapshot.forEach(doc => {
-      const pagoData = doc.data();
-      const pago = { 
-        id: doc.id, 
-        ...pagoData,
-        // Formatear fechas para el frontend
-        fechaPagoFormatted: pagoData.fechaPago?.toDate?.().toLocaleDateString('es-DO') || 'N/A'
-      };
-      
-      pagos.push(pago);
-      
-      totalMonto += (pagoData.montoCapital + pagoData.montoInteres);
-      totalInteres += pagoData.montoInteres;
-      totalCapital += pagoData.montoCapital;
-    });
-
-    // Obtener total de pagos para paginación
-    const totalSnapshot = await db.collection('pagos')
-      .where('prestamoID', '==', req.params.prestamoID)
-      .get();
+    for (const doc of pagosSnapshot.docs) {
+      try {
+        const pagoData = doc.data();
+        
+        // Convertir fecha de forma segura
+        let fechaPagoFormatted = 'N/A';
+        let fechaPagoISO = null;
+        
+        if (pagoData.fechaPago) {
+          try {
+            let fechaDate;
+            if (typeof pagoData.fechaPago === 'object') {
+              if (pagoData.fechaPago.toDate && typeof pagoData.fechaPago.toDate === 'function') {
+                fechaDate = pagoData.fechaPago.toDate();
+              } else if (pagoData.fechaPago._seconds !== undefined) {
+                fechaDate = new Date(pagoData.fechaPago._seconds * 1000);
+              } else if (pagoData.fechaPago.seconds !== undefined) {
+                fechaDate = new Date(pagoData.fechaPago.seconds * 1000);
+              } else {
+                fechaDate = new Date(pagoData.fechaPago);
+              }
+            } else if (typeof pagoData.fechaPago === 'string') {
+              fechaDate = new Date(pagoData.fechaPago);
+            } else {
+              fechaDate = new Date(pagoData.fechaPago);
+            }
+            
+            if (!isNaN(fechaDate.getTime())) {
+              fechaPagoFormatted = fechaDate.toLocaleDateString('es-DO');
+              fechaPagoISO = fechaDate.toISOString();
+            }
+          } catch (e) {
+            console.error(`Error formateando fecha para pago ${doc.id}:`, e);
+          }
+        }
+        
+        const pago = {
+          id: doc.id,
+          ...pagoData,
+          fechaPagoFormatted,
+          fechaPagoISO
+        };
+        
+        pagos.push(pago);
+        
+        totalMonto += (pagoData.montoCapital || 0) + (pagoData.montoInteres || 0) + (pagoData.montoMora || 0);
+        totalInteres += pagoData.montoInteres || 0;
+        totalCapital += pagoData.montoCapital || 0;
+        totalMora += pagoData.montoMora || 0;
+        
+      } catch (docError) {
+        console.error(`Error procesando documento ${doc.id}:`, docError);
+      }
+    }
 
     res.json({
       success: true,
@@ -297,22 +358,24 @@ router.get('/prestamo/:prestamoID', async (req, res) => {
           totalMonto: totalMonto,
           totalInteres: totalInteres,
           totalCapital: totalCapital,
-          totalGeneral: totalSnapshot.size
+          totalMora: totalMora
         }
       },
-      count: pagos.length,
-      total: totalSnapshot.size
+      count: pagos.length
     });
+    
   } catch (error) {
-    console.error('Error fetching payments:', error);
+    console.error('❌ Error fetching payments:', error);
+    console.error('Stack trace:', error.stack);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
 
-// GET /api/pagos - Listar todos los pagos (con filtros MEJORADOS)
+// GET /api/pagos - Listar todos los pagos
 router.get('/', async (req, res) => {
   try {
     const { 
@@ -322,12 +385,12 @@ router.get('/', async (req, res) => {
       fechaFin, 
       limit = 50, 
       offset = 0,
-      tipoPago 
+      tipoPago,
+      modoCalculo
     } = req.query;
     
     let query = db.collection('pagos');
 
-    // Aplicar filtros
     if (prestamoID) {
       query = query.where('prestamoID', '==', prestamoID);
     }
@@ -337,16 +400,18 @@ router.get('/', async (req, res) => {
     if (tipoPago) {
       query = query.where('tipoPago', '==', tipoPago);
     }
+    if (modoCalculo) {
+      query = query.where('modoCalculo', '==', modoCalculo);
+    }
     if (fechaInicio && fechaFin) {
       const inicio = new Date(fechaInicio);
       const fin = new Date(fechaFin);
-      fin.setHours(23, 59, 59, 999); // Hasta el final del día
+      fin.setHours(23, 59, 59, 999);
       
       query = query.where('fechaPago', '>=', inicio)
                    .where('fechaPago', '<=', fin);
     }
 
-    // Ordenar por fecha más reciente y aplicar paginación
     query = query.orderBy('fechaPago', 'desc')
                  .limit(parseInt(limit));
 
@@ -356,7 +421,10 @@ router.get('/', async (req, res) => {
     let estadisticas = {
       totalMonto: 0,
       totalInteres: 0,
-      totalCapital: 0
+      totalCapital: 0,
+      totalMora: 0,
+      totalPagosManuales: 0,
+      totalPagosAutomaticos: 0
     };
 
     pagosSnapshot.forEach(doc => {
@@ -364,15 +432,22 @@ router.get('/', async (req, res) => {
       const pagoConFormato = { 
         id: doc.id, 
         ...pagoData,
-        fechaPagoFormatted: pagoData.fechaPago?.toDate?.().toLocaleDateString('es-DO') || 'N/A'
+        fechaPagoFormatted: pagoData.fechaPago?.toDate?.().toLocaleDateString('es-DO') || 'N/A',
+        fechaPagoISO: pagoData.fechaPago?.toDate?.().toISOString() || null
       };
       
       pagos.push(pagoConFormato);
       
-      // Calcular estadísticas
-      estadisticas.totalMonto += (pagoData.montoCapital + pagoData.montoInteres);
-      estadisticas.totalInteres += pagoData.montoInteres;
-      estadisticas.totalCapital += pagoData.montoCapital;
+      estadisticas.totalMonto += (pagoData.montoCapital || 0) + (pagoData.montoInteres || 0) + (pagoData.montoMora || 0);
+      estadisticas.totalInteres += pagoData.montoInteres || 0;
+      estadisticas.totalCapital += pagoData.montoCapital || 0;
+      estadisticas.totalMora += pagoData.montoMora || 0;
+      
+      if (pagoData.modoManual) {
+        estadisticas.totalPagosManuales++;
+      } else {
+        estadisticas.totalPagosAutomaticos++;
+      }
     });
 
     res.json({
@@ -394,7 +469,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/pagos/:id - Obtener un pago específico (NUEVO)
+// GET /api/pagos/:id - Obtener un pago específico
 router.get('/:id', async (req, res) => {
   try {
     const pagoDoc = await db.collection('pagos').doc(req.params.id).get();
@@ -408,20 +483,29 @@ router.get('/:id', async (req, res) => {
 
     const pagoData = pagoDoc.data();
     
-    // Obtener información del préstamo asociado
     const prestamoDoc = await db.collection('prestamos').doc(pagoData.prestamoID).get();
-    const prestamo = prestamoDoc.exists ? prestamoDoc.data() : null;
+    let prestamo = null;
+    
+    if (prestamoDoc.exists) {
+      const prestamoData = prestamoDoc.data();
+      const prestamoObj = new Prestamo({ id: prestamoDoc.id, ...prestamoData });
+      prestamo = {
+        id: prestamoDoc.id,
+        montoPrestado: prestamoData.montoPrestado,
+        interesPercent: prestamoData.interesPercent,
+        frecuencia: prestamoData.frecuencia,
+        capitalRestante: prestamoData.capitalRestante,
+        resumenDeuda: prestamoObj.obtenerResumenDeuda()
+      };
+    }
 
     res.json({
       success: true,
       data: {
         ...pagoData,
-        prestamo: prestamo ? {
-          montoPrestado: prestamo.montoPrestado,
-          interesPercent: prestamo.interesPercent,
-          frecuencia: prestamo.frecuencia
-        } : null,
-        fechaPagoFormatted: pagoData.fechaPago?.toDate?.().toLocaleDateString('es-DO') || 'N/A'
+        prestamo: prestamo,
+        fechaPagoFormatted: pagoData.fechaPago?.toDate?.().toLocaleDateString('es-DO') || 'N/A',
+        fechaPagoISO: pagoData.fechaPago?.toDate?.().toISOString() || null
       }
     });
   } catch (error) {
@@ -433,10 +517,129 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Función para enviar recordatorios automáticos (MEJORADA)
+// DELETE /api/pagos/:id - Eliminar pago (con reversión)
+router.delete('/:id', async (req, res) => {
+  try {
+    const pagoDoc = await db.collection('pagos').doc(req.params.id).get();
+    
+    if (!pagoDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        error: 'Pago no encontrado'
+      });
+    }
+
+    const pago = pagoDoc.data();
+    
+    const prestamoDoc = await db.collection('prestamos').doc(pago.prestamoID).get();
+    if (prestamoDoc.exists) {
+      const prestamo = new Prestamo({ id: prestamoDoc.id, ...prestamoDoc.data() });
+      
+      const nuevoCapital = prestamo.capitalRestante + (pago.montoCapital || 0);
+      const nuevaFechaUltimoPago = prestamo.historialPagos?.length > 1 
+        ? prestamo.historialPagos[prestamo.historialPagos.length - 2]?.fecha 
+        : null;
+      
+      const actualizaciones = {
+        capitalRestante: nuevoCapital,
+        estado: nuevoCapital <= 0 ? 'completado' : 'activo',
+        fechaActualizacion: new Date()
+      };
+      
+      if (nuevaFechaUltimoPago) {
+        actualizaciones.fechaUltimoPago = nuevaFechaUltimoPago;
+      }
+      
+      await db.collection('prestamos').doc(pago.prestamoID).update(actualizaciones);
+    }
+
+    await pagoDoc.ref.delete();
+
+    res.json({
+      success: true,
+      message: 'Pago eliminado exitosamente y préstamo revertido'
+    });
+  } catch (error) {
+    console.error('Error deleting payment:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// POST /api/pagos/recordatorios - Enviar recordatorios manualmente
+router.post('/recordatorios', async (req, res) => {
+  try {
+    await enviarRecordatoriosAutomaticos();
+    res.json({
+      success: true,
+      message: 'Recordatorios enviados exitosamente'
+    });
+  } catch (error) {
+    console.error('Error enviando recordatorios:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// GET /api/pagos/resumen/:clienteID - Resumen de pagos por cliente
+router.get('/resumen/:clienteID', async (req, res) => {
+  try {
+    const { clienteID } = req.params;
+    
+    const pagosSnapshot = await db.collection('pagos')
+      .where('clienteID', '==', clienteID)
+      .orderBy('fechaPago', 'desc')
+      .get();
+    
+    let resumen = {
+      totalPagos: 0,
+      totalCapital: 0,
+      totalInteres: 0,
+      totalMora: 0,
+      ultimoPago: null,
+      pagosPorTipo: {
+        normal: 0,
+        adelantado: 0,
+        mora: 0
+      }
+    };
+    
+    pagosSnapshot.forEach(doc => {
+      const pago = doc.data();
+      resumen.totalPagos++;
+      resumen.totalCapital += pago.montoCapital || 0;
+      resumen.totalInteres += pago.montoInteres || 0;
+      resumen.totalMora += pago.montoMora || 0;
+      
+      if (pago.tipoPago && resumen.pagosPorTipo[pago.tipoPago] !== undefined) {
+        resumen.pagosPorTipo[pago.tipoPago]++;
+      }
+      
+      if (!resumen.ultimoPago || new Date(pago.fechaPago) > new Date(resumen.ultimoPago)) {
+        resumen.ultimoPago = pago.fechaPago;
+      }
+    });
+    
+    res.json({
+      success: true,
+      data: resumen
+    });
+  } catch (error) {
+    console.error('Error fetching payment summary:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Función para enviar recordatorios automáticos
 async function enviarRecordatoriosAutomaticos() {
   try {
-    // Obtener préstamos con pagos próximos (próximos 3 días)
     const hoy = new Date();
     const enTresDias = new Date();
     enTresDias.setDate(hoy.getDate() + 3);
@@ -451,19 +654,21 @@ async function enviarRecordatoriosAutomaticos() {
 
     for (const doc of prestamosSnapshot.docs) {
       const prestamo = doc.data();
+      const prestamoObj = new Prestamo({ id: doc.id, ...prestamo });
+      const resumen = prestamoObj.obtenerResumenDeuda();
+      
       const clienteDoc = await db.collection('clientes').doc(prestamo.clienteID).get();
       
       if (clienteDoc.exists) {
         const cliente = clienteDoc.data();
-        const interes = (prestamo.capitalRestante * prestamo.interesPercent) / 100;
         
-        const mensaje = `Hola ${cliente.nombre}, le recordamos que tiene un pago pendiente de RD$ ${interes.toLocaleString()} correspondiente a los intereses de su préstamo. Capital restante: RD$ ${prestamo.capitalRestante.toLocaleString()}. Próximo pago: ${new Date(prestamo.fechaProximoPago).toLocaleDateString()}. ¡Gracias por su puntualidad! - EYS Inversiones`;
+        const mensaje = `Hola ${cliente.nombre}, le recordamos que tiene un pago pendiente de RD$ ${resumen.interesAdeudado.toLocaleString()} correspondiente a los intereses de su préstamo. 
+Capital restante: RD$ ${prestamo.capitalRestante.toLocaleString()}
+Próximo pago: ${new Date(prestamo.fechaProximoPago).toLocaleDateString()}
+¡Gracias por su puntualidad! - EYS Inversiones`;
         
-        // Aquí integrarías con tu servicio de WhatsApp
         console.log(`📱 Recordatorio para: ${cliente.nombre} - ${cliente.celular}`);
-        console.log(`💬 Mensaje: ${mensaje}`);
         
-        // Crear registro de notificación
         const notificacion = {
           tipo: 'recordatorio_pago',
           destinatario: cliente.nombre,
@@ -472,7 +677,8 @@ async function enviarRecordatoriosAutomaticos() {
           prestamoID: prestamo.id,
           fechaEnvio: new Date(),
           enviada: true,
-          fechaProgramada: hoy
+          fechaProgramada: hoy,
+          resumenDeuda: resumen
         };
 
         await db.collection('notificaciones').add(notificacion);

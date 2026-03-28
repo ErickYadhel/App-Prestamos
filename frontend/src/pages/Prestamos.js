@@ -22,14 +22,22 @@ import {
   FunnelIcon,
   ChartBarIcon,
   ShieldCheckIcon,
-  BellAlertIcon
+  BellAlertIcon,
+  InformationCircleIcon,
+  CalculatorIcon
 } from '@heroicons/react/24/outline';
 import api from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import PrestamoForm from '../components/Prestamos/PrestamoForm';
 import PrestamoDetails from '../components/Prestamos/PrestamoDetails';
 import RegistrarPago from '../components/Prestamos/RegistrarPago';
-import { normalizeFirebaseData, firebaseTimestampToLocalString } from '../utils/firebaseUtils';
+import PrestamosTable from '../components/Prestamos/PrestamosTable';
+import { normalizeFirebaseData, firebaseTimestampToLocalString, formatFecha } from '../utils/firebaseUtils';
+import { 
+  calcularInteresPorDias, 
+  getConfiguracionMora,
+  getDescripcionFrecuencia
+} from '../utils/loanCalculations';
 
 // ============================================
 // COMPONENTE DE BORDE LUMINOSO
@@ -59,7 +67,11 @@ const GlassCard = ({ children, className = '' }) => {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className={`bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-xl shadow-xl border border-red-600/20 hover:border-red-600/40 transition-all duration-300 ${className}`}
+      className={`rounded-xl shadow-xl border border-red-600/20 hover:border-red-600/40 transition-all duration-300 ${
+        theme === 'dark' 
+          ? 'bg-gray-800/80 backdrop-blur-lg' 
+          : 'bg-white shadow-lg'
+      } ${className}`}
     >
       {children}
     </motion.div>
@@ -74,7 +86,6 @@ const PrestamosSkeleton = () => {
   
   return (
     <div className="space-y-6">
-      {/* Header Skeleton */}
       <div className="flex justify-between items-center">
         <div>
           <div className={`h-8 w-48 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
@@ -83,17 +94,14 @@ const PrestamosSkeleton = () => {
         <div className="flex space-x-2">
           <div className={`h-10 w-10 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
           <div className={`h-10 w-10 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
+          <div className={`h-10 w-10 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
         </div>
       </div>
-
-      {/* Stats Skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[1, 2, 3, 4].map(i => (
           <div key={i} className={`h-24 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
         ))}
       </div>
-
-      {/* Table Skeleton */}
       <div className={`h-96 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
     </div>
   );
@@ -111,7 +119,8 @@ const StatsCard = ({ icon: Icon, label, value, subValue, gradient, trend }) => {
     blue: 'from-blue-600 to-blue-800',
     purple: 'from-purple-600 to-purple-800',
     orange: 'from-orange-600 to-orange-800',
-    teal: 'from-teal-600 to-teal-800'
+    teal: 'from-teal-600 to-teal-800',
+    red: 'from-red-600 to-red-800'
   };
 
   return (
@@ -119,33 +128,33 @@ const StatsCard = ({ icon: Icon, label, value, subValue, gradient, trend }) => {
       <motion.div
         onHoverStart={() => setIsHovered(true)}
         onHoverEnd={() => setIsHovered(false)}
-        className={`relative overflow-hidden rounded-xl p-5 ${
+        className={`relative overflow-hidden rounded-xl p-4 sm:p-5 border-2 hover:border-red-600/40 transition-all duration-300 ${
           theme === 'dark' 
             ? 'bg-gray-800/80 border-gray-700' 
-            : 'bg-white border-gray-200'
-        } border-2 hover:border-red-600/40 transition-all duration-300`}
+            : 'bg-white border-gray-200 shadow-md'
+        }`}
       >
         <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${gradientColors[gradient]} opacity-10 rounded-full blur-3xl`} />
         
         <div className="relative flex items-start justify-between">
-          <div>
-            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+          <div className="flex-1 min-w-0">
+            <p className={`text-xs sm:text-sm font-medium truncate ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
               {label}
             </p>
-            <p className={`text-2xl font-bold mt-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+            <p className={`text-xl sm:text-2xl font-bold mt-1 truncate ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
               {value}
             </p>
-            <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'} mt-1`}>
+            <p className={`text-xs truncate ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'} mt-1`}>
               {subValue}
             </p>
           </div>
-          <div className={`p-3 bg-gradient-to-br ${gradientColors[gradient]} rounded-xl shadow-lg`}>
-            <Icon className="h-6 w-6 text-white" />
+          <div className={`p-2 sm:p-3 bg-gradient-to-br ${gradientColors[gradient]} rounded-xl shadow-lg ml-2 flex-shrink-0`}>
+            <Icon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
           </div>
         </div>
         
         {trend && (
-          <div className="absolute bottom-3 right-3 flex items-center space-x-1">
+          <div className="absolute bottom-2 right-2 flex items-center space-x-1">
             <span className={`text-xs ${trend > 0 ? 'text-green-500' : 'text-red-500'}`}>
               {trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%
             </span>
@@ -159,10 +168,28 @@ const StatsCard = ({ icon: Icon, label, value, subValue, gradient, trend }) => {
 // ============================================
 // COMPONENTE DE FILTROS AVANZADOS
 // ============================================
-const AdvancedFilters = ({ isOpen, onClose, onFilterChange }) => {
+const AdvancedFilters = ({ isOpen, onClose, onFilterChange, filters, setFilters }) => {
   const { theme } = useTheme();
+  const [localFilters, setLocalFilters] = useState(filters || {
+    estado: '',
+    rangoMonto: '',
+    frecuencia: '',
+    prioridad: ''
+  });
 
   if (!isOpen) return null;
+
+  const aplicarFiltros = () => {
+    onFilterChange(localFilters);
+    onClose();
+  };
+
+  const limpiarFiltros = () => {
+    const vacio = { estado: '', rangoMonto: '', frecuencia: '', prioridad: '' };
+    setLocalFilters(vacio);
+    onFilterChange(vacio);
+    onClose();
+  };
 
   return (
     <motion.div
@@ -171,32 +198,36 @@ const AdvancedFilters = ({ isOpen, onClose, onFilterChange }) => {
       exit={{ opacity: 0, y: -20 }}
       className="mb-6"
     >
-      <GlassCard>
-        <div className="p-6">
+      <div className={`rounded-xl shadow-xl border border-red-600/20 hover:border-red-600/40 transition-all duration-300 ${
+        theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+      }`}>
+        <div className="p-4 sm:p-6">
           <div className="flex justify-between items-center mb-4">
-            <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+            <h3 className={`text-base sm:text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
               Filtros Avanzados
             </h3>
             <button
               onClick={onClose}
               className={`p-2 rounded-lg transition-colors ${
-                theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                theme === 'dark' ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-600'
               }`}
             >
               <XMarkIcon className="h-5 w-5" />
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+              <label className={`block text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                 Estado
               </label>
               <select
-                className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                value={localFilters.estado}
+                onChange={(e) => setLocalFilters({ ...localFilters, estado: e.target.value })}
+                className={`w-full px-3 sm:px-4 py-2 rounded-lg border-2 text-sm outline-none transition-all ${
                   theme === 'dark'
-                    ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
-                    : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                    ? 'bg-gray-700 border-gray-600 text-white focus:border-red-500'
+                    : 'bg-white border-gray-200 text-gray-800 focus:border-red-500'
                 }`}
               >
                 <option value="">Todos</option>
@@ -207,32 +238,38 @@ const AdvancedFilters = ({ isOpen, onClose, onFilterChange }) => {
             </div>
 
             <div>
-              <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+              <label className={`block text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                 Rango de Monto
               </label>
               <select
-                className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                value={localFilters.rangoMonto}
+                onChange={(e) => setLocalFilters({ ...localFilters, rangoMonto: e.target.value })}
+                className={`w-full px-3 sm:px-4 py-2 rounded-lg border-2 text-sm outline-none transition-all ${
                   theme === 'dark'
-                    ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
-                    : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                    ? 'bg-gray-700 border-gray-600 text-white focus:border-red-500'
+                    : 'bg-white border-gray-200 text-gray-800 focus:border-red-500'
                 }`}
               >
                 <option value="">Todos</option>
                 <option value="0-50000">0 - 50,000</option>
                 <option value="50000-100000">50,000 - 100,000</option>
-                <option value="100000+">100,000+</option>
+                <option value="100000-250000">100,000 - 250,000</option>
+                <option value="250000-500000">250,000 - 500,000</option>
+                <option value="500000+">500,000+</option>
               </select>
             </div>
 
             <div>
-              <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+              <label className={`block text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                 Frecuencia
               </label>
               <select
-                className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                value={localFilters.frecuencia}
+                onChange={(e) => setLocalFilters({ ...localFilters, frecuencia: e.target.value })}
+                className={`w-full px-3 sm:px-4 py-2 rounded-lg border-2 text-sm outline-none transition-all ${
                   theme === 'dark'
-                    ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
-                    : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                    ? 'bg-gray-700 border-gray-600 text-white focus:border-red-500'
+                    : 'bg-white border-gray-200 text-gray-800 focus:border-red-500'
                 }`}
               >
                 <option value="">Todas</option>
@@ -240,18 +277,21 @@ const AdvancedFilters = ({ isOpen, onClose, onFilterChange }) => {
                 <option value="semanal">Semanal</option>
                 <option value="quincenal">Quincenal</option>
                 <option value="mensual">Mensual</option>
+                <option value="personalizado">Personalizado</option>
               </select>
             </div>
 
             <div>
-              <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+              <label className={`block text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                 Prioridad
               </label>
               <select
-                className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
+                value={localFilters.prioridad}
+                onChange={(e) => setLocalFilters({ ...localFilters, prioridad: e.target.value })}
+                className={`w-full px-3 sm:px-4 py-2 rounded-lg border-2 text-sm outline-none transition-all ${
                   theme === 'dark'
-                    ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
-                    : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                    ? 'bg-gray-700 border-gray-600 text-white focus:border-red-500'
+                    : 'bg-white border-gray-200 text-gray-800 focus:border-red-500'
                 }`}
               >
                 <option value="">Todas</option>
@@ -262,29 +302,33 @@ const AdvancedFilters = ({ isOpen, onClose, onFilterChange }) => {
             </div>
           </div>
 
-          <div className="flex justify-end space-x-3 mt-4">
+          <div className="flex flex-wrap justify-end gap-2 mt-4">
             <button
-              onClick={onClose}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              onClick={limpiarFiltros}
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                 theme === 'dark'
                   ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
-              Cancelar
+              Limpiar
             </button>
             <button
-              className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all"
+              onClick={aplicarFiltros}
+              className="px-4 sm:px-6 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg text-xs sm:text-sm font-medium shadow-lg hover:shadow-xl transition-all"
             >
               Aplicar Filtros
             </button>
           </div>
         </div>
-      </GlassCard>
+      </div>
     </motion.div>
   );
 };
 
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
 const Prestamos = () => {
   const [prestamos, setPrestamos] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -292,6 +336,7 @@ const Prestamos = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({ estado: '', rangoMonto: '', frecuencia: '', prioridad: '' });
   const [viewMode, setViewMode] = useState('list');
   const [selectedPrestamo, setSelectedPrestamo] = useState(null);
   const [editingPrestamo, setEditingPrestamo] = useState(null);
@@ -302,12 +347,14 @@ const Prestamos = () => {
     totalCapitalPrestado: 0,
     totalCapitalRecuperado: 0,
     totalInteresGenerado: 0,
+    totalMoraGenerada: 0,
     prestamosActivos: 0,
     prestamosCompletados: 0,
     prestamosMorosos: 0
   });
 
   const { theme } = useTheme();
+  const configMora = getConfiguracionMora();
 
   useEffect(() => {
     fetchPrestamos();
@@ -351,12 +398,29 @@ const Prestamos = () => {
     }
   };
 
-  // Calcular estadísticas detalladas para toma de decisiones
   const calcularEstadisticas = (prestamosData) => {
     const totalPrestamos = prestamosData.length;
     const totalCapitalPrestado = prestamosData.reduce((sum, p) => sum + (p.montoPrestado || 0), 0);
     const totalCapitalRecuperado = prestamosData.reduce((sum, p) => sum + ((p.montoPrestado || 0) - (p.capitalRestante || 0)), 0);
-    const totalInteresGenerado = prestamosData.reduce((sum, p) => sum + calcularInteresTotalGenerado(p), 0);
+    
+    let totalInteresGenerado = 0;
+    let totalMoraGenerada = 0;
+    
+    prestamosData.forEach(p => {
+      totalInteresGenerado += (p.montoPrestado || 0) - (p.capitalRestante || 0);
+      
+      if (p.configuracionMora?.enabled && p.fechaProximoPago) {
+        const hoy = new Date();
+        const fechaProximo = new Date(p.fechaProximoPago);
+        const diasAtraso = Math.max(0, Math.ceil((hoy - fechaProximo) / (1000 * 60 * 60 * 24)));
+        if (diasAtraso > p.configuracionMora.diasGracia) {
+          const interesAdeudado = (p.capitalRestante * p.interesPercent) / 100;
+          const diasMora = diasAtraso - p.configuracionMora.diasGracia;
+          const moraDiaria = (interesAdeudado * p.configuracionMora.porcentaje) / 100 / 30;
+          totalMoraGenerada += moraDiaria * diasMora;
+        }
+      }
+    });
     
     const prestamosActivos = prestamosData.filter(p => p.estado === 'activo').length;
     const prestamosCompletados = prestamosData.filter(p => p.estado === 'completado').length;
@@ -367,51 +431,85 @@ const Prestamos = () => {
       totalCapitalPrestado,
       totalCapitalRecuperado,
       totalInteresGenerado,
+      totalMoraGenerada,
       prestamosActivos,
       prestamosCompletados,
       prestamosMorosos
     });
   };
 
-  // Calcular interés total generado por un préstamo
+  const calcularInteresDiario = (prestamo) => {
+    if (!prestamo.capitalRestante || !prestamo.interesPercent) return 0;
+    return (prestamo.capitalRestante * prestamo.interesPercent) / 100 / 30;
+  };
+
+  const calcularInteresQuincenal = (prestamo) => {
+    return calcularInteresDiario(prestamo) * 15;
+  };
+
   const calcularInteresTotalGenerado = (prestamo) => {
     return (prestamo.montoPrestado || 0) - (prestamo.capitalRestante || 0);
   };
 
-  // Calcular porcentaje de recuperación
   const calcularPorcentajeRecuperacion = (prestamo) => {
     if (!prestamo.montoPrestado) return 0;
     const capitalRecuperado = prestamo.montoPrestado - (prestamo.capitalRestante || 0);
     return (capitalRecuperado / prestamo.montoPrestado) * 100;
   };
 
-  const filteredPrestamos = prestamos.filter(prestamo =>
-    prestamo.clienteNombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    prestamo.id?.includes(searchTerm) ||
-    getCedulaCliente(prestamo)?.includes(searchTerm)
-  );
-
-  // Calcular intereses según frecuencia
-  const calcularInteresQuincenal = (prestamo) => {
-    return (prestamo.capitalRestante * prestamo.interesPercent) / 100;
-  };
-
-  const calcularInteresMensual = (prestamo) => {
-    const interesQuincenal = calcularInteresQuincenal(prestamo);
-    return interesQuincenal * 2;
-  };
-
-  const calcularCapitalMasIntereses = (prestamo) => {
-    return prestamo.capitalRestante + calcularInteresQuincenal(prestamo);
-  };
-
-  // Calcular ROI aproximado del préstamo
   const calcularROI = (prestamo) => {
     const interesGenerado = calcularInteresTotalGenerado(prestamo);
     const capitalInvertido = prestamo.montoPrestado;
     if (!capitalInvertido) return 0;
     return (interesGenerado / capitalInvertido) * 100;
   };
+
+  const calcularDiasAtraso = (prestamo) => {
+    if (!prestamo.fechaProximoPago) return 0;
+    const hoy = new Date();
+    const fechaProximo = new Date(prestamo.fechaProximoPago);
+    return Math.max(0, Math.ceil((hoy - fechaProximo) / (1000 * 60 * 60 * 24)));
+  };
+
+  const getFrecuenciaTexto = (prestamo) => {
+    const config = {
+      diaPago: prestamo.diaPagoPersonalizado,
+      diaSemana: prestamo.diaSemana,
+      fechasPersonalizadas: prestamo.fechasPersonalizadas
+    };
+    return getDescripcionFrecuencia(prestamo.frecuencia, config);
+  };
+
+  const aplicarFiltros = (nuevosFiltros) => {
+    setFilters(nuevosFiltros);
+  };
+
+  const filteredPrestamos = prestamos.filter(prestamo => {
+    const matchSearch = prestamo.clienteNombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      prestamo.id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      getCedulaCliente(prestamo)?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    if (!matchSearch) return false;
+    
+    if (filters.estado && prestamo.estado !== filters.estado) return false;
+    if (filters.frecuencia && prestamo.frecuencia !== filters.frecuencia) return false;
+    
+    if (filters.rangoMonto) {
+      const [min, max] = filters.rangoMonto.split('-').map(Number);
+      if (max) {
+        if (prestamo.montoPrestado < min || prestamo.montoPrestado > max) return false;
+      } else {
+        if (prestamo.montoPrestado < min) return false;
+      }
+    }
+    
+    if (filters.prioridad) {
+      const prioridad = getPrioridadPrestamo(prestamo);
+      if (prioridad !== filters.prioridad) return false;
+    }
+    
+    return true;
+  });
 
   const handleCreatePrestamo = () => {
     setEditingPrestamo(null);
@@ -428,9 +526,40 @@ const Prestamos = () => {
     setViewMode('details');
   };
 
-  const handleRegistrarPago = (prestamo) => {
+  const handleRegistrarPago = (prestamo, callback) => {
     setSelectedPrestamo(prestamo);
     setViewMode('pago');
+    if (callback) {
+      window.pagoCallback = callback;
+    }
+  };
+
+  const handlePagoRegistrado = async (prestamoActualizado) => {
+    console.log('🔄 Actualizando lista de préstamos después de pago...');
+    
+    if (prestamoActualizado) {
+      setPrestamos(prevPrestamos => 
+        prevPrestamos.map(p => p.id === prestamoActualizado.id ? prestamoActualizado : p)
+      );
+      const nuevosPrestamos = prestamos.map(p => 
+        p.id === prestamoActualizado.id ? prestamoActualizado : p
+      );
+      calcularEstadisticas(nuevosPrestamos);
+      console.log('✅ Préstamo actualizado:', {
+        id: prestamoActualizado.id,
+        capitalRestante: prestamoActualizado.capitalRestante,
+        fechaProximoPago: prestamoActualizado.fechaProximoPago
+      });
+    } else {
+      await fetchPrestamos();
+    }
+    
+    if (window.pagoCallback) {
+      window.pagoCallback();
+      window.pagoCallback = null;
+    }
+    
+    handleBackToList();
   };
 
   const handleEnviarWhatsApp = (prestamo) => {
@@ -442,15 +571,25 @@ const Prestamos = () => {
 
     const interesQuincenal = calcularInteresQuincenal(prestamo);
     const porcentajeRecuperacion = calcularPorcentajeRecuperacion(prestamo);
+    const diasAtraso = calcularDiasAtraso(prestamo);
     
-    const mensaje = `Hola ${prestamo.clienteNombre}, le recordamos que tiene un pago pendiente de RD$ ${interesQuincenal.toLocaleString()} correspondiente a los intereses de su préstamo. 
+    let mensaje = `Hola ${prestamo.clienteNombre}, le recordamos que tiene un pago pendiente de RD$ ${interesQuincenal.toLocaleString()} correspondiente a los intereses de su préstamo. 
 
 📊 Resumen de su préstamo:
 • Capital restante: RD$ ${prestamo.capitalRestante?.toLocaleString()}
 • Progreso: ${porcentajeRecuperacion.toFixed(1)}% pagado
-• Próximo pago: ${calcularProximoPago(prestamo)}
+• Próximo pago: ${formatFecha(prestamo.fechaProximoPago)}`;
 
-¡Gracias por su puntualidad! 🎯
+    if (diasAtraso > 0) {
+      mensaje += `\n⚠️ Tiene ${diasAtraso} días de atraso.`;
+      if (prestamo.configuracionMora?.enabled) {
+        const interesDiario = calcularInteresDiario(prestamo);
+        const mora = interesDiario * diasAtraso * (prestamo.configuracionMora.porcentaje / 100);
+        mensaje += ` Mora: RD$ ${mora.toLocaleString()}`;
+      }
+    }
+    
+    mensaje += `\n\n¡Gracias por su puntualidad! 🎯
 - EYS Inversiones`;
     
     const mensajeCodificado = encodeURIComponent(mensaje);
@@ -463,7 +602,12 @@ const Prestamos = () => {
     setViewMode('list');
     setSelectedPrestamo(null);
     setEditingPrestamo(null);
-    fetchPrestamos();
+  };
+
+  const handleRefresh = async () => {
+    setError('');
+    await fetchPrestamos();
+    await fetchClientes();
   };
 
   const handleSavePrestamo = async (prestamoData) => {
@@ -478,6 +622,7 @@ const Prestamos = () => {
       }
 
       if (response.success) {
+        await fetchPrestamos();
         handleBackToList();
       } else {
         throw new Error(response.error || `Error al ${editingPrestamo ? 'actualizar' : 'crear'} el préstamo`);
@@ -542,48 +687,18 @@ const Prestamos = () => {
     const Icon = estado.icon;
 
     return (
-      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border-2 ${estado.color}`}>
+      <span className={`inline-flex items-center px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-xs font-medium border-2 ${estado.color}`}>
         <Icon className="h-3 w-3 mr-1" />
         {estado.text}
       </span>
     );
   };
 
-  const calcularProximoPago = (prestamo) => {
-    if (!prestamo.fechaUltimoPago) {
-      return prestamo.fechaProximoPago ? 
-        firebaseTimestampToLocalString(prestamo.fechaProximoPago) : 
-        'No definido';
-    }
-    
-    const ultimaFecha = prestamo.fechaUltimoPago instanceof Date ? prestamo.fechaUltimoPago : new Date(prestamo.fechaUltimoPago);
-    let proximaFecha = new Date(ultimaFecha);
-    
-    switch (prestamo.frecuencia) {
-      case 'diario':
-        proximaFecha.setDate(proximaFecha.getDate() + 1);
-        break;
-      case 'semanal':
-        proximaFecha.setDate(proximaFecha.getDate() + 7);
-        break;
-      case 'quincenal':
-        proximaFecha.setDate(proximaFecha.getDate() + 15);
-        break;
-      case 'mensual':
-        proximaFecha.setMonth(proximaFecha.getMonth() + 1);
-        break;
-    }
-    
-    return proximaFecha.toLocaleDateString();
-  };
-
-  // Obtener cédula del cliente
   const getCedulaCliente = (prestamo) => {
     const cliente = clientes.find(c => c.id === prestamo.clienteID);
     return cliente?.cedula || 'N/A';
   };
 
-  // Obtener información de contacto del cliente
   const getContactoCliente = (prestamo) => {
     const cliente = clientes.find(c => c.id === prestamo.clienteID);
     return {
@@ -592,18 +707,17 @@ const Prestamos = () => {
     };
   };
 
-  // Determinar prioridad del préstamo (para toma de decisiones)
   const getPrioridadPrestamo = (prestamo) => {
     const porcentajeRecuperacion = calcularPorcentajeRecuperacion(prestamo);
-    const diasDesdeUltimoPago = prestamo.fechaUltimoPago ? 
-      Math.floor((new Date() - new Date(prestamo.fechaUltimoPago)) / (1000 * 60 * 60 * 24)) : 30;
+    const diasAtraso = calcularDiasAtraso(prestamo);
     
+    if (diasAtraso > 15) return 'alta';
     if (porcentajeRecuperacion > 80) return 'alta';
-    if (diasDesdeUltimoPago > 15) return 'media';
+    if (diasAtraso > 5) return 'media';
+    if (porcentajeRecuperacion > 50) return 'media';
     return 'baja';
   };
 
-  // Render different views
   if (viewMode === 'form') {
     return (
       <PrestamoForm
@@ -623,8 +737,9 @@ const Prestamos = () => {
         clientes={clientes}
         onBack={handleBackToList}
         onEdit={() => handleEditPrestamo(selectedPrestamo)}
-        onRegistrarPago={() => handleRegistrarPago(selectedPrestamo)}
+        onRegistrarPago={(prestamo) => handleRegistrarPago(prestamo, null)}
         onEnviarWhatsApp={handleEnviarWhatsApp}
+        onPagoRegistrado={handlePagoRegistrado}
       />
     );
   }
@@ -633,8 +748,8 @@ const Prestamos = () => {
     return (
       <RegistrarPago
         prestamo={selectedPrestamo}
-        onClose={handleBackToList}
-        onPagoRegistrado={handleBackToList}
+        onClose={() => handlePagoRegistrado(null)}
+        onPagoRegistrado={handlePagoRegistrado}
       />
     );
   }
@@ -644,25 +759,27 @@ const Prestamos = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header Mejorado */}
+    <div className="space-y-4 sm:space-y-6">
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="relative overflow-hidden"
       >
         <div className="absolute inset-0 bg-gradient-to-r from-red-600/20 to-red-800/20 rounded-2xl blur-3xl"></div>
-        <div className={`relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl shadow-2xl p-6 border border-red-600/20`}>
+        <div className={`relative rounded-2xl shadow-2xl p-4 sm:p-6 border border-red-600/20 ${
+          theme === 'dark' ? 'bg-gray-800/80 backdrop-blur-xl' : 'bg-white'
+        }`}>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-gradient-to-br from-red-600 to-red-800 rounded-xl shadow-lg">
-                <SparklesIcon className="h-6 w-6 text-white" />
+            <div className="flex items-center space-x-3 sm:space-x-4">
+              <div className="p-2 sm:p-3 bg-gradient-to-br from-red-600 to-red-800 rounded-xl shadow-lg">
+                <SparklesIcon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
               <div>
-                <h1 className={`text-2xl sm:text-3xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                <h1 className={`text-xl sm:text-2xl lg:text-3xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
                   Préstamos
                 </h1>
-                <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                <p className={`text-xs sm:text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
                   Dashboard completo para toma de decisiones
                 </p>
               </div>
@@ -673,78 +790,95 @@ const Prestamos = () => {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setShowFilters(!showFilters)}
-                className={`p-3 rounded-lg transition-all ${
+                className={`p-2 sm:p-3 rounded-lg transition-all ${
                   showFilters
                     ? 'bg-red-600 text-white'
                     : theme === 'dark'
-                    ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
                 title="Filtros avanzados"
               >
-                <FunnelIcon className="h-5 w-5" />
+                <FunnelIcon className="h-4 w-4 sm:h-5 sm:w-5" />
               </motion.button>
 
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setShowSearch(!showSearch)}
-                className={`p-3 rounded-lg transition-all ${
+                className={`p-2 sm:p-3 rounded-lg transition-all ${
                   showSearch
                     ? 'bg-red-600 text-white'
                     : theme === 'dark'
-                    ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
                 title="Buscar préstamos"
               >
-                <MagnifyingGlassIcon className="h-5 w-5" />
+                <MagnifyingGlassIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleRefresh}
+                className={`p-2 sm:p-3 rounded-lg transition-all ${
+                  theme === 'dark'
+                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                title="Actualizar datos"
+              >
+                <ArrowPathIcon className="h-4 w-4 sm:h-5 sm:w-5" />
               </motion.button>
 
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={handleCreatePrestamo}
-                className="p-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg shadow-lg hover:shadow-xl transition-all"
+                className="p-2 sm:p-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg shadow-lg hover:shadow-xl transition-all"
                 title="Nuevo préstamo"
               >
-                <PlusIcon className="h-5 w-5" />
+                <PlusIcon className="h-4 w-4 sm:h-5 sm:w-5" />
               </motion.button>
             </div>
           </div>
         </div>
       </motion.div>
 
-      {/* Mensaje de error */}
+      {/* Mensajes de error */}
       <AnimatePresence>
         {error && (
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className={`p-4 rounded-xl border-2 flex items-start space-x-3 ${
+            className={`p-3 sm:p-4 rounded-xl border-2 flex items-start space-x-3 ${
               theme === 'dark'
                 ? 'bg-red-900/30 border-red-700 text-red-400'
                 : 'bg-red-50 border-red-200 text-red-700'
             }`}
           >
             <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0 mt-0.5" />
-            <p className="text-sm">{error}</p>
+            <p className="text-xs sm:text-sm">{error}</p>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Filtros Avanzados */}
+      {/* Filtros avanzados */}
       <AnimatePresence>
         {showFilters && (
           <AdvancedFilters
             isOpen={showFilters}
             onClose={() => setShowFilters(false)}
+            onFilterChange={aplicarFiltros}
+            filters={filters}
+            setFilters={setFilters}
           />
         )}
       </AnimatePresence>
 
-      {/* Search Bar */}
+      {/* Barra de búsqueda */}
       <AnimatePresence>
         {showSearch && (
           <motion.div
@@ -752,19 +886,21 @@ const Prestamos = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
           >
-            <GlassCard>
-              <div className="p-4">
+            <div className={`rounded-xl shadow-xl border border-red-600/20 hover:border-red-600/40 transition-all duration-300 ${
+              theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+            }`}>
+              <div className="p-3 sm:p-4">
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <MagnifyingGlassIcon className={`h-5 w-5 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} />
+                    <MagnifyingGlassIcon className={`h-4 w-4 sm:h-5 sm:w-5 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} />
                   </div>
                   <input
                     type="text"
                     placeholder="Buscar por cliente, cédula o ID..."
-                    className={`w-full pl-10 pr-10 py-3 rounded-lg border-2 outline-none transition-all ${
+                    className={`w-full pl-9 sm:pl-10 pr-9 sm:pr-10 py-2 sm:py-3 rounded-lg border-2 outline-none transition-all text-sm ${
                       theme === 'dark'
-                        ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
-                        : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                        ? 'bg-gray-700 border-gray-600 text-white focus:border-red-500 placeholder-gray-400'
+                        : 'bg-white border-gray-200 text-gray-800 focus:border-red-500 placeholder-gray-400'
                     }`}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -775,18 +911,18 @@ const Prestamos = () => {
                       onClick={() => setSearchTerm('')}
                       className="absolute inset-y-0 right-0 pr-3 flex items-center"
                     >
-                      <XMarkIcon className={`h-5 w-5 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} hover:text-red-600 transition-colors`} />
+                      <XMarkIcon className={`h-4 w-4 sm:h-5 sm:w-5 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} hover:text-red-600 transition-colors`} />
                     </button>
                   )}
                 </div>
               </div>
-            </GlassCard>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Stats Summary MEJORADO */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatsCard
           icon={BanknotesIcon}
           label="Capital Invertido"
@@ -820,299 +956,101 @@ const Prestamos = () => {
         />
       </div>
 
-      {/* Quick Actions Bar */}
-      <GlassCard>
-        <div className="p-4">
+      {/* Acciones rápidas */}
+      <div className={`rounded-xl shadow-xl border border-red-600/20 hover:border-red-600/40 transition-all duration-300 ${
+        theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+      }`}>
+        <div className="p-3 sm:p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`text-sm font-medium mr-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+            <span className={`text-xs sm:text-sm font-medium mr-1 sm:mr-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
               Acciones rápidas:
             </span>
-            <button className="px-3 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-xs hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+            <button 
+              onClick={() => setFilters({ ...filters, estado: '' })}
+              className={`px-2 sm:px-3 py-1 rounded-full text-xs transition-colors ${
+                theme === 'dark'
+                  ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
               Todos ({stats.totalPrestamos})
             </button>
-            <button className="px-3 py-1 bg-green-200 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs hover:bg-green-300 dark:hover:bg-green-800/50 transition-colors">
+            <button 
+              onClick={() => setFilters({ ...filters, estado: 'activo' })}
+              className={`px-2 sm:px-3 py-1 rounded-full text-xs transition-colors ${
+                theme === 'dark'
+                  ? 'bg-green-900/30 text-green-400 hover:bg-green-800/50'
+                  : 'bg-green-100 text-green-700 hover:bg-green-200'
+              }`}
+            >
               Activos ({stats.prestamosActivos})
             </button>
-            <button className="px-3 py-1 bg-red-200 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full text-xs hover:bg-red-300 dark:hover:bg-red-800/50 transition-colors">
+            <button 
+              onClick={() => setFilters({ ...filters, estado: 'moroso' })}
+              className={`px-2 sm:px-3 py-1 rounded-full text-xs transition-colors ${
+                theme === 'dark'
+                  ? 'bg-red-900/30 text-red-400 hover:bg-red-800/50'
+                  : 'bg-red-100 text-red-700 hover:bg-red-200'
+              }`}
+            >
               Morosos ({stats.prestamosMorosos})
+            </button>
+            <button 
+              onClick={() => setFilters({ ...filters, prioridad: 'alta' })}
+              className={`px-2 sm:px-3 py-1 rounded-full text-xs transition-colors ${
+                theme === 'dark'
+                  ? 'bg-yellow-900/30 text-yellow-400 hover:bg-yellow-800/50'
+                  : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+              }`}
+            >
+              Alta Prioridad
             </button>
           </div>
         </div>
-      </GlassCard>
+      </div>
 
-      {/* Prestamos Table MEJORADA */}
-      <GlassCard>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className={theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}>
-              <tr>
-                {['Cliente / Contacto', 'Inversión', 'Progreso', 'Rentabilidad', 'Próximo Pago', 'Estado', 'Acciones'].map((header, index) => (
-                  <th
-                    key={index}
-                    className="px-4 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                  >
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className={`divide-y divide-gray-200 dark:divide-gray-700 ${
-              theme === 'dark' ? 'bg-gray-800/50' : 'bg-white'
-            }`}>
-              <AnimatePresence>
-                {filteredPrestamos.map((prestamo) => {
-                  const contacto = getContactoCliente(prestamo);
-                  const porcentajeRecuperacion = calcularPorcentajeRecuperacion(prestamo);
-                  const roi = calcularROI(prestamo);
-                  const prioridad = getPrioridadPrestamo(prestamo);
-                  
-                  return (
-                    <motion.tr
-                      key={prestamo.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      onHoverStart={() => setHoveredRow(prestamo.id)}
-                      onHoverEnd={() => setHoveredRow(null)}
-                      className={`cursor-pointer transition-all duration-300 ${
-                        hoveredRow === prestamo.id
-                          ? theme === 'dark'
-                            ? 'bg-gray-700/50'
-                            : 'bg-gray-100'
-                          : ''
-                      } ${
-                        prioridad === 'alta' 
-                          ? theme === 'dark'
-                            ? 'bg-green-900/20'
-                            : 'bg-green-50'
-                          : prioridad === 'media'
-                          ? theme === 'dark'
-                            ? 'bg-yellow-900/20'
-                            : 'bg-yellow-50'
-                          : ''
-                      }`}
-                      onClick={() => handleViewPrestamo(prestamo)}
-                    >
-                      <td className="px-4 py-4">
-                        <div className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                          {prestamo.clienteNombre}
-                        </div>
-                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                          {getCedulaCliente(prestamo)}
-                        </div>
-                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1 flex items-center`}>
-                          <span className="mr-2">📞</span> {contacto.celular}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                          RD$ {prestamo.montoPrestado?.toLocaleString()}
-                        </div>
-                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                          Restante: RD$ {prestamo.capitalRestante?.toLocaleString()}
-                        </div>
-                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
-                          {prestamo.frecuencia} • {prestamo.interesPercent}%
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                            <motion.div 
-                              initial={{ width: 0 }}
-                              animate={{ width: `${Math.min(porcentajeRecuperacion, 100)}%` }}
-                              transition={{ duration: 1 }}
-                              className={`h-full rounded-full ${
-                                porcentajeRecuperacion > 66 
-                                  ? 'bg-green-600' 
-                                  : porcentajeRecuperacion > 33 
-                                  ? 'bg-yellow-600' 
-                                  : 'bg-red-600'
-                              }`}
-                            />
-                          </div>
-                          <span className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                            {porcentajeRecuperacion.toFixed(1)}%
-                          </span>
-                        </div>
-                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
-                          RD$ {(prestamo.montoPrestado - prestamo.capitalRestante).toLocaleString()} pagado
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                          {roi.toFixed(1)}% ROI
-                        </div>
-                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                          RD$ {calcularInteresTotalGenerado(prestamo).toLocaleString()}
-                        </div>
-                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
-                          Quincena: RD$ {calcularInteresQuincenal(prestamo).toLocaleString()}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className={`text-sm ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                          {calcularProximoPago(prestamo)}
-                        </div>
-                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                          {prestamo.frecuencia}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        {getEstadoBadge(prestamo)}
-                        {prioridad === 'alta' && (
-                          <div className="flex items-center mt-1 text-xs text-green-600 dark:text-green-400">
-                            <BellAlertIcon className="h-3 w-3 mr-1" />
-                            Alta prioridad
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-4 text-right text-sm font-medium">
-                        <div className="flex justify-end space-x-1">
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEnviarWhatsApp(prestamo);
-                            }}
-                            className={`p-2 rounded-lg transition-colors ${
-                              theme === 'dark'
-                                ? 'hover:bg-gray-700 text-green-400'
-                                : 'hover:bg-green-50 text-green-600'
-                            }`}
-                            title="Enviar recordatorio WhatsApp"
-                          >
-                            <ChatBubbleLeftIcon className="h-4 w-4" />
-                          </motion.button>
-                          
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleViewPrestamo(prestamo);
-                            }}
-                            className={`p-2 rounded-lg transition-colors ${
-                              theme === 'dark'
-                                ? 'hover:bg-gray-700 text-blue-400'
-                                : 'hover:bg-blue-50 text-blue-600'
-                            }`}
-                            title="Ver análisis detallado"
-                          >
-                            <EyeIcon className="h-4 w-4" />
-                          </motion.button>
-                          
-                          {prestamo.estado === 'activo' && (
-                            <motion.button
-                              whileHover={{ scale: 1.1 }}
-                              whileTap={{ scale: 0.9 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRegistrarPago(prestamo);
-                              }}
-                              className={`p-2 rounded-lg transition-colors ${
-                                theme === 'dark'
-                                  ? 'hover:bg-gray-700 text-green-400'
-                                  : 'hover:bg-green-50 text-green-600'
-                              }`}
-                              title="Registrar pago"
-                            >
-                              <CurrencyDollarIcon className="h-4 w-4" />
-                            </motion.button>
-                          )}
-                          
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditPrestamo(prestamo);
-                            }}
-                            className={`p-2 rounded-lg transition-colors ${
-                              theme === 'dark'
-                                ? 'hover:bg-gray-700 text-yellow-400'
-                                : 'hover:bg-yellow-50 text-yellow-600'
-                            }`}
-                            title="Editar préstamo"
-                          >
-                            <PencilIcon className="h-4 w-4" />
-                          </motion.button>
-                          
-                          {prestamo.estado === 'activo' && (
-                            <motion.button
-                              whileHover={{ scale: 1.1 }}
-                              whileTap={{ scale: 0.9 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeletePrestamo(prestamo.id);
-                              }}
-                              className={`p-2 rounded-lg transition-colors ${
-                                theme === 'dark'
-                                  ? 'hover:bg-gray-700 text-red-400'
-                                  : 'hover:bg-red-50 text-red-600'
-                              }`}
-                              title="Eliminar préstamo"
-                            >
-                              <TrashIcon className="h-4 w-4" />
-                            </motion.button>
-                          )}
-                        </div>
-                      </td>
-                    </motion.tr>
-                  );
-                })}
-              </AnimatePresence>
-            </tbody>
-          </table>
+      {/* Tabla de préstamos */}
+      <div className={`rounded-xl shadow-xl border border-red-600/20 hover:border-red-600/40 transition-all duration-300 ${
+        theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+      }`}>
+        <PrestamosTable
+          prestamos={filteredPrestamos}
+          onView={handleViewPrestamo}
+          onEdit={handleEditPrestamo}
+          onRegistrarPago={handleRegistrarPago}
+          onWhatsApp={handleEnviarWhatsApp}
+          calcularPorcentajeRecuperacion={calcularPorcentajeRecuperacion}
+          calcularDiasAtraso={calcularDiasAtraso}
+          getFrecuenciaTexto={getFrecuenciaTexto}
+          getCedulaCliente={getCedulaCliente}
+          getContactoCliente={getContactoCliente}
+          configMora={configMora}
+        />
+      </div>
 
-          {filteredPrestamos.length === 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-12"
-            >
-              <div className={`text-6xl mb-4 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-300'}`}>📊</div>
-              <p className={`text-lg font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                {searchTerm ? 'No se encontraron préstamos' : 'No hay préstamos registrados'}
-              </p>
-              {!searchTerm && (
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleCreatePrestamo}
-                  className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all inline-flex items-center space-x-2"
-                >
-                  <PlusIcon className="h-5 w-5" />
-                  <span>Crear Primer Préstamo</span>
-                </motion.button>
-              )}
-            </motion.div>
-          )}
-        </div>
-      </GlassCard>
-
-      {/* Resumen Ejecutivo MEJORADO */}
+      {/* Resumen ejecutivo */}
       {filteredPrestamos.length > 0 && (
-        <GlassCard>
-          <div className="p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="p-2 bg-gradient-to-br from-purple-600 to-purple-800 rounded-lg shadow-lg">
-                <RocketLaunchIcon className="h-5 w-5 text-white" />
+        <div className={`rounded-xl shadow-xl border border-red-600/20 hover:border-red-600/40 transition-all duration-300 ${
+          theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+        }`}>
+          <div className="p-4 sm:p-6">
+            <div className="flex items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4">
+              <div className="p-1.5 sm:p-2 bg-gradient-to-br from-purple-600 to-purple-800 rounded-lg shadow-lg">
+                <RocketLaunchIcon className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
               </div>
-              <h3 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+              <h3 className={`text-base sm:text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
                 Resumen Ejecutivo
               </h3>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className={`p-4 rounded-lg border-2 ${
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className={`p-3 sm:p-4 rounded-lg border-2 ${
                 theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
               }`}>
-                <p className={`text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                <p className={`text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
                   Préstamos de Alta Prioridad
                 </p>
-                <p className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                <p className={`text-xl sm:text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
                   {filteredPrestamos.filter(p => getPrioridadPrestamo(p) === 'alta').length}
                 </p>
                 <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
@@ -1120,13 +1058,13 @@ const Prestamos = () => {
                 </p>
               </div>
 
-              <div className={`p-4 rounded-lg border-2 ${
+              <div className={`p-3 sm:p-4 rounded-lg border-2 ${
                 theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
               }`}>
-                <p className={`text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                <p className={`text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
                   Interés Quincenal Total
                 </p>
-                <p className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                <p className={`text-xl sm:text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
                   RD$ {filteredPrestamos.reduce((sum, p) => sum + calcularInteresQuincenal(p), 0).toLocaleString()}
                 </p>
                 <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
@@ -1134,13 +1072,13 @@ const Prestamos = () => {
                 </p>
               </div>
 
-              <div className={`p-4 rounded-lg border-2 ${
+              <div className={`p-3 sm:p-4 rounded-lg border-2 ${
                 theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
               }`}>
-                <p className={`text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                <p className={`text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
                   ROI Promedio
                 </p>
-                <p className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                <p className={`text-xl sm:text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
                   {filteredPrestamos.length > 0 ? 
                     (filteredPrestamos.reduce((sum, p) => sum + calcularROI(p), 0) / filteredPrestamos.length).toFixed(1) : 0
                   }%
@@ -1151,7 +1089,7 @@ const Prestamos = () => {
               </div>
             </div>
           </div>
-        </GlassCard>
+        </div>
       )}
     </div>
   );

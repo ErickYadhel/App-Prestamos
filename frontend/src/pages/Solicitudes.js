@@ -906,6 +906,13 @@ const Solicitudes = () => {
   };
 
   const handleAprobarSolicitud = (solicitud) => {
+    console.log('🚀 [Solicitudes] handleAprobarSolicitud llamado');
+    console.log('📋 Solicitud a aprobar:', {
+      id: solicitud.id,
+      cliente: solicitud.clienteNombre,
+      estado: solicitud.estado,
+      monto: solicitud.montoSolicitado
+    });
     setSolicitudParaAprobar(solicitud);
   };
 
@@ -1636,7 +1643,7 @@ Puede revisar la solicitud en el sistema.
                       {header}
                     </th>
                   ))}
-                </tr>
+                 </tr>
               </thead>
               <tbody className={`divide-y divide-gray-200 dark:divide-gray-700 ${
                 theme === 'dark' ? 'bg-gray-800/50' : 'bg-white'
@@ -1686,7 +1693,7 @@ Puede revisar la solicitud en el sistema.
                               Ingreso: {new Date(solicitud.fechaIngreso).toLocaleDateString()}
                             </div>
                           )}
-                        </td>
+                         </td>
                         <td className="px-6 py-4">
                           <div className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                             RD$ {safeToLocaleString(solicitud.montoSolicitado)}
@@ -1705,7 +1712,7 @@ Puede revisar la solicitud en el sistema.
                               🏦 {solicitud.bancoCliente}
                             </div>
                           )}
-                        </td>
+                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center space-x-2 mb-2">
                             <span className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -1728,7 +1735,7 @@ Puede revisar la solicitud en el sistema.
                               ))}
                             </div>
                           )}
-                        </td>
+                         </td>
                         <td className="px-6 py-4">
                           <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
                             {solicitud.empleadoNombre || 'N/A'}
@@ -1737,7 +1744,7 @@ Puede revisar la solicitud en el sistema.
                             <CalendarIcon className="h-3 w-3 mr-1" />
                             {safeFirebaseTimestamp(solicitud.fechaSolicitud)}
                           </div>
-                        </td>
+                         </td>
                         <td className="px-6 py-4">
                           {getEstadoBadge(solicitud)}
                           {solicitud.fechaDecision && (
@@ -1745,7 +1752,7 @@ Puede revisar la solicitud en el sistema.
                               {safeFirebaseTimestamp(solicitud.fechaDecision)}
                             </div>
                           )}
-                        </td>
+                         </td>
                         <td className="px-6 py-4 text-right text-sm font-medium">
                           <div className="flex justify-end space-x-1">
                             <button
@@ -1810,7 +1817,7 @@ Puede revisar la solicitud en el sistema.
                               </>
                             )}
                           </div>
-                        </td>
+                         </td>
                       </motion.tr>
                     );
                   })}
@@ -1848,9 +1855,21 @@ Puede revisar la solicitud en el sistema.
         {solicitudParaAprobar && (
           <AprobarSolicitudModal
             solicitud={solicitudParaAprobar}
-            onClose={() => setSolicitudParaAprobar(null)}
-            onAprobado={handleBackToList}
-            onError={setError}
+            onClose={() => {
+              console.log('❌ Modal cerrado sin aprobar');
+              setSolicitudParaAprobar(null);
+            }}
+            onAprobado={() => {
+              console.log('✅ [Solicitudes] onAprobado ejecutado');
+              setSolicitudParaAprobar(null);
+              handleBackToList();
+              setSuccess('Solicitud aprobada y préstamo creado exitosamente');
+              setTimeout(() => setSuccess(''), 5000);
+            }}
+            onError={(error) => {
+              console.error('❌ Error en aprobación:', error);
+              setError(error);
+            }}
           />
         )}
       </AnimatePresence>

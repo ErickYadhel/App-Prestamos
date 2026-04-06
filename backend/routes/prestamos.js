@@ -35,11 +35,6 @@ function calcularPrimeraFechaPago(fechaPrestamo, frecuencia, config = {}) {
       return fechaSemanal;
       
     case 'quincenal':
-      // LOGICA PARA PRIMERA FECHA DE PAGO:
-      // Si la fecha del préstamo es menor a 15 -> primera fecha es 15 del mismo mes
-      // Si la fecha del préstamo es 15 o mayor pero menor a 30 -> primera fecha es 30 del mismo mes
-      // Si la fecha del préstamo es 30 o mayor -> primera fecha es 15 del mes siguiente
-      
       if (dia < 15) {
         const fecha15 = new Date(año, mes, 15);
         console.log(`  → Día ${dia} < 15, primera fecha: 15 del mismo mes (${fecha15.toLocaleDateString()})`);
@@ -194,7 +189,10 @@ router.post('/', async (req, res) => {
       clienteID: prestamoData.clienteID,
       montoPrestado: prestamoData.montoPrestado,
       frecuencia: prestamoData.frecuencia,
-      fechaPrestamo: prestamoData.fechaPrestamo
+      fechaPrestamo: prestamoData.fechaPrestamo,
+      generarComision: prestamoData.generarComision || false,
+      garanteID: prestamoData.garanteID,
+      porcentajeComision: prestamoData.porcentajeComision
     });
     
     // Verificar que el cliente existe
@@ -218,7 +216,17 @@ router.post('/', async (req, res) => {
       };
     }
 
-    const fechaPrestamo = new Date(prestamoData.fechaPrestamo);
+    // 👇 MANEJO CORRECTO DE FECHA
+    let fechaPrestamo;
+    if (prestamoData.fechaPrestamo instanceof Date) {
+      fechaPrestamo = prestamoData.fechaPrestamo;
+    } else if (typeof prestamoData.fechaPrestamo === 'string') {
+      fechaPrestamo = new Date(prestamoData.fechaPrestamo);
+    } else if (prestamoData.fechaPrestamo?.toDate) {
+      fechaPrestamo = prestamoData.fechaPrestamo.toDate();
+    } else {
+      fechaPrestamo = new Date(prestamoData.fechaPrestamo);
+    }
     
     // Calcular la PRIMERA fecha de pago usando la función corregida
     const primeraFechaPago = calcularPrimeraFechaPago(
@@ -234,6 +242,19 @@ router.post('/', async (req, res) => {
     console.log('✅ Primera fecha de pago calculada:', primeraFechaPago.toLocaleDateString());
     console.log('✅ Frecuencia:', prestamoData.frecuencia);
 
+    // Obtener nombre del garante si se seleccionó uno
+    let garanteNombre = null;
+    if (prestamoData.garanteID) {
+      try {
+        const garanteDoc = await db.collection('garantes').doc(prestamoData.garanteID).get();
+        if (garanteDoc.exists) {
+          garanteNombre = garanteDoc.data().nombre;
+        }
+      } catch (error) {
+        console.warn('Error obteniendo garante:', error);
+      }
+    }
+
     const prestamo = new Prestamo({
       ...prestamoData,
       clienteNombre: cliente.nombre,
@@ -247,7 +268,11 @@ router.post('/', async (req, res) => {
       fechasPersonalizadas: prestamoData.frecuencia === 'personalizado' ? prestamoData.fechasPersonalizadas : null,
       configuracionMora,
       nota: prestamoData.nota || '',
-      historialPagos: []
+      historialPagos: [],
+      generarComision: prestamoData.generarComision || false,
+      garanteID: prestamoData.garanteID || null,
+      garanteNombre: garanteNombre || prestamoData.garanteNombre || null,
+      porcentajeComision: prestamoData.porcentajeComision || 50
     });
 
     // Validar datos del préstamo
@@ -286,7 +311,18 @@ router.post('/', async (req, res) => {
       configuracionMora: prestamo.configuracionMora,
       nota: prestamo.nota,
       historialPagos: prestamo.historialPagos,
-      fechaActualizacion: prestamo.fechaActualizacion
+      fechaActualizacion: prestamo.fechaActualizacion,
+      generarComision: prestamo.generarComision,
+      garanteID: prestamo.garanteID,
+      garanteNombre: prestamo.garanteNombre,
+      porcentajeComision: prestamo.porcentajeComision
+    });
+
+    console.log('✅ Préstamo creado con comisión:', {
+      generarComision: prestamo.generarComision,
+      garanteID: prestamo.garanteID,
+      garanteNombre: prestamo.garanteNombre,
+      porcentajeComision: prestamo.porcentajeComision
     });
 
     res.status(201).json({
@@ -303,11 +339,14 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/prestamos/:id - Actualizar préstamo
+// PUT /api/prestamos/:id - Actualizar préstamo (CORREGIDO)
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
+
+    console.log('📝 Actualizando préstamo:', id);
+    console.log('📦 Datos recibidos:', JSON.stringify(updates, null, 2));
 
     const prestamoRef = db.collection('prestamos').doc(id);
     const prestamoDoc = await prestamoRef.get();
@@ -324,12 +363,52 @@ router.put('/:id', async (req, res) => {
 
     const camposPermitidos = [
       'montoPrestado', 'interesPercent', 'frecuencia', 'estado', 'nota',
-      'diaPagoPersonalizado', 'diaSemana', 'fechasPersonalizadas', 'capitalRestante'
+      'diaPagoPersonalizado', 'diaSemana', 'fechasPersonalizadas', 'capitalRestante',
+      'generarComision', 'garanteID', 'garanteNombre', 'porcentajeComision'
     ];
     
     for (const campo of camposPermitidos) {
       if (updates[campo] !== undefined) {
         updatesData[campo] = updates[campo];
+      }
+    }
+
+    // 👇 MANEJO CORRECTO DE FECHA PRESTAMO
+    if (updates.fechaPrestamo !== undefined) {
+      let fechaPrestamo;
+      if (updates.fechaPrestamo instanceof Date) {
+        fechaPrestamo = updates.fechaPrestamo;
+      } else if (typeof updates.fechaPrestamo === 'string') {
+        fechaPrestamo = new Date(updates.fechaPrestamo);
+      } else if (updates.fechaPrestamo?.toDate) {
+        fechaPrestamo = updates.fechaPrestamo.toDate();
+      } else if (updates.fechaPrestamo?._seconds !== undefined) {
+        fechaPrestamo = new Date(updates.fechaPrestamo._seconds * 1000);
+      } else if (updates.fechaPrestamo?.seconds !== undefined) {
+        fechaPrestamo = new Date(updates.fechaPrestamo.seconds * 1000);
+      } else {
+        fechaPrestamo = new Date(updates.fechaPrestamo);
+      }
+      
+      if (!isNaN(fechaPrestamo.getTime())) {
+        updatesData.fechaPrestamo = fechaPrestamo;
+        console.log('✅ Fecha préstamo actualizada:', fechaPrestamo);
+      } else {
+        console.warn('⚠️ Fecha inválida recibida, omitiendo actualización');
+        // No incluir fecha inválida en la actualización
+        delete updatesData.fechaPrestamo;
+      }
+    }
+
+    // Si se actualiza el garanteID, actualizar también el nombre
+    if (updates.garanteID && updates.garanteID !== prestamoActual.garanteID) {
+      try {
+        const garanteDoc = await db.collection('garantes').doc(updates.garanteID).get();
+        if (garanteDoc.exists) {
+          updatesData.garanteNombre = garanteDoc.data().nombre;
+        }
+      } catch (error) {
+        console.warn('Error obteniendo garante:', error);
       }
     }
 
@@ -347,17 +426,35 @@ router.put('/:id', async (req, res) => {
 
     if (updates.frecuencia || updates.diaPagoPersonalizado || updates.diaSemana || updates.fechasPersonalizadas) {
       const fechaBase = updates.fechaUltimoPago || prestamoActual.fechaUltimoPago || prestamoActual.fechaPrestamo;
-      updatesData.fechaProximoPago = calcularPrimeraFechaPago(
-        new Date(fechaBase),
-        updates.frecuencia || prestamoActual.frecuencia,
-        {
-          diaPagoPersonalizado: updates.diaPagoPersonalizado || prestamoActual.diaPagoPersonalizado,
-          fechasPersonalizadas: updates.fechasPersonalizadas || prestamoActual.fechasPersonalizadas
-        }
-      );
+      let fechaBaseDate;
+      
+      if (fechaBase instanceof Date) {
+        fechaBaseDate = fechaBase;
+      } else if (fechaBase?.toDate) {
+        fechaBaseDate = fechaBase.toDate();
+      } else if (fechaBase?._seconds !== undefined) {
+        fechaBaseDate = new Date(fechaBase._seconds * 1000);
+      } else if (fechaBase?.seconds !== undefined) {
+        fechaBaseDate = new Date(fechaBase.seconds * 1000);
+      } else {
+        fechaBaseDate = new Date(fechaBase);
+      }
+      
+      if (!isNaN(fechaBaseDate.getTime())) {
+        updatesData.fechaProximoPago = calcularPrimeraFechaPago(
+          fechaBaseDate,
+          updates.frecuencia || prestamoActual.frecuencia,
+          {
+            diaPagoPersonalizado: updates.diaPagoPersonalizado || prestamoActual.diaPagoPersonalizado,
+            fechasPersonalizadas: updates.fechasPersonalizadas || prestamoActual.fechasPersonalizadas
+          }
+        );
+      }
     }
 
     updatesData.fechaActualizacion = new Date();
+
+    console.log('📝 Datos a actualizar en Firestore:', Object.keys(updatesData));
 
     await prestamoRef.update(updatesData);
 

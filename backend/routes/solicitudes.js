@@ -326,15 +326,34 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/solicitudes/:id/aprobar - Aprobar solicitud y crear préstamo
+// PUT /api/solicitudes/:id/aprobar - Aprobar solicitud y crear préstamo (MODIFICADO CON COMISIONES)
 router.put('/:id/aprobar', async (req, res) => {
   try {
     const { id } = req.params;
-    const { aprobadoPor, observaciones, montoAprobado, interesPercent, frecuencia } = req.body;
+    const { 
+      aprobadoPor, 
+      observaciones, 
+      montoAprobado, 
+      interesPercent, 
+      frecuencia,
+      // NUEVOS CAMPOS DE COMISIÓN
+      generarComision,
+      garanteID,
+      garanteNombre,
+      porcentajeComision
+    } = req.body;
 
     console.log('🚀 [BACKEND] /aprobar llamado');
     console.log('📋 ID Solicitud:', id);
-    console.log('📝 Datos recibidos:', { montoAprobado, interesPercent, frecuencia, aprobadoPor });
+    console.log('📝 Datos recibidos:', { 
+      montoAprobado, 
+      interesPercent, 
+      frecuencia, 
+      aprobadoPor,
+      generarComision,
+      garanteID,
+      porcentajeComision 
+    });
 
     const solicitudRef = db.collection('solicitudes').doc(id);
     const solicitudDoc = await solicitudRef.get();
@@ -409,6 +428,9 @@ router.put('/:id/aprobar', async (req, res) => {
     console.log('  - Frecuencia:', frecuenciaFinal);
     console.log('  - Fecha préstamo:', fechaPrestamo.toLocaleDateString());
     console.log('  - Primera fecha pago:', primeraFechaPago.toLocaleDateString());
+    console.log('  - Generar comisión:', generarComision);
+    console.log('  - Garante ID:', garanteID);
+    console.log('  - Porcentaje comisión:', porcentajeComision);
     
     const prestamoData = {
       id: prestamoRef.id,
@@ -431,7 +453,12 @@ router.put('/:id/aprobar', async (req, res) => {
       cuentaCliente: solicitudData.cuentaCliente,
       tipoCuenta: solicitudData.tipoCuenta,
       historialPagos: [],
-      fechaActualizacion: new Date()
+      fechaActualizacion: new Date(),
+      // NUEVOS CAMPOS DE COMISIÓN
+      generarComision: generarComision || false,
+      garanteID: garanteID || null,
+      garanteNombre: garanteNombre || null,
+      porcentajeComision: porcentajeComision || 50
     };
 
     await prestamoRef.set(prestamoData);
@@ -589,7 +616,7 @@ router.delete('/:id', async (req, res) => {
     const solicitudRef = db.collection('solicitudes').doc(id);
     const solicitudDoc = await solicitudRef.get();
     
-    if (!solicitudDoc.exists()) {
+    if (!solicitudDoc.exists) {
       return res.status(404).json({
         success: false,
         error: 'Solicitud no encontrada'

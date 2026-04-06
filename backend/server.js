@@ -93,6 +93,7 @@ const solicitudesRoutes = require('./routes/solicitudes');
 const garantesRoutes = require('./routes/garantes');
 const dashboardRoutes = require('./routes/dashboard');
 const usuarioRoutes = require('./routes/usuario');
+const comisionesRoutes = require('./routes/comisiones'); // NUEVA RUTA DE COMISIONES
 
 // Importar módulo de notificaciones
 const { 
@@ -113,6 +114,7 @@ app.use('/api/solicitudes', solicitudesRoutes);
 app.use('/api/garantes', garantesRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/usuarios', usuarioRoutes);
+app.use('/api/comisiones', comisionesRoutes); // NUEVA RUTA DE COMISIONES
 
 // ============================================
 // 🔧 CONFIGURACIÓN DE ENVÍO AUTOMÁTICO DE NOTIFICACIONES
@@ -178,7 +180,8 @@ app.get('/', (req, res) => {
       solicitudes: '/api/solicitudes',
       garantes: '/api/garantes',
       dashboard: '/api/dashboard',
-      notificaciones: '/api/notificaciones'
+      notificaciones: '/api/notificaciones',
+      comisiones: '/api/comisiones'
     }
   });
 });
@@ -246,6 +249,7 @@ app.listen(PORT, () => {
   console.log(`👨‍👩‍👧‍👦 Garantes   → /api/garantes`);
   console.log(`📊 Dashboard   → /api/dashboard`);
   console.log(`🔔 Notificaciones → /api/notificaciones`);
+  console.log(`💰 Comisiones  → /api/comisiones`); // NUEVO ENDPOINT
   console.log('');
   console.log('🎨 Colores: Rojo y Negro');
   console.log(`🔐 CORS Orígenes permitidos: ${allowedOrigins.join(', ')}`);

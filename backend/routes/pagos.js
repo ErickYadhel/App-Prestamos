@@ -2,6 +2,7 @@ const express = require('express');
 const admin = require('firebase-admin');
 const Pago = require('../models/Pago');
 const Prestamo = require('../models/Prestamo');
+const Comision = require('../models/Comision'); // 👈 NUEVA IMPORTACIÓN
 const router = express.Router();
 
 const db = admin.firestore();
@@ -75,6 +76,94 @@ async function crearNotificacionCompletado(prestamo) {
     await db.collection('notificaciones').add(notificacion);
   } catch (error) {
     console.error('Error creando notificación de completado:', error);
+  }
+}
+
+// ============================================
+// FUNCIÓN PARA OBTENER DATOS DEL GARANTE
+// ============================================
+
+async function obtenerGaranteById(garanteID) {
+  try {
+    const garanteDoc = await db.collection('garantes').doc(garanteID).get();
+    if (garanteDoc.exists) {
+      return garanteDoc.data();
+    }
+    return null;
+  } catch (error) {
+    console.error('Error obteniendo garante:', error);
+    return null;
+  }
+}
+
+// ============================================
+// FUNCIÓN PARA CREAR COMISIÓN AUTOMÁTICAMENTE (MEJORADA)
+// ============================================
+
+async function crearComisionAutomatica(prestamo, pagoId, interesPagado, fechaPago) {
+  try {
+    if (!prestamo.generarComision || !prestamo.garanteID || interesPagado <= 0) {
+      console.log('⚠️ No se genera comisión:', {
+        generarComision: prestamo.generarComision,
+        garanteID: prestamo.garanteID,
+        interesPagado
+      });
+      return null;
+    }
+    
+    // Obtener información completa del garante
+    const garanteInfo = await obtenerGaranteById(prestamo.garanteID);
+    const garanteNombre = garanteInfo?.nombre || prestamo.garanteNombre || prestamo.garanteID;
+    const garanteCedula = garanteInfo?.cedula || '';
+    
+    const porcentajeComision = prestamo.porcentajeComision || 50;
+    const montoComision = (interesPagado * porcentajeComision) / 100;
+    
+    console.log('💰 Generando comisión automática:');
+    console.log('  - Préstamo:', prestamo.id);
+    console.log('  - Garante ID:', prestamo.garanteID);
+    console.log('  - Garante Nombre:', garanteNombre);
+    console.log('  - Garante Cédula:', garanteCedula);
+    console.log('  - Interés pagado:', interesPagado);
+    console.log('  - Porcentaje comisión:', porcentajeComision);
+    console.log('  - Monto comisión:', montoComision);
+    
+    // Generar ID personalizado con nombre, cédula y fecha
+    const idPersonalizado = Comision.generarIdPersonalizado(garanteNombre, garanteCedula, fechaPago);
+    
+    const comisionData = {
+      id: idPersonalizado,
+      tipo: 'prestamo',
+      garanteID: prestamo.garanteID,
+      garanteNombre: garanteNombre,
+      prestamoID: prestamo.id,
+      clienteID: prestamo.clienteID,
+      clienteNombre: prestamo.clienteNombre,
+      pagoID: pagoId,
+      montoBase: interesPagado,
+      porcentaje: porcentajeComision,
+      montoComision: montoComision,
+      fechaPago: fechaPago,
+      fechaGeneracion: new Date(),
+      estado: 'pagada', // 👈 CAMBIADO: se marca como pagada inmediatamente
+      fechaPagoGarante: new Date(), // 👈 Se registra la fecha de pago al garante
+      pagadoPor: 'sistema',
+      descripcion: `Comisión automática por pago de interés del préstamo ${prestamo.id} - Cliente: ${prestamo.clienteNombre}`,
+      periodo: Comision.prototype._calcularPeriodo(fechaPago),
+      creadoPor: 'sistema',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    const comisionRef = db.collection('comisiones').doc(idPersonalizado);
+    await comisionRef.set(comisionData);
+    
+    console.log(`✅ Comisión automática creada y marcada como PAGADA: ${idPersonalizado}`);
+    
+    return { id: idPersonalizado, ...comisionData };
+  } catch (error) {
+    console.error('Error creando comisión automática:', error);
+    return null;
   }
 }
 
@@ -206,6 +295,7 @@ router.post('/', async (req, res) => {
     console.log('  - Capital restante:', prestamo.capitalRestante);
     console.log('  - Nueva fecha próximo pago:', prestamo.fechaProximoPago?.toLocaleDateString());
     console.log('  - Estado:', prestamo.estado);
+    console.log('  - Interés pagado:', distribucion.interes);
 
     const batch = db.batch();
     
@@ -224,6 +314,17 @@ router.post('/', async (req, res) => {
     });
 
     await batch.commit();
+
+    // CREAR COMISIÓN AUTOMÁTICA si aplica (marcada como PAGADA automáticamente)
+    let comisionCreada = null;
+    if (distribucion.interes > 0 && prestamo.generarComision && prestamo.garanteID) {
+      comisionCreada = await crearComisionAutomatica(
+        prestamo, 
+        pagoRef.id, 
+        distribucion.interes, 
+        fechaPagoDate
+      );
+    }
 
     if (distribucion.restoInteres > 0 && distribucion.restoInteres !== undefined) {
       await crearNotificacionResto(prestamo, distribucion.restoInteres);
@@ -250,7 +351,8 @@ router.post('/', async (req, res) => {
         },
         distribucion: distribucion,
         modo: modoCalculo === 'manual' ? 'manual' : 'automatico',
-        mensaje: getMensajeExito(modoCalculo, prestamoCompletado, tieneMora)
+        mensaje: getMensajeExito(modoCalculo, prestamoCompletado, tieneMora),
+        comisionGenerada: comisionCreada ? true : false
       },
       message: getMensajeExito(modoCalculo, prestamoCompletado, tieneMora)
     });
@@ -264,7 +366,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /api/pagos/prestamo/:prestamoID - Obtener pagos de un préstamo (CORREGIDO)
+// GET /api/pagos/prestamo/:prestamoID - Obtener pagos de un préstamo
 router.get('/prestamo/:prestamoID', async (req, res) => {
   try {
     const { limit = 50 } = req.query;
@@ -272,7 +374,6 @@ router.get('/prestamo/:prestamoID', async (req, res) => {
     
     console.log('📋 Buscando pagos para préstamo:', prestamoID);
     
-    // Verificar que el préstamo existe
     const prestamoDoc = await db.collection('prestamos').doc(prestamoID).get();
     if (!prestamoDoc.exists) {
       console.log('❌ Préstamo no encontrado:', prestamoID);
@@ -298,7 +399,6 @@ router.get('/prestamo/:prestamoID', async (req, res) => {
       try {
         const pagoData = doc.data();
         
-        // Convertir fecha de forma segura
         let fechaPagoFormatted = 'N/A';
         let fechaPagoISO = null;
         
@@ -551,6 +651,17 @@ router.delete('/:id', async (req, res) => {
       }
       
       await db.collection('prestamos').doc(pago.prestamoID).update(actualizaciones);
+      
+      // También eliminar las comisiones asociadas a este pago
+      const comisionesSnapshot = await db.collection('comisiones')
+        .where('pagoID', '==', pagoDoc.id)
+        .get();
+      
+      const batch = db.batch();
+      comisionesSnapshot.forEach(comDoc => {
+        batch.delete(comDoc.ref);
+      });
+      await batch.commit();
     }
 
     await pagoDoc.ref.delete();

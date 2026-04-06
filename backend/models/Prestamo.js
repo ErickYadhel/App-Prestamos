@@ -16,7 +16,12 @@ class Prestamo {
     fechasPersonalizadas = [],
     configuracionMora = null,
     nota = '',
-    historialPagos = []
+    historialPagos = [],
+    // NUEVOS CAMPOS DE COMISIÓN
+    generarComision = false,
+    garanteID = null,
+    garanteNombre = null,
+    porcentajeComision = 50
   }) {
     this.id = id;
     this.clienteID = clienteID;
@@ -36,6 +41,11 @@ class Prestamo {
     this.nota = nota || '';
     this.historialPagos = historialPagos || [];
     this.fechaActualizacion = new Date();
+    // Nuevos campos
+    this.generarComision = generarComision;
+    this.garanteID = garanteID;
+    this.garanteNombre = garanteNombre;
+    this.porcentajeComision = porcentajeComision;
   }
 
   _normalizarFecha(fecha) {
@@ -223,6 +233,20 @@ class Prestamo {
     return distribucion;
   }
 
+  // Método para calcular la comisión del garante
+  calcularComision(interesPagado) {
+    if (!this.generarComision || !this.garanteID || interesPagado <= 0) {
+      return { monto: 0, porcentaje: 0 };
+    }
+    
+    const montoComision = (interesPagado * this.porcentajeComision) / 100;
+    
+    return {
+      monto: montoComision,
+      porcentaje: this.porcentajeComision
+    };
+  }
+
   aplicarPago(montoPago, fechaPago = new Date(), distribucion = null) {
     const fechaPagoDate = this._normalizarFecha(fechaPago);
     const resultado = distribucion || this.calcularDistribucionPago(montoPago, fechaPagoDate);
@@ -297,7 +321,12 @@ class Prestamo {
       diasAtraso,
       enMora: this.estaEnMora(fechaRef),
       fechaProximoPago: this.fechaProximoPago,
-      fechaUltimoPago: this.fechaUltimoPago
+      fechaUltimoPago: this.fechaUltimoPago,
+      // Información de comisión
+      generarComision: this.generarComision,
+      garanteID: this.garanteID,
+      garanteNombre: this.garanteNombre,
+      porcentajeComision: this.porcentajeComision
     };
   }
 

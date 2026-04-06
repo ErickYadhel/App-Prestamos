@@ -64,30 +64,51 @@ class Garante {
   validar() {
     const errors = [];
 
+    // Validar nombre
     if (!this.nombre?.trim()) {
       errors.push('El nombre es requerido');
     }
 
-    if (!this.cedula?.trim()) {
+    // Validar cédula (requerida y debe tener 11 dígitos)
+    if (!this.cedula || this.cedula.trim() === '') {
       errors.push('La cédula es requerida');
-    } else if (!this.validarCedula(this.cedula)) {
-      errors.push('La cédula no tiene un formato válido');
+    } else {
+      const cedulaLimpia = this.cedula.replace(/\D/g, '');
+      if (cedulaLimpia.length !== 11) {
+        errors.push('La cédula debe tener 11 dígitos (Ej: 00112345678)');
+      } else if (!this.validarCedula(cedulaLimpia)) {
+        errors.push('La cédula no es válida (dígito verificador incorrecto)');
+      }
     }
 
+    // Validar celular
     if (!this.celular?.trim()) {
       errors.push('El celular es requerido');
+    } else {
+      const telefonoLimpio = this.celular.replace(/\D/g, '');
+      if (telefonoLimpio.length < 10) {
+        errors.push('El celular debe tener al menos 10 dígitos');
+      }
     }
 
+    // Validar cliente asociado
     if (!this.clienteID) {
       errors.push('El cliente asociado es requerido');
     }
 
+    // Validar edad
     if (this.edad && (this.edad < 18 || this.edad > 100)) {
       errors.push('La edad debe estar entre 18 y 100 años');
     }
 
-    if (this.email && !this.validarEmail(this.email)) {
+    // Validar email
+    if (this.email && this.email.trim() !== '' && !this.validarEmail(this.email)) {
       errors.push('El email no tiene un formato válido');
+    }
+
+    // Validar sueldo
+    if (this.sueldo && this.sueldo < 0) {
+      errors.push('El sueldo no puede ser negativo');
     }
 
     if (errors.length > 0) {
@@ -98,9 +119,29 @@ class Garante {
   }
 
   validarCedula(cedula) {
-    // Validación básica de cédula dominicana
-    const cedulaRegex = /^\d{3}-\d{7}-\d{1}$|^\d{11}$/;
-    return cedulaRegex.test(cedula);
+    // Algoritmo de validación de cédula dominicana (módulo 11)
+    const cedulaLimpia = cedula.replace(/\D/g, '');
+    
+    if (cedulaLimpia.length !== 11) {
+      return false;
+    }
+    
+    const digitoVerificador = parseInt(cedulaLimpia[10]);
+    let suma = 0;
+    
+    for (let i = 0; i < 10; i++) {
+      let digito = parseInt(cedulaLimpia[i]);
+      let multiplicador = i % 2 === 0 ? 1 : 2;
+      let resultado = digito * multiplicador;
+      if (resultado > 9) {
+        resultado = resultado.toString().split('').reduce((a, b) => parseInt(a) + parseInt(b), 0);
+      }
+      suma += resultado;
+    }
+    
+    const digitoCalculado = (10 - (suma % 10)) % 10;
+    
+    return digitoCalculado === digitoVerificador;
   }
 
   validarEmail(email) {
@@ -121,15 +162,17 @@ class Garante {
 
   // Agregar préstamo garantizado
   agregarPrestamoGarantizado(prestamoID, monto, fecha) {
-    this.prestamosGarantizados.push(prestamoID);
-    this.prestamosActivos++;
-    
-    this.historialGarantias.push({
-      prestamoID,
-      monto,
-      fecha: fecha || new Date(),
-      estado: 'activo'
-    });
+    if (!this.prestamosGarantizados.includes(prestamoID)) {
+      this.prestamosGarantizados.push(prestamoID);
+      this.prestamosActivos++;
+      
+      this.historialGarantias.push({
+        prestamoID,
+        monto,
+        fecha: fecha || new Date(),
+        estado: 'activo'
+      });
+    }
   }
 
   // Completar préstamo garantizado
@@ -142,6 +185,7 @@ class Garante {
       garantia.estado = 'completado';
       garantia.fechaCompletado = new Date();
       this.prestamosActivos = Math.max(0, this.prestamosActivos - 1);
+      this.prestamosGarantizados = this.prestamosGarantizados.filter(id => id !== prestamoID);
     }
   }
 
@@ -174,7 +218,41 @@ class Garante {
       prestamosActivos: this.prestamosActivos,
       capacidadEndeudamiento: this.calcularCapacidadEndeudamiento(),
       puedeGarantizar: this.puedeGarantizar(),
-      activo: this.activo
+      activo: this.activo,
+      tipoGarante: this.tipoGarante
+    };
+  }
+
+  toJSON() {
+    return {
+      id: this.id,
+      clienteID: this.clienteID,
+      clienteNombre: this.clienteNombre,
+      nombre: this.nombre,
+      cedula: this.cedula,
+      edad: this.edad,
+      celular: this.celular,
+      email: this.email,
+      trabajo: this.trabajo,
+      sueldo: this.sueldo,
+      puesto: this.puesto,
+      direccion: this.direccion,
+      sector: this.sector,
+      provincia: this.provincia,
+      pais: this.pais,
+      cedulaFotoUrl: this.cedulaFotoUrl,
+      fotoUrl: this.fotoUrl,
+      activo: this.activo,
+      fechaCreacion: this.fechaCreacion,
+      fechaModificacion: this.fechaModificacion,
+      fechaEliminacion: this.fechaEliminacion,
+      tipoGarante: this.tipoGarante,
+      relacionCliente: this.relacionCliente,
+      capacidadEndeudamiento: this.capacidadEndeudamiento,
+      observaciones: this.observaciones,
+      prestamosGarantizados: this.prestamosGarantizados,
+      prestamosActivos: this.prestamosActivos,
+      historialGarantias: this.historialGarantias
     };
   }
 }

@@ -18,11 +18,14 @@ import Configuracion from './pages/Configuracion';
 import Notificaciones from './pages/Notificaciones';
 import Perfil from './pages/Usuarios';
 import ErrorBoundary from './components/ErrorBoundary';
-import Informacion from './pages/Informacion'; // 👈 NUEVA IMPORTACIÓN
+import Informacion from './pages/Informacion';
 
-// 👇 NUEVAS IMPORTACIONES
+// 👇 IMPORTACIONES EXISTENTES
 import Operaciones from './pages/Operaciones';
 import Seguridad from './pages/Seguridad';
+
+// 👇 NUEVA IMPORTACIÓN - COMISIONES
+import Comisiones from './pages/Operaciones/Comisiones';
 
 // Componente de carga mejorado
 const LoadingScreen = () => (
@@ -50,7 +53,7 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
 
   // Verificar si el usuario tiene el rol permitido
   if (allowedRoles.length > 0 && !allowedRoles.includes(user.rol)) {
-    return <Navigate to="/" />; // Redirigir a la bienvenida si no tiene permisos
+    return <Navigate to="/" />;
   }
 
   return children;
@@ -144,6 +147,24 @@ function App() {
                       </ProtectedRoute>
                     } />
                     
+                    {/* 👇 RUTA DE COMISIONES - ACCESIBLE PARA TODOS LOS USUARIOS LOGUEADOS */}
+                    <Route path="/comisiones" element={
+                      <ProtectedRoute>
+                        <Layout>
+                          <Comisiones />
+                        </Layout>
+                      </ProtectedRoute>
+                    } />
+                    
+                    {/* 👇 RUTA DE COMISIONES DENTRO DE OPERACIONES (REDIRECCIÓN) */}
+                    <Route path="/operaciones/comisiones" element={
+                      <ProtectedRoute>
+                        <Layout>
+                          <Comisiones />
+                        </Layout>
+                      </ProtectedRoute>
+                    } />
+                    
                     {/* 👇 NUEVAS RUTAS */}
                     
                     {/* Operaciones - Acceso para admin, supervisor y consultor */}
@@ -173,7 +194,7 @@ function App() {
                       </ProtectedRoute>
                     } />
                     
-                    {/* 👇 NUEVA RUTA - Información del Sistema */}
+                    {/* Información del Sistema */}
                     <Route path="/informacion" element={
                       <ProtectedRoute allowedRoles={['admin', 'consultor', 'solicitante', 'supervisor']}>
                         <Layout>

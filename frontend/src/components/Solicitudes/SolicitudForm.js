@@ -21,7 +21,9 @@ import {
   ChartBarIcon,
   CalculatorIcon,
   XMarkIcon,
-  ClockIcon
+  ClockIcon,
+  GiftIcon,
+  UserGroupIcon
 } from '@heroicons/react/24/outline';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -30,6 +32,9 @@ import { useTheme } from '../../context/ThemeContext';
 const SolicitudForm = ({ solicitud, onSave, onCancel, error, bancos = [] }) => {
   const { user } = useAuth();
   const { theme } = useTheme();
+  const [garantes, setGarantes] = useState([]);
+  const [cargandoGarantes, setCargandoGarantes] = useState(false);
+  
   const [formData, setFormData] = useState({
     clienteNombre: '',
     cedula: '',
@@ -50,7 +55,12 @@ const SolicitudForm = ({ solicitud, onSave, onCancel, error, bancos = [] }) => {
     garantia: '',
     observaciones: '',
     empleadoNombre: user?.nombre || '',
-    empleadoID: user?.id || 'empleado-1'
+    empleadoID: user?.id || 'empleado-1',
+    // NUEVOS CAMPOS DE COMISIÓN
+    generarComision: false,
+    garanteID: '',
+    garanteNombre: '',
+    porcentajeComision: 50
   });
 
   const [errors, setErrors] = useState({});
@@ -63,6 +73,24 @@ const SolicitudForm = ({ solicitud, onSave, onCancel, error, bancos = [] }) => {
     anosAntiguedad: 0
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Cargar garantes al montar el componente
+  useEffect(() => {
+    const fetchGarantes = async () => {
+      try {
+        setCargandoGarantes(true);
+        const response = await api.get('/garantes');
+        if (response.success) {
+          setGarantes(response.data);
+        }
+      } catch (error) {
+        console.error('Error fetching garantes:', error);
+      } finally {
+        setCargandoGarantes(false);
+      }
+    };
+    fetchGarantes();
+  }, []);
 
   useEffect(() => {
     if (solicitud) {
@@ -86,7 +114,11 @@ const SolicitudForm = ({ solicitud, onSave, onCancel, error, bancos = [] }) => {
         garantia: solicitud.garantia || '',
         observaciones: solicitud.observaciones || '',
         empleadoNombre: solicitud.empleadoNombre || user?.nombre || '',
-        empleadoID: solicitud.empleadoID || user?.id || 'empleado-1'
+        empleadoID: solicitud.empleadoID || user?.id || 'empleado-1',
+        generarComision: solicitud.generarComision || false,
+        garanteID: solicitud.garanteID || '',
+        garanteNombre: solicitud.garanteNombre || '',
+        porcentajeComision: solicitud.porcentajeComision || 50
       });
     }
   }, [solicitud, user]);
@@ -108,6 +140,16 @@ const SolicitudForm = ({ solicitud, onSave, onCancel, error, bancos = [] }) => {
         [name]: ''
       }));
     }
+  };
+
+  const handleGaranteChange = (e) => {
+    const garanteId = e.target.value;
+    const garante = garantes.find(g => g.id === garanteId);
+    setFormData(prev => ({
+      ...prev,
+      garanteID: garanteId,
+      garanteNombre: garante?.nombre || ''
+    }));
   };
 
   const calcularEstimaciones = () => {
@@ -176,6 +218,11 @@ const SolicitudForm = ({ solicitud, onSave, onCancel, error, bancos = [] }) => {
       newErrors.email = 'El email es requerido';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Email inválido';
+    }
+
+    // Validar comisión si está activada
+    if (formData.generarComision && !formData.garanteID) {
+      newErrors.garanteID = 'Debe seleccionar un garante para generar comisión';
     }
 
     setErrors(newErrors);
@@ -305,7 +352,12 @@ const SolicitudForm = ({ solicitud, onSave, onCancel, error, bancos = [] }) => {
         empleadoNombre: formData.empleadoNombre,
         empleadoID: formData.empleadoID,
         scoreAnalisis: scoreCalculado,
-        fechaSolicitud: new Date().toISOString()
+        fechaSolicitud: new Date().toISOString(),
+        // NUEVOS CAMPOS DE COMISIÓN
+        generarComision: formData.generarComision,
+        garanteID: formData.garanteID || null,
+        garanteNombre: formData.garanteNombre || null,
+        porcentajeComision: formData.porcentajeComision
       };
 
       console.log('📤 Enviando solicitud con todos los campos:', solicitudData);
@@ -826,6 +878,94 @@ const SolicitudForm = ({ solicitud, onSave, onCancel, error, bancos = [] }) => {
               </div>
             </div>
 
+            {/* ============================================ */}
+            {/* NUEVA SECCIÓN: CONFIGURACIÓN DE COMISIÓN */}
+            {/* ============================================ */}
+            <div className={`rounded-lg shadow ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
+              <div className={`px-6 py-4 border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                <h3 className={`text-lg font-medium flex items-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  <GiftIcon className="h-5 w-5 mr-2 text-red-600" />
+                  Configuración de Comisión
+                </h3>
+                <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Activa esta opción si el préstamo fue referido por un garante o agente
+                </p>
+              </div>
+              <div className="p-6 space-y-4">
+                <label className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="generarComision"
+                    checked={formData.generarComision}
+                    onChange={(e) => setFormData({ ...formData, generarComision: e.target.checked })}
+                    className="h-4 w-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
+                  />
+                  <span className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Generar comisión para garante
+                  </span>
+                </label>
+
+                {formData.generarComision && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-6 pt-2">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Garante *
+                      </label>
+                      <select
+                        name="garanteID"
+                        value={formData.garanteID}
+                        onChange={handleGaranteChange}
+                        className={`w-full px-4 py-2 rounded-lg border-2 text-sm ${
+                          errors.garanteID ? 'border-red-500' :
+                          theme === 'dark'
+                            ? 'bg-gray-700 border-gray-600 text-white focus:border-red-500'
+                            : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                        }`}
+                        disabled={cargandoGarantes}
+                      >
+                        <option value="">Seleccionar garante</option>
+                        {garantes.map(garante => (
+                          <option key={garante.id} value={garante.id}>
+                            {garante.nombre} - {garante.telefono || 'Sin teléfono'}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.garanteID && <p className="text-red-500 text-xs mt-1">{errors.garanteID}</p>}
+                      {cargandoGarantes && (
+                        <p className="text-xs text-gray-500 mt-1">Cargando garantes...</p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        El garante recibirá el {formData.porcentajeComision}% del interés pagado por el cliente
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Porcentaje de Comisión (%)
+                      </label>
+                      <input
+                        type="number"
+                        name="porcentajeComision"
+                        value={formData.porcentajeComision}
+                        onChange={(e) => setFormData({ ...formData, porcentajeComision: parseFloat(e.target.value) })}
+                        className={`w-full px-4 py-2 rounded-lg border-2 text-sm ${
+                          theme === 'dark'
+                            ? 'bg-gray-700 border-gray-600 text-white focus:border-red-500'
+                            : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                        }`}
+                        min="0"
+                        max="100"
+                        step="5"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Porcentaje del interés que recibirá el garante (Ej: 50% = 5% del 10%)
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Observaciones */}
             <div className={`rounded-lg shadow ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
               <div className={`px-6 py-4 border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
@@ -850,7 +990,7 @@ const SolicitudForm = ({ solicitud, onSave, onCancel, error, bancos = [] }) => {
             </div>
           </div>
 
-          {/* Columna Lateral - Cálculos y Resumen */}
+          {/* Columna Lateral - Cálculos y Resumen (sin cambios) */}
           <div className="space-y-6">
             {/* Score Estimado */}
             <div className={`rounded-lg shadow ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>

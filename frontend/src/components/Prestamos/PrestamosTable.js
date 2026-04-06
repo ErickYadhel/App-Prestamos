@@ -11,12 +11,14 @@ import {
   CalculatorIcon,
   ChevronUpIcon,
   ChevronDownIcon,
-  ArrowsUpDownIcon
+  ArrowsUpDownIcon,
+  GiftIcon  // 👈 NUEVO ÍCONO
 } from '@heroicons/react/24/outline';
 import { useTheme } from '../../context/ThemeContext';
 import { formatFecha } from '../../utils/firebaseUtils';
 
-// Componente para el ícono de ordenamiento
+// ... (SortIcon y EstadoBadge se mantienen igual)
+
 const SortIcon = ({ column, currentSort, sortDirection }) => {
   if (currentSort !== column) {
     return <ArrowsUpDownIcon className="h-3 w-3 ml-1 text-gray-400" />;
@@ -26,8 +28,8 @@ const SortIcon = ({ column, currentSort, sortDirection }) => {
     : <ChevronDownIcon className="h-3 w-3 ml-1 text-red-600" />;
 };
 
-// Componente para el estado del préstamo
 const EstadoBadge = ({ estado, theme, diasAtraso, configMora }) => {
+  // ... (código existente sin cambios)
   const estados = {
     activo: { 
       color: theme === 'dark' 
@@ -92,7 +94,6 @@ const PrestamosTable = ({
   const [expandedRow, setExpandedRow] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
 
-  // Detectar tamaño de pantalla
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
@@ -102,7 +103,6 @@ const PrestamosTable = ({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Función para ordenar los préstamos
   const sortedPrestamos = useMemo(() => {
     if (!prestamos.length) return [];
     
@@ -153,7 +153,6 @@ const PrestamosTable = ({
     return sortable;
   }, [prestamos, sortConfig, calcularPorcentajeRecuperacion, getFrecuenciaTexto]);
 
-  // Manejar cambio de ordenamiento
   const handleSort = (key) => {
     setSortConfig(prev => ({
       key,
@@ -161,18 +160,19 @@ const PrestamosTable = ({
     }));
   };
 
-  // Columnas de la tabla
+  // 👇 COLUMNAS MODIFICADAS - Agregar "Comisión"
   const columns = [
     { key: 'clienteNombre', label: 'Cliente', mobile: true, sortable: true },
     { key: 'montoPrestado', label: 'Inversión', mobile: true, sortable: true },
     { key: 'progreso', label: 'Progreso', mobile: false, sortable: true },
     { key: 'fechaProximoPago', label: 'Próximo Pago', mobile: false, sortable: true },
     { key: 'frecuencia', label: 'Frecuencia', mobile: false, sortable: true },
+    { key: 'comision', label: 'Comisión', mobile: false, sortable: false }, // 👈 NUEVA COLUMNA
     { key: 'estado', label: 'Estado', mobile: true, sortable: true },
     { key: 'acciones', label: 'Acciones', mobile: true, sortable: false }
   ];
 
-  // Vista para móvil (cards)
+  // 👇 Vista para móvil (cards) - AGREGAR INFORMACIÓN DE COMISIÓN
   if (isMobile) {
     return (
       <div className="space-y-3 p-2">
@@ -193,7 +193,6 @@ const PrestamosTable = ({
                   : 'bg-white border-gray-200'
               } ${diasAtraso > 15 ? (theme === 'dark' ? 'bg-red-900/20' : 'bg-red-50') : ''}`}
             >
-              {/* Card Header */}
               <div 
                 className="p-4 cursor-pointer"
                 onClick={() => setExpandedRow(isExpanded ? null : prestamo.id)}
@@ -209,6 +208,13 @@ const PrestamosTable = ({
                     <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
                       📞 {contacto.celular.substring(0, 10)}
                     </p>
+                    {/* 👇 NUEVO - Mostrar comisión */}
+                    {prestamo.generarComision && (
+                      <p className={`text-xs flex items-center mt-1 ${theme === 'dark' ? 'text-purple-400' : 'text-purple-600'}`}>
+                        <GiftIcon className="h-3 w-3 mr-1" />
+                        Comisión: {prestamo.porcentajeComision || 50}% del interés
+                      </p>
+                    )}
                   </div>
                   <div className="text-right">
                     <EstadoBadge 
@@ -226,7 +232,6 @@ const PrestamosTable = ({
                   </div>
                 </div>
                 
-                {/* Progress Bar */}
                 <div className="mt-3">
                   <div className="flex justify-between text-xs text-gray-500 mb-1">
                     <span>Progreso</span>
@@ -241,7 +246,6 @@ const PrestamosTable = ({
                 </div>
               </div>
               
-              {/* Card Expanded Content */}
               <AnimatePresence>
                 {isExpanded && (
                   <motion.div
@@ -281,7 +285,6 @@ const PrestamosTable = ({
                         </div>
                       </div>
                       
-                      {/* Acciones */}
                       <div className="flex justify-around pt-3 border-t border-gray-200 dark:border-gray-700">
                         <button
                           onClick={(e) => { e.stopPropagation(); onView(prestamo); }}
@@ -437,6 +440,22 @@ const PrestamosTable = ({
                   <div className={`text-sm ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                     {getFrecuenciaTexto(prestamo)}
                   </div>
+                </td>
+                {/* 👇 NUEVA COLUMNA - Comisión */}
+                <td className="px-4 py-3">
+                  {prestamo.generarComision ? (
+                    <div className="flex items-center space-x-1">
+                      <GiftIcon className="h-4 w-4 text-purple-500" />
+                      <span className={`text-xs ${theme === 'dark' ? 'text-purple-400' : 'text-purple-600'}`}>
+                        {prestamo.porcentajeComision || 50}%
+                      </span>
+                      <span className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                        a {prestamo.garanteNombre?.split(' ')[0] || 'garante'}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>No</span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <EstadoBadge 

@@ -623,6 +623,35 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
                 </span>
               </div>
 
+              {/* Mostrar comisión si aplica - NUEVO BLOQUE */}
+              {prestamo?.generarComision && prestamo?.garanteID && calculosAvanzados.distribucion?.interes > 0 && (
+                <>
+                  <div className="border-t pt-3 mt-2">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className={`text-xs font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Comisión para garante
+                        </p>
+                        <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                          ({prestamo.garanteNombre || prestamo.garanteID})
+                        </p>
+                      </div>
+                      <p className="text-sm font-bold text-purple-600 dark:text-purple-400">
+                        RD$ {((calculosAvanzados.distribucion?.interes || 0) * (prestamo.porcentajeComision || 50) / 100).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="flex justify-between items-center mt-1">
+                      <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                        Para EYS ({(100 - (prestamo.porcentajeComision || 50))}%)
+                      </p>
+                      <p className="text-sm font-bold text-red-600 dark:text-red-400">
+                        RD$ {((calculosAvanzados.distribucion?.interes || 0) * (100 - (prestamo.porcentajeComision || 50)) / 100).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div className={`border-t pt-2 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                 <div className="flex justify-between">
                   <span className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Nuevo capital:</span>

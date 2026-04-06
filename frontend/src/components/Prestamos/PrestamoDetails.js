@@ -12,7 +12,8 @@ import {
   ShieldCheckIcon,
   InformationCircleIcon,
   ArrowTrendingUpIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  GiftIcon
 } from '@heroicons/react/24/outline';
 import api from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
@@ -521,6 +522,42 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
               </div>
             </div>
           </div>
+
+          {/* Información de Comisión - NUEVO BLOQUE */}
+          {prestamoData.generarComision && (
+            <div className={`shadow rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
+              <div className={`px-6 py-4 border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                <h3 className={`text-lg font-medium flex items-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  <GiftIcon className="h-5 w-5 mr-2 text-red-600" />
+                  Información de Comisión
+                </h3>
+              </div>
+              <div className="p-6 space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Genera comisión:</span>
+                  <span className={`font-medium ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>Sí</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Garante:</span>
+                  <span className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    {prestamoData.garanteNombre || prestamoData.garanteID || 'No asignado'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Porcentaje de comisión:</span>
+                  <span className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    {prestamoData.porcentajeComision || 50}% del interés
+                  </span>
+                </div>
+                <div className={`mt-2 p-3 rounded-lg ${theme === 'dark' ? 'bg-blue-900/20' : 'bg-blue-50'}`}>
+                  <p className={`text-xs ${theme === 'dark' ? 'text-blue-300' : 'text-blue-700'}`}>
+                    💡 El garante recibirá el {(prestamoData.porcentajeComision || 50)}% del interés pagado por el cliente.
+                    {prestamoData.porcentajeComision === 50 && ' En este caso, de cada 10% de interés, 5% es para EYS y 5% para el garante.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className={`shadow rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
             <div className={`px-6 py-4 border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>

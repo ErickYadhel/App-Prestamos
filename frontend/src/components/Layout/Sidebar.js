@@ -26,7 +26,8 @@ import {
   XMarkIcon,
   PresentationChartLineIcon,
   LockClosedIcon,
-  InformationCircleIcon
+  InformationCircleIcon,
+  GiftIcon  // 👈 NUEVO ÍCONO PARA COMISIONES
 } from '@heroicons/react/24/outline';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../services/firebase';
@@ -255,7 +256,7 @@ const Sidebar = ({ children }) => {
     };
   }, []);
 
-  // Items del menú
+  // Items del menú - AGREGADO COMISIONES
   const todosLosMenuItems = [
     { name: 'Dashboard', path: '/dashboard', icon: HomeIcon, modulo: 'dashboard', accion: 'ver' },
     { name: 'Clientes', path: '/clientes', icon: UsersIcon, modulo: 'clientes', accion: 'ver' },
@@ -263,6 +264,7 @@ const Sidebar = ({ children }) => {
     { name: 'Pagos', path: '/pagos', icon: CreditCardIcon, modulo: 'pagos', accion: 'ver' },
     { name: 'Solicitudes', path: '/solicitudes', icon: DocumentTextIcon, modulo: 'solicitudes', accion: 'ver' },
     { name: 'Garantes', path: '/garantes', icon: UserGroupIcon, modulo: 'garantes', accion: 'ver' },
+    { name: 'Comisiones', path: '/comisiones', icon: GiftIcon, modulo: 'comisiones', accion: 'ver' }, // 👈 NUEVO ÍTEM
     { name: 'Usuarios', path: '/usuarios', icon: UsersIcon, modulo: 'usuarios', accion: 'ver' },
     { name: 'Notificaciones', path: '/notificaciones', icon: BellIcon, modulo: 'notificaciones', accion: 'ver' },
     { name: 'Operaciones', path: '/operaciones', icon: PresentationChartLineIcon, modulo: 'operaciones', accion: 'ver' },

@@ -77,20 +77,27 @@ Su solicitud de préstamo ha sido *APROBADA*:
     console.log('📋 Datos de la solicitud:', {
       id: solicitud.id,
       cliente: solicitud.clienteNombre,
-      estadoActual: solicitud.estado
+      estadoActual: solicitud.estado,
+      generarComision: solicitud.generarComision,
+      garanteID: solicitud.garanteID,
+      porcentajeComision: solicitud.porcentajeComision
     });
     console.log('📝 Datos del formulario:', formData);
     console.log('👤 Usuario aprobador:', user?.email);
 
     try {
-      // Llamar al backend para aprobar la solicitud y crear el préstamo
       console.log('📡 [API] Enviando solicitud a /solicitudes/${solicitud.id}/aprobar');
       const response = await api.put(`/solicitudes/${solicitud.id}/aprobar`, {
         montoAprobado: parseFloat(formData.montoAprobado),
         interesPercent: parseFloat(formData.interesPercent),
         frecuencia: formData.frecuencia,
         observaciones: formData.observaciones,
-        aprobadoPor: user?.email
+        aprobadoPor: user?.email,
+        // NUEVOS CAMPOS DE COMISIÓN - tomados de la solicitud original
+        generarComision: solicitud.generarComision || false,
+        garanteID: solicitud.garanteID || null,
+        garanteNombre: solicitud.garanteNombre || null,
+        porcentajeComision: solicitud.porcentajeComision || 50
       });
 
       console.log('📡 [API] Respuesta del backend:', response);
@@ -99,11 +106,9 @@ Su solicitud de préstamo ha sido *APROBADA*:
         console.log('✅ [Backend] Solicitud aprobada exitosamente');
         console.log('📦 Datos recibidos:', response.data);
         
-        // Verificar que el préstamo se creó
         if (response.data.prestamoId) {
           console.log('💰 Préstamo creado con ID:', response.data.prestamoId);
           
-          // Verificar en Firestore que el préstamo existe
           const prestamoDoc = await getDoc(doc(db, 'prestamos', response.data.prestamoId));
           if (prestamoDoc.exists()) {
             console.log('✅ Préstamo verificado en Firestore:', prestamoDoc.data());
@@ -114,7 +119,6 @@ Su solicitud de préstamo ha sido *APROBADA*:
           console.warn('⚠️ No se recibió prestamoId en la respuesta');
         }
         
-        // Actualizar la solicitud en Firestore localmente
         console.log('🔄 Actualizando solicitud en Firestore...');
         const solicitudRef = doc(db, 'solicitudes', solicitud.id);
         await updateDoc(solicitudRef, {
@@ -130,11 +134,9 @@ Su solicitud de préstamo ha sido *APROBADA*:
         
         console.log('✅ Solicitud actualizada en Firestore');
         
-        // Enviar WhatsApp
         enviarWhatsAppAprobacion();
         console.log('📱 WhatsApp enviado al cliente');
         
-        // Notificar éxito al componente padre
         console.log('🎉 Proceso completado, cerrando modal y recargando...');
         onAprobado();
       } else {
@@ -190,7 +192,6 @@ Su solicitud de préstamo ha sido *APROBADA*:
           }`}>
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-green-500 to-transparent animate-scan" />
 
-            {/* Header */}
             <div className={`p-6 border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} bg-gradient-to-r ${
               theme === 'dark' ? 'from-gray-800 to-gray-900' : 'from-green-50 to-white'
             }`}>
@@ -223,7 +224,6 @@ Su solicitud de préstamo ha sido *APROBADA*:
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[calc(90vh-120px)] overflow-y-auto">
-              {/* Información de la Solicitud */}
               <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'} border border-green-600/20`}>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div>
@@ -251,7 +251,6 @@ Su solicitud de préstamo ha sido *APROBADA*:
                 </div>
               </div>
 
-              {/* Términos del Préstamo */}
               <div>
                 <h3 className={`text-lg font-medium mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                   Términos del Préstamo
@@ -322,7 +321,6 @@ Su solicitud de préstamo ha sido *APROBADA*:
                 </div>
               </div>
 
-              {/* Resumen de Cálculos */}
               <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-green-900/20' : 'bg-green-50'} border border-green-600/20`}>
                 <div className="flex items-center space-x-2 mb-3">
                   <CalculatorIcon className="h-5 w-5 text-green-600" />
@@ -346,7 +344,6 @@ Su solicitud de préstamo ha sido *APROBADA*:
                 </div>
               </div>
 
-              {/* Análisis de Riesgo */}
               <div className={`p-4 rounded-lg ${ratioPagoSueldo <= 40 ? 
                 (theme === 'dark' ? 'bg-blue-900/20' : 'bg-blue-50') : 
                 (theme === 'dark' ? 'bg-yellow-900/20' : 'bg-yellow-50')} border ${ratioPagoSueldo <= 40 ? 'border-blue-600/20' : 'border-yellow-600/20'}`}>
@@ -379,7 +376,6 @@ Su solicitud de préstamo ha sido *APROBADA*:
                 </div>
               </div>
 
-              {/* WhatsApp */}
               <div className="flex items-center space-x-3">
                 <input
                   type="checkbox"
@@ -393,7 +389,6 @@ Su solicitud de préstamo ha sido *APROBADA*:
                 </label>
               </div>
 
-              {/* Observaciones */}
               <div>
                 <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                   Observaciones para el Cliente
@@ -412,7 +407,6 @@ Su solicitud de préstamo ha sido *APROBADA*:
                 />
               </div>
 
-              {/* Actions */}
               <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
                   type="button"

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // 👈 NUEVA IMPORTACIÓN
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   PlusIcon, 
@@ -25,7 +26,8 @@ import {
   ShieldCheckIcon,
   BriefcaseIcon,
   HomeIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  GiftIcon  // 👈 NUEVO ÍCONO
 } from '@heroicons/react/24/outline';
 import api from '../services/api';
 import { useTheme } from '../context/ThemeContext';
@@ -73,7 +75,6 @@ const GarantesSkeleton = () => {
   
   return (
     <div className="space-y-6">
-      {/* Header Skeleton */}
       <div className="flex justify-between items-center">
         <div>
           <div className={`h-8 w-48 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
@@ -81,15 +82,11 @@ const GarantesSkeleton = () => {
         </div>
         <div className={`h-10 w-36 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
       </div>
-
-      {/* Stats Skeleton */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[1, 2, 3, 4].map(i => (
           <div key={i} className={`h-24 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
         ))}
       </div>
-
-      {/* Table Skeleton */}
       <div className={`h-96 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
     </div>
   );
@@ -275,7 +272,11 @@ const InfoCard = ({ icon: Icon, label, value, color }) => {
   );
 };
 
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
 const Garantes = () => {
+  const navigate = useNavigate(); // 👈 NUEVO - Para navegar a comisiones
   const [garantes, setGarantes] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -298,6 +299,11 @@ const Garantes = () => {
 
   const { theme } = useTheme();
 
+  // 👈 NUEVA FUNCIÓN - Ver comisiones del garante
+  const handleVerComisiones = (garante) => {
+    navigate(`/comisiones?garanteID=${garante.id}`);
+  };
+
   useEffect(() => {
     fetchGarantes();
     fetchClientes();
@@ -308,26 +314,23 @@ const Garantes = () => {
       setLoading(true);
       setError('');
       
-      // Intentar obtener datos reales de la API
       let garantesReales = [];
       try {
         const response = await api.get('/garantes');
         garantesReales = response.data || [];
       } catch (apiError) {
         console.log('Usando datos de ejemplo para garantes');
-        // Datos de ejemplo como fallback
         garantesReales = getMockGarantes();
       }
 
       setGarantes(garantesReales);
       
-      // Calcular estadísticas mejoradas
       const total = garantesReales.length;
       const activos = garantesReales.filter(g => g.activo !== false).length;
       const conPrestamos = garantesReales.filter(g => (g.prestamosActivos || 0) > 0).length;
       const capacidadTotal = garantesReales.reduce((sum, g) => {
         const sueldo = parseFloat(g.sueldo) || 0;
-        return sum + (sueldo * 0.4 * 12); // 40% del sueldo anual
+        return sum + (sueldo * 0.4 * 12);
       }, 0);
       
       setStats({ total, activos, conPrestamos, capacidadTotal });
@@ -346,9 +349,9 @@ const Garantes = () => {
         clienteID: '1',
         clienteNombre: 'Juan Pérez',
         nombre: 'Roberto Pérez',
-        cedula: '001-1111111-1',
+        cedula: '00111111111',
         edad: 45,
-        celular: '809-111-2222',
+        celular: '8091112222',
         email: 'roberto@email.com',
         trabajo: 'Empresa ABC',
         sueldo: 40000,
@@ -381,9 +384,9 @@ const Garantes = () => {
         clienteID: '1',
         clienteNombre: 'Juan Pérez',
         nombre: 'Ana Pérez',
-        cedula: '001-2222222-2',
+        cedula: '00222222222',
         edad: 42,
-        celular: '809-333-4444',
+        celular: '8093334444',
         email: 'ana@email.com',
         trabajo: 'Escuela Nacional',
         sueldo: 35000,
@@ -416,9 +419,9 @@ const Garantes = () => {
         clienteID: '2',
         clienteNombre: 'María Rodríguez',
         nombre: 'Carlos Rodríguez',
-        cedula: '002-3333333-3',
+        cedula: '00333333333',
         edad: 50,
-        celular: '809-555-6666',
+        celular: '8095556666',
         email: 'carlos@email.com',
         trabajo: 'Constructor Independiente',
         sueldo: 45000,
@@ -451,9 +454,9 @@ const Garantes = () => {
         clienteID: '3',
         clienteNombre: 'Carlos López',
         nombre: 'Miguel López',
-        cedula: '003-4444444-4',
+        cedula: '00444444444',
         edad: 38,
-        celular: '809-777-8888',
+        celular: '8097778888',
         email: 'miguel@email.com',
         trabajo: 'Taller Mecánico',
         sueldo: 30000,
@@ -479,7 +482,6 @@ const Garantes = () => {
 
   const fetchClientes = async () => {
     try {
-      // Intentar obtener clientes reales
       let clientesReales = [];
       try {
         const response = await api.get('/clientes');
@@ -552,9 +554,8 @@ const Garantes = () => {
     try {
       setError('');
       
-      // Calcular capacidad de endeudamiento automáticamente
       const sueldo = parseFloat(garanteData.sueldo) || 0;
-      const capacidadEndeudamiento = sueldo * 0.4 * 12; // 40% del sueldo anual
+      const capacidadEndeudamiento = sueldo * 0.4 * 12;
       
       const garanteCompleto = {
         ...garanteData,
@@ -565,37 +566,16 @@ const Garantes = () => {
       };
 
       if (editingGarante) {
-        // Actualizar garante existente
         await api.put(`/garantes/${editingGarante.id}`, garanteCompleto);
       } else {
-        // Crear nuevo garante
         await api.post('/garantes', garanteCompleto);
       }
       
-      await fetchGarantes(); // Recargar lista
+      await fetchGarantes();
       setShowForm(false);
     } catch (error) {
       console.error('Error saving guarantor:', error);
-      // Fallback: actualizar estado local si la API falla
-      if (editingGarante) {
-        const updatedGarantes = garantes.map(g =>
-          g.id === editingGarante.id ? { ...garanteData, id: editingGarante.id } : g
-        );
-        setGarantes(updatedGarantes);
-        setShowForm(false);
-      } else {
-        const newGarante = {
-          ...garanteData,
-          id: Date.now().toString(),
-          fechaCreacion: new Date().toISOString(),
-          capacidadEndeudamiento: (parseFloat(garanteData.sueldo) || 0) * 0.4 * 12,
-          prestamosActivos: 0,
-          prestamosGarantizados: [],
-          historialGarantias: []
-        };
-        setGarantes(prev => [newGarante, ...prev]);
-        setShowForm(false);
-      }
+      setError(error.response?.data?.error || error.message || 'Error al guardar el garante');
     }
   };
 
@@ -607,7 +587,6 @@ const Garantes = () => {
         await fetchGarantes();
       } catch (error) {
         console.error('Error deleting guarantor:', error);
-        // Fallback: eliminar localmente
         const updatedGarantes = garantes.filter(g => g.id !== garanteId);
         setGarantes(updatedGarantes);
       }
@@ -620,7 +599,6 @@ const Garantes = () => {
       await fetchGarantes();
     } catch (error) {
       console.error('Error updating guarantor:', error);
-      // Fallback: actualizar localmente
       const updatedGarantes = garantes.map(g =>
         g.id === garanteId ? { ...g, activo: activar } : g
       );
@@ -638,7 +616,9 @@ const Garantes = () => {
     }).format(amount);
   };
 
-  // Componente Formulario de Garante (MEJORADO)
+  // ============================================
+  // COMPONENTE FORMULARIO DE GARANTE CON VALIDACIÓN DE CÉDULA
+  // ============================================
   const GaranteForm = () => {
     const [formData, setFormData] = useState({
       clienteID: '',
@@ -660,6 +640,7 @@ const Garantes = () => {
       observaciones: '',
       activo: true
     });
+    const [cedulaError, setCedulaError] = useState('');
 
     useEffect(() => {
       if (editingGarante) {
@@ -686,10 +667,64 @@ const Garantes = () => {
       }
     }, [editingGarante]);
 
+    // Función de validación de cédula dominicana
+    const validarCedula = (cedula) => {
+      const cedulaLimpia = cedula.replace(/\D/g, '');
+      
+      if (cedulaLimpia.length !== 11) {
+        return { valida: false, mensaje: 'La cédula debe tener 11 dígitos' };
+      }
+      
+      const digitoVerificador = parseInt(cedulaLimpia[10]);
+      let suma = 0;
+      
+      for (let i = 0; i < 10; i++) {
+        let digito = parseInt(cedulaLimpia[i]);
+        let multiplicador = i % 2 === 0 ? 1 : 2;
+        let resultado = digito * multiplicador;
+        if (resultado > 9) {
+          resultado = resultado.toString().split('').reduce((a, b) => parseInt(a) + parseInt(b), 0);
+        }
+        suma += resultado;
+      }
+      
+      const digitoCalculado = (10 - (suma % 10)) % 10;
+      
+      return {
+        valida: digitoCalculado === digitoVerificador,
+        mensaje: digitoCalculado === digitoVerificador ? '' : 'La cédula no es válida (dígito verificador incorrecto)'
+      };
+    };
+
+    // Manejar cambio de cédula con validación en tiempo real
+    const handleCedulaChange = (e) => {
+      const value = e.target.value;
+      setFormData(prev => ({ ...prev, cedula: value }));
+      
+      if (value && value.trim() !== '') {
+        const validation = validarCedula(value);
+        setCedulaError(validation.valida ? '' : validation.mensaje);
+      } else {
+        setCedulaError('La cédula es requerida');
+      }
+    };
+
     const handleSubmit = (e) => {
       e.preventDefault();
       
-      if (!formData.clienteID || !formData.nombre || !formData.cedula || !formData.celular) {
+      // Validar cédula antes de enviar
+      if (!formData.cedula || formData.cedula.trim() === '') {
+        setError('La cédula es requerida');
+        return;
+      }
+      
+      const cedulaValidation = validarCedula(formData.cedula);
+      if (!cedulaValidation.valida) {
+        setError(cedulaValidation.mensaje);
+        return;
+      }
+      
+      if (!formData.clienteID || !formData.nombre || !formData.celular) {
         setError('Por favor complete los campos obligatorios');
         return;
       }
@@ -803,15 +838,23 @@ const Garantes = () => {
                     <input
                       type="text"
                       value={formData.cedula}
-                      onChange={(e) => setFormData(prev => ({ ...prev, cedula: e.target.value }))}
+                      onChange={handleCedulaChange}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
-                        theme === 'dark'
-                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
-                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                        cedulaError
+                          ? 'border-red-500 focus:border-red-500'
+                          : theme === 'dark'
+                            ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                            : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
                       }`}
-                      placeholder="001-1234567-8"
+                      placeholder="00112345678"
                       required
                     />
+                    {cedulaError && (
+                      <p className="text-red-500 text-xs mt-1">{cedulaError}</p>
+                    )}
+                    <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                      Ingrese los 11 dígitos de la cédula (Ej: 00112345678)
+                    </p>
                   </div>
 
                   <div>
@@ -846,7 +889,7 @@ const Garantes = () => {
                           ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
                           : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
                       }`}
-                      placeholder="809-123-4567"
+                      placeholder="8091234567"
                       required
                     />
                   </div>
@@ -1120,7 +1163,9 @@ const Garantes = () => {
     );
   };
 
-  // Componente Detalles del Garante (MEJORADO)
+  // ============================================
+  // COMPONENTE DETALLES DEL GARANTE (MODIFICADO - AGREGAR BOTÓN COMISIONES)
+  // ============================================
   const GaranteDetails = () => {
     if (!selectedGarante) return null;
 
@@ -1163,7 +1208,7 @@ const Garantes = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Columna Izquierda - Información Principal */}
+              {/* Columna Izquierda - Información Principal (sin cambios) */}
               <div className="lg:col-span-2 space-y-4">
                 {/* Cliente Principal */}
                 <div className={`p-4 rounded-lg border-2 ${
@@ -1287,7 +1332,7 @@ const Garantes = () => {
                 )}
               </div>
 
-              {/* Columna Derecha - Estadísticas */}
+              {/* Columna Derecha - Estadísticas (MODIFICADA - AGREGAR BOTÓN COMISIONES) */}
               <div className="space-y-4">
                 {/* Estado */}
                 <div className={`p-4 rounded-lg border-2 ${
@@ -1343,7 +1388,21 @@ const Garantes = () => {
                   </div>
                 </div>
 
-                {/* Botones de Acción */}
+                {/* 👇 NUEVO BOTÓN - Ver Comisiones */}
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => {
+                    handleCloseView();
+                    handleVerComisiones(selectedGarante);
+                  }}
+                  className="w-full py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center space-x-2"
+                >
+                  <GiftIcon className="h-5 w-5" />
+                  <span>Ver Comisiones</span>
+                </motion.button>
+
+                {/* Botones de Acción existentes */}
                 <div className="space-y-2">
                   <motion.button
                     whileHover={{ scale: 1.05 }}
@@ -1653,7 +1712,7 @@ const Garantes = () => {
             </div>
           </GlassCard>
 
-          {/* Tabla de Garantes */}
+          {/* Tabla de Garantes (MODIFICADA - AGREGAR BOTÓN VER COMISIONES) */}
           <GlassCard>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -1792,6 +1851,24 @@ const Garantes = () => {
                                 title="Editar"
                               >
                                 <PencilIcon className="h-4 w-4" />
+                              </motion.button>
+
+                              {/* 👇 NUEVO BOTÓN - Ver Comisiones en la tabla */}
+                              <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleVerComisiones(garante);
+                                }}
+                                className={`p-2 rounded-lg transition-colors ${
+                                  theme === 'dark'
+                                    ? 'hover:bg-gray-700 text-purple-400'
+                                    : 'hover:bg-purple-50 text-purple-600'
+                                }`}
+                                title="Ver comisiones del garante"
+                              >
+                                <GiftIcon className="h-4 w-4" />
                               </motion.button>
                               
                               {garante.activo ? (

@@ -12,7 +12,8 @@ import {
   XMarkIcon,
   SparklesIcon,
   RocketLaunchIcon,
-  CpuChipIcon
+  CpuChipIcon,
+  UserGroupIcon  // 👈 NUEVO ÍCONO PARA GARANTES
 } from '@heroicons/react/24/outline';
 
 // Importar los submódulos
@@ -22,6 +23,7 @@ import Documentos from './Operaciones/Documentos';
 import Calculos from './Operaciones/Calculos';
 import Comisiones from './Operaciones/Comisiones';
 import Calendario from './Operaciones/Calendario';
+import Garantes from './Garantes';  // 👈 NUEVA IMPORTACIÓN
 
 // ============================================
 // COMPONENTE DE BORDE LUMINOSO
@@ -276,6 +278,16 @@ const Operaciones = () => {
       componente: <Calculos />
     },
     {
+      id: 'garantes',        // 👈 NUEVO MÓDULO
+      nombre: 'Garantes',
+      descripcion: 'Gestión de garantes y avales',
+      icon: UserGroupIcon,
+      color: 'from-teal-500 to-teal-700',
+      gradientColor: 'from-teal-600 via-teal-500 to-teal-600',
+      items: ['Lista de garantes', 'Registro de garantes', 'Relaciones con clientes', 'Comisiones por garante'],
+      componente: <Garantes />
+    },
+    {
       id: 'comisiones',
       nombre: 'Comisiones',
       descripcion: 'Gestión de comisiones',
@@ -341,7 +353,7 @@ const Operaciones = () => {
                 </h1>
                 <p className={`text-sm mt-2 flex items-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
                   <SparklesIcon className="h-4 w-4 text-yellow-500 mr-2" />
-                  Gestión de formularios, reportes, documentos, cálculos, comisiones y calendario
+                  Gestión de formularios, reportes, documentos, cálculos, garantes, comisiones y calendario
                 </p>
               </div>
             </div>

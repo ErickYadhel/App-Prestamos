@@ -1,3 +1,4 @@
+// src/pages/Pagos.js
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -20,13 +21,50 @@ import {
   ArrowPathIcon,
   FunnelIcon,
   ChevronDownIcon,
-  ChevronUpIcon
+  ChevronUpIcon,
+  GiftIcon,
+  ChartPieIcon,
+  ArrowTrendingUpIcon,
+  TrophyIcon,
+  UserIcon,
+  UsersIcon
 } from '@heroicons/react/24/outline';
 import api from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import RegistrarPagoModal from '../components/Pagos/RegistrarPagoModal';
 import DetallesPago from '../components/Pagos/DetallesPago';
 import { normalizeFirebaseData, firebaseTimestampToLocalString } from '../utils/firebaseUtils';
+
+// ============================================
+// IMPORTACIONES PARA GRÁFICOS
+// ============================================
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+} from 'chart.js';
+import { Line, Doughnut } from 'react-chartjs-2';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
 
 // ============================================
 // COMPONENTE DE BORDE LUMINOSO
@@ -71,7 +109,6 @@ const PagosSkeleton = () => {
   
   return (
     <div className="space-y-6">
-      {/* Header Skeleton */}
       <div className="flex justify-between items-center">
         <div>
           <div className={`h-8 w-48 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
@@ -79,15 +116,11 @@ const PagosSkeleton = () => {
         </div>
         <div className={`h-10 w-40 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
       </div>
-
-      {/* Stats Skeleton */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[1, 2, 3, 4].map(i => (
+        {[1, 2, 3, 4, 5, 6].map(i => (
           <div key={i} className={`h-24 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
         ))}
       </div>
-
-      {/* Table Skeleton */}
       <div className={`h-96 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} animate-pulse`}></div>
     </div>
   );
@@ -106,7 +139,10 @@ const StatsCard = ({ icon: Icon, label, value, subValue, gradient, trend }) => {
     purple: 'from-purple-600 to-purple-800',
     orange: 'from-orange-600 to-orange-800',
     red: 'from-red-600 to-red-800',
-    teal: 'from-teal-600 to-teal-800'
+    teal: 'from-teal-600 to-teal-800',
+    indigo: 'from-indigo-600 to-indigo-800',
+    pink: 'from-pink-600 to-pink-800',
+    yellow: 'from-yellow-600 to-yellow-800'
   };
 
   return (
@@ -276,6 +312,9 @@ const AdvancedFilters = ({ isOpen, onClose, filtros, onFilterChange }) => {
   );
 };
 
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
 const Pagos = () => {
   const [pagos, setPagos] = useState([]);
   const [prestamos, setPrestamos] = useState([]);
@@ -305,6 +344,17 @@ const Pagos = () => {
     pagosEsteMes: 0
   });
 
+  // Estados adicionales
+  const [totalComisiones, setTotalComisiones] = useState(0);
+  const [pagosPorMes, setPagosPorMes] = useState([]);
+  const [distribucionTipos, setDistribucionTipos] = useState({ normal: 0, adelantado: 0, mora: 0, abono: 0 });
+  const [ultimasComisiones, setUltimasComisiones] = useState([]);
+  const [clienteTopInteres, setClienteTopInteres] = useState({ nombre: '', totalInteres: 0 });
+  const [clienteTopPagos, setClienteTopPagos] = useState({ nombre: '', cantidadPagos: 0 });
+  const [capitalPagado, setCapitalPagado] = useState(0);
+  const [pagadoEsteMes, setPagadoEsteMes] = useState(0);
+  const [totalGeneralRecaudado, setTotalGeneralRecaudado] = useState(0);
+
   const { theme } = useTheme();
 
   useEffect(() => {
@@ -312,12 +362,125 @@ const Pagos = () => {
     fetchPrestamosActivos();
   }, []);
 
+  // ==================== FUNCIONES AUXILIARES ====================
+  const extraerMontoPago = (pago) => {
+    const montoTotal = pago.montoTotal ?? pago.total ?? pago.monto ?? 0;
+    const montoCapital = pago.montoCapital ?? pago.capital ?? pago.distribucion?.capital ?? 0;
+    const montoInteres = pago.montoInteres ?? pago.interes ?? pago.distribucion?.interes ?? 0;
+    const montoMora = pago.montoMora ?? pago.mora ?? pago.distribucion?.mora ?? 0;
+    return { montoTotal, montoCapital, montoInteres, montoMora };
+  };
+
+  const procesarDatosGraficos = (pagosData) => {
+    const meses = {};
+    const tipos = { normal: 0, adelantado: 0, mora: 0, abono: 0 };
+    
+    pagosData.forEach(pago => {
+      const fecha = new Date(pago.fechaPago);
+      if (isNaN(fecha.getTime())) return;
+      
+      const mesKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
+      const mesLabel = fecha.toLocaleDateString('es-DO', { year: 'numeric', month: 'short' });
+      const { montoTotal } = extraerMontoPago(pago);
+      
+      if (!meses[mesKey]) {
+        meses[mesKey] = { mes: mesLabel, total: 0, cantidad: 0 };
+      }
+      meses[mesKey].total += montoTotal;
+      meses[mesKey].cantidad++;
+      
+      const tipo = pago.tipoPago || 'normal';
+      if (tipos[tipo] !== undefined) tipos[tipo]++;
+    });
+    
+    const mesesOrdenados = Object.values(meses).sort((a, b) => {
+      const mesesOrden = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      return mesesOrden.indexOf(a.mes.substring(0,3)) - mesesOrden.indexOf(b.mes.substring(0,3));
+    });
+    
+    setPagosPorMes(mesesOrdenados);
+    setDistribucionTipos(tipos);
+  };
+
+  const cargarComisionesTotal = async () => {
+    try {
+      const response = await api.get('/comisiones');
+      if (response.success) {
+        const comisiones = response.data || [];
+        const total = comisiones.reduce((sum, com) => sum + (com.montoComision || 0), 0);
+        setTotalComisiones(total);
+        const ultimas = [...comisiones].sort((a,b) => new Date(b.fechaPago) - new Date(a.fechaPago)).slice(0,5);
+        setUltimasComisiones(ultimas);
+      }
+    } catch (error) {
+      console.error('Error cargando comisiones:', error);
+    }
+  };
+
+  const calcularEstadisticas = (pagosData) => {
+    const hoy = new Date();
+    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    
+    let totalRecaudado = 0, totalCapital = 0, totalInteres = 0;
+    let pagosMes = 0;
+    let interesPorCliente = {};
+    let pagosPorCliente = {};
+
+    pagosData.forEach(pago => {
+      const { montoTotal, montoCapital, montoInteres } = extraerMontoPago(pago);
+      totalRecaudado += montoTotal;
+      totalCapital += montoCapital;
+      totalInteres += montoInteres;
+
+      const fechaPago = new Date(pago.fechaPago);
+      if (fechaPago >= inicioMes) {
+        pagosMes += montoTotal;
+        const cliente = pago.clienteNombre;
+        if (!interesPorCliente[cliente]) interesPorCliente[cliente] = 0;
+        if (!pagosPorCliente[cliente]) pagosPorCliente[cliente] = 0;
+        interesPorCliente[cliente] += montoInteres;
+        pagosPorCliente[cliente] += 1;
+      }
+    });
+
+    // Cliente con mayor interés pagado
+    let topInteres = { nombre: '', totalInteres: 0 };
+    for (const [nombre, total] of Object.entries(interesPorCliente)) {
+      if (total > topInteres.totalInteres) topInteres = { nombre, totalInteres: total };
+    }
+
+    // Cliente con mayor cantidad de pagos
+    let topPagos = { nombre: '', cantidadPagos: 0 };
+    for (const [nombre, cantidad] of Object.entries(pagosPorCliente)) {
+      if (cantidad > topPagos.cantidadPagos) topPagos = { nombre, cantidadPagos: cantidad };
+    }
+
+    setCapitalPagado(totalCapital);
+    setPagadoEsteMes(pagosMes);
+    setClienteTopInteres(topInteres);
+    setClienteTopPagos(topPagos);
+    setTotalGeneralRecaudado(totalRecaudado + totalComisiones);
+
+    const pagosHoy = pagosData.filter(pago => {
+      const fechaPago = pago.fechaPago instanceof Date ? pago.fechaPago : new Date(pago.fechaPago);
+      return fechaPago.toDateString() === hoy.toDateString();
+    }).length;
+
+    setStats({
+      totalPagos: pagosData.length,
+      totalRecaudado,
+      totalCapital,
+      totalInteres,
+      pagosHoy,
+      pagosEsteMes: pagosMes
+    });
+  };
+
   const fetchPagos = async () => {
     try {
       setLoading(true);
       setError('');
       
-      // Primero intentamos con la API real
       try {
         const response = await api.get('/pagos');
         if (response.success) {
@@ -326,13 +489,14 @@ const Pagos = () => {
           );
           setPagos(pagosNormalizados);
           calcularEstadisticas(pagosNormalizados);
+          procesarDatosGraficos(pagosNormalizados);
+          await cargarComisionesTotal();
           return;
         }
       } catch (apiError) {
         console.log('Usando datos de ejemplo - API no disponible');
       }
 
-      // Fallback a datos de ejemplo
       const mockPagos = [
         {
           id: '1',
@@ -407,6 +571,8 @@ const Pagos = () => {
       ];
       setPagos(mockPagos);
       calcularEstadisticas(mockPagos);
+      procesarDatosGraficos(mockPagos);
+      await cargarComisionesTotal();
       
     } catch (error) {
       console.error('Error fetching payments:', error);
@@ -419,7 +585,6 @@ const Pagos = () => {
 
   const fetchPrestamosActivos = async () => {
     try {
-      // Primero intentamos con la API real
       try {
         const response = await api.get('/prestamos');
         if (response.success) {
@@ -433,7 +598,6 @@ const Pagos = () => {
         console.log('Usando datos de ejemplo para préstamos');
       }
 
-      // Fallback a datos de ejemplo
       const mockPrestamos = [
         {
           id: '1',
@@ -467,35 +631,6 @@ const Pagos = () => {
     }
   };
 
-  const calcularEstadisticas = (pagosData) => {
-    const hoy = new Date();
-    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    
-    const totalPagos = pagosData.length;
-    const totalRecaudado = pagosData.reduce((sum, p) => sum + (p.montoTotal || 0), 0);
-    const totalCapital = pagosData.reduce((sum, p) => sum + (p.montoCapital || 0), 0);
-    const totalInteres = pagosData.reduce((sum, p) => sum + (p.montoInteres || 0), 0);
-    
-    const pagosHoy = pagosData.filter(pago => {
-      const fechaPago = pago.fechaPago instanceof Date ? pago.fechaPago : new Date(pago.fechaPago);
-      return fechaPago.toDateString() === hoy.toDateString();
-    }).length;
-
-    const pagosEsteMes = pagosData.filter(pago => {
-      const fechaPago = pago.fechaPago instanceof Date ? pago.fechaPago : new Date(pago.fechaPago);
-      return fechaPago >= inicioMes;
-    }).length;
-
-    setStats({
-      totalPagos,
-      totalRecaudado,
-      totalCapital,
-      totalInteres,
-      pagosHoy,
-      pagosEsteMes
-    });
-  };
-
   const filteredPagos = pagos.filter(pago => {
     const matchSearch = 
       pago.clienteNombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -504,8 +639,6 @@ const Pagos = () => {
 
     const matchEstado = filtroEstado === 'todos' || pago.tipoPago === filtroEstado;
     const matchPrestamo = selectedPrestamo === 'todos' || pago.prestamoID === selectedPrestamo;
-
-    // Filtros avanzados
     const matchTipo = filtros.tipo === 'todos' || pago.tipoPago === filtros.tipo;
     
     let matchFecha = true;
@@ -640,6 +773,55 @@ const Pagos = () => {
     } : null;
   };
 
+  // Datos para gráficos
+  const lineChartData = {
+    labels: pagosPorMes.map(p => p.mes),
+    datasets: [{
+      label: 'Monto Recaudado (RD$)',
+      data: pagosPorMes.map(p => p.total),
+      borderColor: '#ef4444',
+      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+      borderWidth: 3,
+      tension: 0.4,
+      fill: true,
+      pointBackgroundColor: '#ef4444',
+      pointBorderColor: '#fff',
+      pointBorderWidth: 2,
+      pointRadius: 4,
+      pointHoverRadius: 6
+    }]
+  };
+
+  const doughnutData = {
+    labels: ['Normal', 'Adelantado', 'Mora', 'Abono'],
+    datasets: [{
+      data: [distribucionTipos.normal, distribucionTipos.adelantado, distribucionTipos.mora, distribucionTipos.abono],
+      backgroundColor: ['#10b981', '#3b82f6', '#ef4444', '#8b5cf6'],
+      borderColor: 'transparent',
+      borderWidth: 2,
+      hoverOffset: 8
+    }]
+  };
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: {
+          color: theme === 'dark' ? '#9ca3af' : '#4b5563',
+          font: { size: 11 }
+        }
+      },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => `RD$ ${ctx.raw.toLocaleString()}`
+        }
+      }
+    }
+  };
+
   if (viewMode === 'details' && selectedPago) {
     return (
       <DetallesPago
@@ -656,7 +838,7 @@ const Pagos = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header Mejorado */}
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -680,9 +862,7 @@ const Pagos = () => {
             </div>
             
             <div className="flex items-center space-x-2 w-full sm:w-auto">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+              <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`p-3 rounded-lg transition-all ${
                   showFilters
@@ -694,11 +874,9 @@ const Pagos = () => {
                 title="Filtros avanzados"
               >
                 <FunnelIcon className="h-5 w-5" />
-              </motion.button>
+              </button>
 
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+              <button
                 onClick={() => setShowSearch(!showSearch)}
                 className={`p-3 rounded-lg transition-all ${
                   showSearch
@@ -710,16 +888,14 @@ const Pagos = () => {
                 title="Buscar pagos"
               >
                 <MagnifyingGlassIcon className="h-5 w-5" />
-              </motion.button>
+              </button>
 
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+              <button
                 onClick={handleRegistrarPago}
                 className="p-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg shadow-lg hover:shadow-xl transition-all flex items-center space-x-2"
               >
                 <PlusIcon className="h-5 w-5" />
-              </motion.button>
+              </button>
             </div>
           </div>
         </div>
@@ -812,12 +988,13 @@ const Pagos = () => {
         )}
       </AnimatePresence>
 
-      {/* Stats Summary MEJORADO */}
+      {/* Stats Summary - Fila 1 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           icon={BanknotesIcon}
           label="Total Recaudado"
-          value={`RD$ ${stats.totalRecaudado.toLocaleString()}`}
+          value={`RD$ ${totalGeneralRecaudado.toLocaleString()}`}
+          subValue="Capital + Interés + Comisiones"
           gradient="green"
         />
         
@@ -838,12 +1015,81 @@ const Pagos = () => {
         />
 
         <StatsCard
-          icon={ReceiptRefundIcon}
+          icon={GiftIcon}
+          label="Comisiones Pagadas"
+          value={`RD$ ${totalComisiones.toLocaleString()}`}
+          subValue="A garantes"
+          gradient="pink"
+        />
+      </div>
+
+      {/* Stats Summary - Fila 2 (Nuevas métricas) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatsCard
+          icon={CurrencyDollarIcon}
+          label="Pagado este mes"
+          value={`RD$ ${pagadoEsteMes.toLocaleString()}`}
+          gradient="teal"
+        />
+        <StatsCard
+          icon={BanknotesIcon}
+          label="Capital Pagado"
+          value={`RD$ ${capitalPagado.toLocaleString()}`}
+          subValue="Total capital recuperado"
+          gradient="indigo"
+        />
+        <StatsCard
+          icon={UsersIcon}
           label="Total Pagos"
           value={stats.totalPagos}
-          subValue="Registrados en sistema"
+          subValue="Pagos registrados"
+          gradient="yellow"
+        />
+      </div>
+
+      {/* Stats Summary - Fila 3 (Clientes destacados) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <StatsCard
+          icon={TrophyIcon}
+          label="Cliente con mayor interés"
+          value={clienteTopInteres.nombre || 'Ninguno'}
+          subValue={clienteTopInteres.totalInteres > 0 ? `RD$ ${clienteTopInteres.totalInteres.toLocaleString()} en intereses` : 'Sin datos'}
+          gradient="red"
+        />
+        <StatsCard
+          icon={UserIcon}
+          label="Cliente con más pagos"
+          value={clienteTopPagos.nombre || 'Ninguno'}
+          subValue={clienteTopPagos.cantidadPagos > 0 ? `${clienteTopPagos.cantidadPagos} pagos realizados` : 'Sin datos'}
           gradient="orange"
         />
+      </div>
+
+      {/* Gráficos */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <GlassCard>
+          <div className="p-4">
+            <h3 className={`text-lg font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+              <ArrowTrendingUpIcon className="h-5 w-5 mr-2 text-red-600" />
+              Evolución de Pagos
+            </h3>
+            <div className="h-64">
+              <Line data={lineChartData} options={chartOptions} />
+            </div>
+          </div>
+        </GlassCard>
+
+        <GlassCard>
+          <div className="p-4">
+            <h3 className={`text-lg font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+              <ChartPieIcon className="h-5 w-5 mr-2 text-red-600" />
+              Distribución por Tipo de Pago
+            </h3>
+            <div className="h-64 flex justify-center">
+              <Doughnut data={doughnutData} options={chartOptions} />
+            </div>
+          </div>
+        </GlassCard>
       </div>
 
       {/* Filtros Rápidos */}
@@ -914,7 +1160,7 @@ const Pagos = () => {
         </div>
       </GlassCard>
 
-      {/* Lista de Pagos MEJORADA */}
+      {/* Tabla de Pagos */}
       <GlassCard>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -936,6 +1182,7 @@ const Pagos = () => {
               <AnimatePresence>
                 {filteredPagos.map((pago) => {
                   const prestamoInfo = getPrestamoInfo(pago);
+                  const { montoTotal, montoCapital, montoInteres } = extraerMontoPago(pago);
                   const isHovered = hoveredRow === pago.id;
                   
                   return (
@@ -970,15 +1217,15 @@ const Pagos = () => {
                       </td>
                       <td className="px-6 py-4">
                         <div className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                          RD$ {(pago.montoTotal || 0).toLocaleString()}
+                          RD$ {montoTotal.toLocaleString()}
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
-                          Capital: RD$ {(pago.montoCapital || 0).toLocaleString()}
+                          Capital: RD$ {montoCapital.toLocaleString()}
                         </div>
                         <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                          Interés: RD$ {(pago.montoInteres || 0).toLocaleString()}
+                          Interés: RD$ {montoInteres.toLocaleString()}
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -993,9 +1240,7 @@ const Pagos = () => {
                         {getTipoPagoBadge(pago.tipoPago)}
                       </td>
                       <td className="px-6 py-4 text-right text-sm font-medium">
-                        <motion.button
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleViewDetails(pago);
@@ -1008,7 +1253,7 @@ const Pagos = () => {
                           title="Ver detalles completos"
                         >
                           <EyeIcon className="h-4 w-4" />
-                        </motion.button>
+                        </button>
                       </td>
                     </motion.tr>
                   );
@@ -1031,22 +1276,54 @@ const Pagos = () => {
                 }
               </p>
               {!searchTerm && filtroEstado === 'todos' && selectedPrestamo === 'todos' && (
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                <button
                   onClick={handleRegistrarPago}
                   className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all inline-flex items-center space-x-2"
                 >
                   <PlusIcon className="h-5 w-5" />
                   <span>Registrar Primer Pago</span>
-                </motion.button>
+                </button>
               )}
             </motion.div>
           )}
         </div>
       </GlassCard>
 
-      {/* Información sobre el Sistema de Pagos */}
+      {/* Últimas comisiones */}
+      {ultimasComisiones.length > 0 && (
+        <GlassCard>
+          <div className="p-4">
+            <h3 className={`text-lg font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+              <GiftIcon className="h-5 w-5 mr-2 text-purple-600" />
+              Últimas Comisiones
+            </h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {ultimasComisiones.map(com => (
+                <div key={com.id} className={`p-3 rounded-lg border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                        {com.clienteNombre || 'Cliente'}
+                      </p>
+                      <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Garante: {com.garanteNombre || com.garanteID}
+                      </p>
+                    </div>
+                    <p className="text-sm font-bold text-purple-600 dark:text-purple-400">
+                      RD$ {(com.montoComision || 0).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                    {new Date(com.fechaPago).toLocaleDateString('es-DO')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </GlassCard>
+      )}
+
+      {/* Información del Sistema */}
       <GlassCard>
         <div className="p-4">
           <div className="flex items-start space-x-3">

@@ -263,7 +263,6 @@ const Sidebar = ({ children }) => {
     { name: 'Préstamos', path: '/prestamos', icon: CurrencyDollarIcon, modulo: 'prestamos', accion: 'ver' },
     { name: 'Pagos', path: '/pagos', icon: CreditCardIcon, modulo: 'pagos', accion: 'ver' },
     { name: 'Solicitudes', path: '/solicitudes', icon: DocumentTextIcon, modulo: 'solicitudes', accion: 'ver' },
-    { name: 'Garantes', path: '/garantes', icon: UserGroupIcon, modulo: 'garantes', accion: 'ver' },
     { name: 'Comisiones', path: '/comisiones', icon: GiftIcon, modulo: 'comisiones', accion: 'ver' }, // 👈 NUEVO ÍTEM
     { name: 'Usuarios', path: '/usuarios', icon: UsersIcon, modulo: 'usuarios', accion: 'ver' },
     { name: 'Notificaciones', path: '/notificaciones', icon: BellIcon, modulo: 'notificaciones', accion: 'ver' },

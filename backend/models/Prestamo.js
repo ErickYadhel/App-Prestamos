@@ -96,6 +96,10 @@ class Prestamo {
     return moraDiaria * diasMora;
   }
 
+  // ============================================
+  // MÉTODO CORREGIDO PARA CALCULAR SIGUIENTE FECHA DE PAGO
+  // Misma lógica que QUINCENAL: usa this.fechaProximoPago como referencia
+  // ============================================
   calcularSiguienteFechaPago(fechaBase) {
     const fecha = this._normalizarFecha(fechaBase);
     if (!fecha) return new Date();
@@ -120,51 +124,72 @@ class Prestamo {
         return fechaSemanal;
         
       case 'quincenal':
-        const fechaProximoActual = this.fechaProximoPago || this.fechaPrestamo;
-        const fechaBaseProx = this._normalizarFecha(fechaProximoActual);
-        const diaProx = fechaBaseProx.getDate();
-        const mesProx = fechaBaseProx.getMonth();
-        const añoProx = fechaBaseProx.getFullYear();
+        // Usar la fecha de próximo pago actual si existe, si no, usar fecha base
+        const fechaActualQuincenal = this.fechaProximoPago ? this._normalizarFecha(this.fechaProximoPago) : fecha;
+        const diaActualQuincenal = fechaActualQuincenal.getDate();
+        const mesActualQuincenal = fechaActualQuincenal.getMonth();
+        const añoActualQuincenal = fechaActualQuincenal.getFullYear();
         
-        console.log(`  Fecha de próximo pago actual: ${fechaBaseProx.toLocaleDateString()}, Día: ${diaProx}`);
+        console.log(`  Fecha de próximo pago actual: ${fechaActualQuincenal.toLocaleDateString()}, Día: ${diaActualQuincenal}`);
         
-        if (diaProx === 15) {
-          const nuevaFecha = new Date(añoProx, mesProx, 30);
-          console.log(`  → Siguiente fecha: 30 del mismo mes (${nuevaFecha.toLocaleDateString()})`);
+        if (diaActualQuincenal === 15) {
+          const ultimoDia = new Date(añoActualQuincenal, mesActualQuincenal + 1, 0).getDate();
+          const nuevaFecha = new Date(añoActualQuincenal, mesActualQuincenal, ultimoDia);
+          console.log(`  → Quincenal: de 15 a ${ultimoDia} del mismo mes (${nuevaFecha.toLocaleDateString()})`);
           return nuevaFecha;
         } else {
-          const nuevaFecha = new Date(añoProx, mesProx + 1, 15);
-          console.log(`  → Siguiente fecha: 15 del mes siguiente (${nuevaFecha.toLocaleDateString()})`);
+          let mesSiguiente = mesActualQuincenal + 1;
+          let añoSiguiente = añoActualQuincenal;
+          if (mesSiguiente > 11) {
+            mesSiguiente = 0;
+            añoSiguiente++;
+          }
+          const nuevaFecha = new Date(añoSiguiente, mesSiguiente, 15);
+          console.log(`  → Quincenal: de ${diaActualQuincenal} a 15 del mes siguiente (${nuevaFecha.toLocaleDateString()})`);
           return nuevaFecha;
         }
         
       case 'mensual':
-        let diaPago = this.diaPagoPersonalizado || dia;
-        let fechaMensual = new Date(año, mes + 1, diaPago);
-        if (fechaMensual.getMonth() !== (mes + 1) % 12) {
-          fechaMensual = new Date(año, mes + 2, 0);
+        // 👇 MISMA LÓGICA QUE QUINCENAL: usar fecha de próximo pago actual
+        const fechaActualMensual = this.fechaProximoPago ? this._normalizarFecha(this.fechaProximoPago) : fecha;
+        const diaActualMensual = fechaActualMensual.getDate();
+        const mesActualMensual = fechaActualMensual.getMonth();
+        const añoActualMensual = fechaActualMensual.getFullYear();
+        
+        console.log(`  Fecha de próximo pago actual: ${fechaActualMensual.toLocaleDateString()}, Día: ${diaActualMensual}`);
+        
+        // Usar el día configurado (diaPagoPersonalizado) o mantener el día actual
+        let diaPagoMensual = this.diaPagoPersonalizado || diaActualMensual;
+        let fechaMensual = new Date(añoActualMensual, mesActualMensual + 1, diaPagoMensual);
+        
+        // Si el día no existe en el mes, ajustar al último día
+        if (fechaMensual.getMonth() !== (mesActualMensual + 1) % 12) {
+          fechaMensual = new Date(añoActualMensual, mesActualMensual + 2, 0);
+          console.log(`  → Mensual: día ${diaPagoMensual} no existe, ajustado al último día: ${fechaMensual.toLocaleDateString()}`);
+        } else {
+          console.log(`  → Mensual (día configurado ${diaPagoMensual}): ${fechaMensual.toLocaleDateString()}`);
         }
-        console.log(`  → Mensual (día ${diaPago}): ${fechaMensual.toLocaleDateString()}`);
         return fechaMensual;
         
       case 'personalizado':
         if (this.fechasPersonalizadas && this.fechasPersonalizadas.length > 0) {
+          const fechaReferencia = this.fechaProximoPago ? this._normalizarFecha(this.fechaProximoPago) : fecha;
           const fechas = this.fechasPersonalizadas.map(f => this._normalizarFecha(f));
           fechas.sort((a, b) => a - b);
           for (const fechaPago of fechas) {
-            if (fechaPago > fecha) {
-              console.log(`  → Personalizado: ${fechaPago.toLocaleDateString()}`);
+            if (fechaPago > fechaReferencia) {
+              console.log(`  → Personalizado: siguiente fecha programada ${fechaPago.toLocaleDateString()}`);
               return fechaPago;
             }
           }
           const primeraFecha = new Date(fechas[0]);
           primeraFecha.setFullYear(primeraFecha.getFullYear() + 1);
-          console.log(`  → Personalizado (próximo año): ${primeraFecha.toLocaleDateString()}`);
+          console.log(`  → Personalizado: no hay más fechas, usando primera del próximo año: ${primeraFecha.toLocaleDateString()}`);
           return primeraFecha;
         }
         const fechaDefault = new Date(fecha);
         fechaDefault.setDate(dia + 30);
-        console.log(`  → Default (30 días): ${fechaDefault.toLocaleDateString()}`);
+        console.log(`  → Personalizado (default): ${fechaDefault.toLocaleDateString()}`);
         return fechaDefault;
         
       default:

@@ -52,29 +52,49 @@ function calcularPrimeraFechaPago(fechaPrestamo, frecuencia, config = {}) {
       }
       
     case 'mensual':
+      // 👇 CORREGIDO: Comparar día configurado con día actual
       let diaPago = config.diaPagoPersonalizado || dia;
-      let fechaMensual = new Date(año, mes + 1, diaPago);
-      if (fechaMensual.getMonth() !== (mes + 1) % 12) {
-        fechaMensual = new Date(año, mes + 2, 0);
+      let mesPrimeraFecha = mes;
+      let añoPrimeraFecha = año;
+      
+      // Si el día de pago configurado es menor o igual al día actual, pasar al mes siguiente
+      if (diaPago <= dia) {
+        mesPrimeraFecha = mes + 1;
+        if (mesPrimeraFecha > 11) {
+          mesPrimeraFecha = 0;
+          añoPrimeraFecha++;
+        }
       }
-      console.log('  Resultado (mensual):', fechaMensual.toLocaleDateString());
+      
+      let fechaMensual = new Date(añoPrimeraFecha, mesPrimeraFecha, diaPago);
+      
+      // Si el día no existe en el mes (ej: 31 en febrero), ajustar al último día del mes
+      if (fechaMensual.getMonth() !== mesPrimeraFecha % 12) {
+        fechaMensual = new Date(añoPrimeraFecha, mesPrimeraFecha + 1, 0);
+        console.log(`  → Mensual: día ${diaPago} no existe en el mes, ajustado al último día: ${fechaMensual.toLocaleDateString()}`);
+      } else {
+        console.log(`  → Mensual (día configurado ${diaPago}): ${fechaMensual.toLocaleDateString()}`);
+      }
       return fechaMensual;
       
     case 'personalizado':
       if (config.fechasPersonalizadas && config.fechasPersonalizadas.length > 0) {
         const fechas = config.fechasPersonalizadas.map(f => new Date(f));
         fechas.sort((a, b) => a - b);
+        // Buscar la primera fecha después de la fecha del préstamo
         for (const fechaPago of fechas) {
           if (fechaPago > fecha) {
             console.log('  Resultado (personalizado):', fechaPago.toLocaleDateString());
             return fechaPago;
           }
         }
+        // Si todas las fechas son anteriores, usar la primera del próximo año
         const primeraFecha = new Date(fechas[0]);
         primeraFecha.setFullYear(primeraFecha.getFullYear() + 1);
         console.log('  Resultado (personalizado - próximo año):', primeraFecha.toLocaleDateString());
         return primeraFecha;
       }
+      // Fallback: sumar 30 días
       const fechaDefault = new Date(fecha);
       fechaDefault.setDate(dia + 30);
       console.log('  Resultado (default):', fechaDefault.toLocaleDateString());
@@ -216,7 +236,7 @@ router.post('/', async (req, res) => {
       };
     }
 
-    // 👇 MANEJO CORRECTO DE FECHA
+    // Manejo correcto de fecha
     let fechaPrestamo;
     if (prestamoData.fechaPrestamo instanceof Date) {
       fechaPrestamo = prestamoData.fechaPrestamo;
@@ -339,7 +359,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/prestamos/:id - Actualizar préstamo (CORREGIDO)
+// PUT /api/prestamos/:id - Actualizar préstamo
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -373,7 +393,7 @@ router.put('/:id', async (req, res) => {
       }
     }
 
-    // 👇 MANEJO CORRECTO DE FECHA PRESTAMO
+    // Manejo correcto de fecha préstamo
     if (updates.fechaPrestamo !== undefined) {
       let fechaPrestamo;
       if (updates.fechaPrestamo instanceof Date) {
@@ -395,7 +415,6 @@ router.put('/:id', async (req, res) => {
         console.log('✅ Fecha préstamo actualizada:', fechaPrestamo);
       } else {
         console.warn('⚠️ Fecha inválida recibida, omitiendo actualización');
-        // No incluir fecha inválida en la actualización
         delete updatesData.fechaPrestamo;
       }
     }

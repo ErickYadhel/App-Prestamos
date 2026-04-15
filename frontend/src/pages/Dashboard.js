@@ -77,6 +77,8 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy 
 import ChartModal from '../components/Dashboard/ChartModal';
 import DashboardManager from '../components/Dashboard/DashboardManager';
 import { formatFirebaseDate, formatShortDate, getRelativeTime, convertTimestampToDate } from '../components/Dashboard/DateFormatter';
+import TopComisionesWidget from '../components/Dashboard/TopComisionesWidget';
+import CalendarWidget from '../components/Dashboard/CalendarWidget';
 
 // Registrar componentes de Chart.js
 ChartJS.register(
@@ -172,7 +174,7 @@ const DashboardSkeleton = () => {
 };
 
 // ============================================
-// COMPONENTE DE COMISIONES DEL GARANTE
+// COMPONENTE DE COMISIONES DEL GARANTE (para garantes)
 // ============================================
 const ComisionesGaranteWidget = ({ comisionesData, loading, esGarante }) => {
   const { theme } = useTheme();
@@ -207,91 +209,19 @@ const ComisionesGaranteWidget = ({ comisionesData, loading, esGarante }) => {
     );
   }
 
-  if (!comisionesData || (esGarante && !comisionesData.garante)) {
-    return null;
-  }
-
-  // Vista para admin - Top Garantes
-  if (!esGarante && comisionesData.topGarantes && comisionesData.topGarantes.length > 0) {
+  if (!comisionesData || !comisionesData.garante) {
     return (
       <GlassCard>
-        <div className="p-4 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-gradient-to-br from-yellow-500 to-yellow-700 rounded-lg">
-                <TrophyIcon className="h-5 w-5 text-white" />
-              </div>
-              <h4 className={`text-base sm:text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                Top Garantes por Comisiones
-              </h4>
-            </div>
-            <Link 
-              to="/operaciones/comisiones" 
-              className={`text-xs sm:text-sm ${theme === 'dark' ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'}`}
-            >
-              Ver todos →
-            </Link>
-          </div>
-          
-          <div className="space-y-3">
-            {comisionesData.topGarantes.map((garante, index) => (
-              <motion.div
-                key={garante.id || index}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className={`flex items-center justify-between p-3 rounded-lg border ${
-                  index === 0 
-                    ? 'bg-gradient-to-r from-yellow-50 to-transparent dark:from-yellow-900/20 border-yellow-200 dark:border-yellow-800' 
-                    : theme === 'dark' ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                    index === 0 ? 'bg-yellow-500 text-white' :
-                    index === 1 ? 'bg-gray-400 text-white' :
-                    index === 2 ? 'bg-amber-600 text-white' :
-                    'bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
-                  }`}>
-                    {index + 1}
-                  </div>
-                  <div>
-                    <p className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      {garante.nombre || garante.garanteID}
-                    </p>
-                    <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {garante.cantidad} comisiones
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className={`text-sm font-bold ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>
-                    {formatearMonto(garante.total)}
-                  </p>
-                  <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
-                    {formatearMonto(garante.pagadas)} pagadas
-                  </p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
-          {comisionesData.totalGeneral !== undefined && (
-            <div className={`mt-4 pt-3 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} flex justify-between items-center`}>
-              <span className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                Total en comisiones
-              </span>
-              <span className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                {formatearMonto(comisionesData.totalGeneral)}
-              </span>
-            </div>
-          )}
+        <div className="p-6 text-center">
+          <GiftIcon className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+          <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+            No hay comisiones registradas aún
+          </p>
         </div>
       </GlassCard>
     );
   }
 
-  // Vista para garante - Mis Comisiones
   const garanteData = comisionesData.garante || {};
   const ultimasComisiones = garanteData.ultimasComisiones || [];
   const mostrarTodas = ultimasComisiones.length > 3 && expanded;
@@ -316,7 +246,6 @@ const ComisionesGaranteWidget = ({ comisionesData, loading, esGarante }) => {
           </Link>
         </div>
 
-        {/* Tarjetas de resumen */}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-green-900/20' : 'bg-green-50'} border border-green-200 dark:border-green-800`}>
             <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Total Ganado</p>
@@ -347,7 +276,6 @@ const ComisionesGaranteWidget = ({ comisionesData, loading, esGarante }) => {
           </div>
         </div>
 
-        {/* Últimas comisiones */}
         {ultimasComisiones.length > 0 && (
           <div className={`mt-3 pt-3 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
             <p className={`text-xs font-medium mb-2 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -387,12 +315,6 @@ const ComisionesGaranteWidget = ({ comisionesData, loading, esGarante }) => {
                 {expanded ? 'Ver menos ↑' : `Ver más (${ultimasComisiones.length - 3}) ↓`}
               </button>
             )}
-          </div>
-        )}
-
-        {ultimasComisiones.length === 0 && (
-          <div className={`text-center py-4 text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
-            No hay comisiones registradas aún
           </div>
         )}
       </div>
@@ -1964,7 +1886,9 @@ const Dashboard = () => {
       topGarantes: [],
       totalGeneral: 0,
       garante: null
-    }
+    },
+    prestamos: [],
+    pagos: []
   });
   const [loading, setLoading] = useState(true);
   const [filtros, setFiltros] = useState({ periodo: 'mes', año: new Date().getFullYear().toString() });
@@ -2262,7 +2186,9 @@ const Dashboard = () => {
             ganancias: data.stats?.gananciasMes || 0
           } 
         },
-        comisiones: data.comisiones || { topGarantes: [], totalGeneral: 0, garante: null }
+        comisiones: data.comisiones || { topGarantes: [], totalGeneral: 0, garante: null },
+        prestamos: data.prestamos || [],
+        pagos: data.pagos || []
       });
       setLastUpdated(new Date());
       
@@ -2667,13 +2593,25 @@ const Dashboard = () => {
         />
       </div>
 
-      {/* Widget de Comisiones */}
-      <div className="grid grid-cols-1 gap-4">
-        <ComisionesGaranteWidget 
-          comisionesData={dashboardData.comisiones} 
-          loading={loading}
-          esGarante={esGarante}
-        />
+      {/* Widgets de Comisiones y Calendario */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Widget de Comisiones */}
+        {esGarante ? (
+          <ComisionesGaranteWidget 
+            comisionesData={dashboardData.comisiones} 
+            loading={loading}
+            esGarante={esGarante}
+          />
+        ) : (
+          <TopComisionesWidget 
+            prestamos={dashboardData.prestamos}
+            pagos={dashboardData.pagos}
+            comisiones={dashboardData.comisiones}
+          />
+        )}
+        
+        {/* Widget de Calendario */}
+        <CalendarWidget />
       </div>
 
       {/* Gráficos Personalizables */}

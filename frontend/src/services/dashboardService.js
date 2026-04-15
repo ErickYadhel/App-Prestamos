@@ -80,7 +80,9 @@ class DashboardService {
         graficos,
         metricas,
         actividadReciente,
-        prestamosProximosVencimiento
+        prestamosProximosVencimiento,
+        prestamos,
+        pagos
       };
 
     } catch (error) {

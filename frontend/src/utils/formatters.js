@@ -4,6 +4,7 @@
 
 /**
  * Formatea un monto a moneda dominicana (DOP)
+ * con formato: miles separados por coma (,) y decimales con punto (.)
  * @param {number} amount - Monto a formatear
  * @param {boolean} showSymbol - Mostrar símbolo RD$
  * @returns {string} - Monto formateado
@@ -16,15 +17,14 @@ export const formatCurrency = (amount, showSymbol = true) => {
   
   if (isNaN(numAmount)) return showSymbol ? 'RD$ 0' : '0';
   
-  // Formatear con separadores de miles
-  const formatter = new Intl.NumberFormat('es-DO', {
-    style: showSymbol ? 'currency' : 'decimal',
-    currency: 'DOP',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  });
+  // Formateo personalizado: miles con coma, decimales con punto
+  const partes = numAmount.toFixed(2).split('.');
+  const parteEntera = parseInt(partes[0], 10).toLocaleString('en-US');
+  const decimales = partes[1];
   
-  return formatter.format(numAmount);
+  const numeroFormateado = decimales === '00' ? parteEntera : `${parteEntera}.${decimales}`;
+  
+  return showSymbol ? `RD$ ${numeroFormateado}` : numeroFormateado;
 };
 
 /**
@@ -49,7 +49,7 @@ export const formatCompactCurrency = (amount) => {
 };
 
 /**
- * Formatea un número con separadores de miles
+ * Formatea un número con separadores de miles (coma como separador)
  * @param {number} number - Número a formatear
  * @returns {string} - Número formateado
  */
@@ -60,7 +60,8 @@ export const formatNumber = (number) => {
   
   if (isNaN(numNumber)) return '0';
   
-  return new Intl.NumberFormat('es-DO').format(numNumber);
+  // Usar en-US para que los miles se separen con coma
+  return numNumber.toLocaleString('en-US');
 };
 
 /**
@@ -97,6 +98,7 @@ export const formatPercentage = (value, decimals = 1) => {
   
   if (isNaN(numValue)) return '0%';
   
+  // Usar punto como separador decimal
   return `${numValue.toFixed(decimals)}%`;
 };
 

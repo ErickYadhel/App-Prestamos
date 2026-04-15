@@ -27,7 +27,7 @@ import {
   PresentationChartLineIcon,
   LockClosedIcon,
   InformationCircleIcon,
-  GiftIcon  // 👈 NUEVO ÍCONO PARA COMISIONES
+  GiftIcon
 } from '@heroicons/react/24/outline';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../services/firebase';
@@ -65,7 +65,6 @@ const Sidebar = ({ children }) => {
       setIsMobile(width < 768);
       setIsTablet(width >= 768 && width < 1024);
       
-      // En tablet, la barra lateral se comporta como en móvil pero con overlay
       if (width < 1024) {
         setIsFixed(false);
       }
@@ -81,6 +80,32 @@ const Sidebar = ({ children }) => {
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location]);
+
+  // 👇 NUEVO: Cargar configuración de la empresa desde Firestore
+  useEffect(() => {
+    const cargarConfiguracionEmpresa = async () => {
+      try {
+        const empresaRef = doc(db, 'Configuracion', 'empresa');
+        const empresaSnap = await getDoc(empresaRef);
+        
+        if (empresaSnap.exists()) {
+          const data = empresaSnap.data();
+          if (data.logoUrl) {
+            setLogoUrl(data.logoUrl);
+            localStorage.setItem('empresaLogo', data.logoUrl);
+          }
+          if (data.empresaNombre) {
+            setEmpresaNombre(data.empresaNombre);
+            localStorage.setItem('empresaNombre', data.empresaNombre);
+          }
+        }
+      } catch (error) {
+        console.error('Error cargando configuración de empresa:', error);
+      }
+    };
+    
+    cargarConfiguracionEmpresa();
+  }, []);
 
   // Función para obtener color por defecto según el rol
   const getDefaultRoleColor = (rol) => {
@@ -227,7 +252,7 @@ const Sidebar = ({ children }) => {
     return colorRol;
   };
 
-  // Escuchar cambios en el logo y nombre de empresa
+  // Escuchar cambios en el logo y nombre de empresa (desde el evento)
   useEffect(() => {
     const handleLogoUpdate = (event) => {
       setLogoUrl(event.detail);
@@ -256,14 +281,14 @@ const Sidebar = ({ children }) => {
     };
   }, []);
 
-  // Items del menú - AGREGADO COMISIONES
+  // Items del menú
   const todosLosMenuItems = [
     { name: 'Dashboard', path: '/dashboard', icon: HomeIcon, modulo: 'dashboard', accion: 'ver' },
     { name: 'Clientes', path: '/clientes', icon: UsersIcon, modulo: 'clientes', accion: 'ver' },
     { name: 'Préstamos', path: '/prestamos', icon: CurrencyDollarIcon, modulo: 'prestamos', accion: 'ver' },
     { name: 'Pagos', path: '/pagos', icon: CreditCardIcon, modulo: 'pagos', accion: 'ver' },
     { name: 'Solicitudes', path: '/solicitudes', icon: DocumentTextIcon, modulo: 'solicitudes', accion: 'ver' },
-    { name: 'Comisiones', path: '/comisiones', icon: GiftIcon, modulo: 'comisiones', accion: 'ver' }, // 👈 NUEVO ÍTEM
+    { name: 'Comisiones', path: '/comisiones', icon: GiftIcon, modulo: 'comisiones', accion: 'ver' },
     { name: 'Usuarios', path: '/usuarios', icon: UsersIcon, modulo: 'usuarios', accion: 'ver' },
     { name: 'Notificaciones', path: '/notificaciones', icon: BellIcon, modulo: 'notificaciones', accion: 'ver' },
     { name: 'Operaciones', path: '/operaciones', icon: PresentationChartLineIcon, modulo: 'operaciones', accion: 'ver' },
@@ -304,7 +329,6 @@ const Sidebar = ({ children }) => {
             }`}
             style={{ maxHeight: '100vh', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
-            {/* Ocultar scrollbar en navegadores WebKit */}
             <style jsx>{`
               div::-webkit-scrollbar {
                 display: none;
@@ -395,7 +419,6 @@ const Sidebar = ({ children }) => {
             setShowUserMenu(false);
           }}
         >
-          {/* Ocultar scrollbar en navegadores WebKit */}
           <style jsx>{`
             div::-webkit-scrollbar {
               display: none;
@@ -430,7 +453,7 @@ const Sidebar = ({ children }) => {
             )}
           </div>
 
-          {/* Botón fijar - con z-index más alto */}
+          {/* Botón fijar */}
           <AnimatePresence>
             {isHovered && sidebarOpen && (
               <motion.button
@@ -451,7 +474,7 @@ const Sidebar = ({ children }) => {
             )}
           </AnimatePresence>
 
-          {/* Navegación con scroll invisible */}
+          {/* Navegación */}
           <nav className="mt-4 h-[calc(100vh-4rem)] overflow-y-auto scrollbar-hide pb-8" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {loadingPermisos ? (
               <div className="flex justify-center py-8">
@@ -522,7 +545,6 @@ const Sidebar = ({ children }) => {
         } border-b sticky top-0 z-40`}>
           <div className="flex justify-between items-center px-4 md:px-6 py-3">
             <div className="flex items-center space-x-3">
-              {/* Botón menú móvil y tablet */}
               <button
                 onClick={() => setIsMobileMenuOpen(true)}
                 className="lg:hidden p-2 rounded-lg transition-colors hover:bg-gray-800"

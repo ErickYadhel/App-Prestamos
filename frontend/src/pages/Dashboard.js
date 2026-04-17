@@ -79,6 +79,7 @@ import DashboardManager from '../components/Dashboard/DashboardManager';
 import { formatFirebaseDate, formatShortDate, getRelativeTime, convertTimestampToDate } from '../components/Dashboard/DateFormatter';
 import TopComisionesWidget from '../components/Dashboard/TopComisionesWidget';
 import CalendarWidget from '../components/Dashboard/CalendarWidget';
+import ClienteTopInteresWidget from '../components/Dashboard/ClienteTopInteresWidget';
 
 // Registrar componentes de Chart.js
 ChartJS.register(
@@ -2593,7 +2594,7 @@ const Dashboard = () => {
         />
       </div>
 
-      {/* Widgets de Comisiones y Calendario */}
+      {/* Widgets de Comisiones, Clientes Destacados y Calendario */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Widget de Comisiones */}
         {esGarante ? (
@@ -2610,7 +2611,12 @@ const Dashboard = () => {
           />
         )}
         
-        {/* Widget de Calendario */}
+        {/* Widget de Clientes Destacados */}
+        <ClienteTopInteresWidget />
+      </div>
+
+      {/* Widget de Calendario - Fila completa */}
+      <div className="grid grid-cols-1 gap-4">
         <CalendarWidget />
       </div>
 

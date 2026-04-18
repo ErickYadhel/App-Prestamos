@@ -80,6 +80,32 @@ import { formatFirebaseDate, formatShortDate, getRelativeTime, convertTimestampT
 import TopComisionesWidget from '../components/Dashboard/TopComisionesWidget';
 import CalendarWidget from '../components/Dashboard/CalendarWidget';
 import ClienteTopInteresWidget from '../components/Dashboard/ClienteTopInteresWidget';
+import HeatmapPagos from '../components/Dashboard/HeatmapPagos';
+import GaugeMorosidad from '../components/Dashboard/GaugeMorosidad';
+import BubbleChartClientes from '../components/Dashboard/BubbleChartClientes';
+import FunnelConversion from '../components/Dashboard/FunnelConversion';
+import TrendLineChart from '../components/Dashboard/TrendLineChart';
+import AreaChartMorosidad from '../components/Dashboard/AreaChartMorosidad';
+import RadarComparativo from '../components/Dashboard/RadarComparativo';
+import StackedBarChart from '../components/Dashboard/StackedBarChart';
+import RentabilidadCliente from '../components/Dashboard/RentabilidadCliente';
+import AnalisisMorosidad from '../components/Dashboard/AnalisisMorosidad';
+import EficienciaCobranza from '../components/Dashboard/EficienciaCobranza';
+import CicloVidaPrestamo from '../components/Dashboard/CicloVidaPrestamo';
+import AnalisisRenovaciones from '../components/Dashboard/AnalisisRenovaciones';
+import RendimientoAsesor from '../components/Dashboard/RendimientoAsesor';
+import EstacionalidadPagos from '../components/Dashboard/EstacionalidadPagos';
+import AnalisisRiesgo from '../components/Dashboard/AnalisisRiesgo';
+import FlujoCajaProyectado from '../components/Dashboard/FlujoCajaProyectado';
+import Benchmarking from '../components/Dashboard/Benchmarking';
+import MapaCalorProvincia from '../components/Dashboard/MapaCalorProvincia';
+import AnalisisCohortes from '../components/Dashboard/AnalisisCohortes';
+import GraficoPareto from '../components/Dashboard/GraficoPareto';
+import DistribucionMontos from '../components/Dashboard/DistribucionMontos';
+import PrediccionDefault from '../components/Dashboard/PrediccionDefault';
+import AlertasWidget from '../components/Dashboard/AlertasWidget';
+import ComparativaPeriodos from '../components/Dashboard/ComparativaPeriodos';
+import BotonExportar from '../components/Dashboard/BotonExportar';
 
 // Registrar componentes de Chart.js
 ChartJS.register(
@@ -2415,6 +2441,12 @@ const Dashboard = () => {
                 onOpenManager={() => setShowDashboardManager(true)}
               />
 
+              <BotonExportar 
+                dashboardData={dashboardData}
+                estadisticas={dashboardData.stats}
+                metricas={dashboardData.metricas}
+              />
+
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -2729,6 +2761,65 @@ const Dashboard = () => {
           onExpand={() => openChartModal('Proyecciones a 6 meses', getLineData(dashboardData.graficos.proyecciones, 'Proyección', '#8B5CF6'), 'line')}
           getChartOptions={getChartOptions}
         />
+      </div>
+
+      {/* Gráficos Avanzados */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <HeatmapPagos />
+        <GaugeMorosidad />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <BubbleChartClientes />
+        <FunnelConversion />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <TrendLineChart />
+        <AreaChartMorosidad />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <RadarComparativo />
+        <StackedBarChart />
+      </div>
+
+      {/* 10 Dashboards para Toma de Decisiones */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <RentabilidadCliente />
+        <AnalisisMorosidad />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <EficienciaCobranza />
+        <CicloVidaPrestamo />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <AnalisisRenovaciones />
+        <RendimientoAsesor />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <EstacionalidadPagos />
+        <AnalisisRiesgo />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <FlujoCajaProyectado />
+        <Benchmarking />
+      </div>
+
+      {/* Gráficos Avanzados Adicionales */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <MapaCalorProvincia />
+        <AnalisisCohortes />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <GraficoPareto />
+        <DistribucionMontos />
+      </div>
+      <div className="grid grid-cols-1 gap-4">
+        <PrediccionDefault />
+      </div>
+
+      {/* Alertas y Comparativa */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <AlertasWidget />
+        <ComparativaPeriodos />
       </div>
 
       {/* KPIs Avanzados */}

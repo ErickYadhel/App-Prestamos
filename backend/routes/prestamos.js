@@ -6,6 +6,51 @@ const router = express.Router();
 const db = admin.firestore();
 
 // ============================================
+// FUNCIÓN PARA GENERAR ID PERSONALIZADO
+// ============================================
+function generarIdPrestamo(clienteNombre, fechaPrestamo) {
+  // Limpiar el nombre: eliminar espacios, convertir a minúsculas, eliminar acentos
+  const nombreLimpio = clienteNombre
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Eliminar acentos
+    .replace(/\s+/g, '') // Eliminar espacios
+    .replace(/[^a-z0-9]/g, ''); // Solo letras y números
+  
+  // Obtener fecha formateada
+  let fecha;
+  if (fechaPrestamo instanceof Date) {
+    fecha = fechaPrestamo;
+  } else if (typeof fechaPrestamo === 'string') {
+    fecha = new Date(fechaPrestamo);
+  } else if (fechaPrestamo?.toDate) {
+    fecha = fechaPrestamo.toDate();
+  } else {
+    fecha = new Date(fechaPrestamo);
+  }
+  
+  const dia = fecha.getDate();
+  const mes = fecha.getMonth() + 1;
+  const año = fecha.getFullYear().toString().slice(-2);
+  
+  const fechaFormateada = `${dia}-${mes}-${año}`;
+  
+  // Combinar nombre + fecha
+  let idGenerado = `${nombreLimpio}${fechaFormateada}`;
+  
+  // Limitar longitud máxima
+  if (idGenerado.length > 100) {
+    idGenerado = idGenerado.substring(0, 100);
+  }
+  
+  console.log('🔑 ID generado para préstamo:', idGenerado);
+  console.log('   Nombre original:', clienteNombre);
+  console.log('   Nombre limpio:', nombreLimpio);
+  console.log('   Fecha:', fechaFormateada);
+  
+  return idGenerado;
+}
+
+// ============================================
 // FUNCIONES DE FECHA CORREGIDAS
 // ============================================
 
@@ -52,12 +97,10 @@ function calcularPrimeraFechaPago(fechaPrestamo, frecuencia, config = {}) {
       }
       
     case 'mensual':
-      // 👇 CORREGIDO: Comparar día configurado con día actual
       let diaPago = config.diaPagoPersonalizado || dia;
       let mesPrimeraFecha = mes;
       let añoPrimeraFecha = año;
       
-      // Si el día de pago configurado es menor o igual al día actual, pasar al mes siguiente
       if (diaPago <= dia) {
         mesPrimeraFecha = mes + 1;
         if (mesPrimeraFecha > 11) {
@@ -68,7 +111,6 @@ function calcularPrimeraFechaPago(fechaPrestamo, frecuencia, config = {}) {
       
       let fechaMensual = new Date(añoPrimeraFecha, mesPrimeraFecha, diaPago);
       
-      // Si el día no existe en el mes (ej: 31 en febrero), ajustar al último día del mes
       if (fechaMensual.getMonth() !== mesPrimeraFecha % 12) {
         fechaMensual = new Date(añoPrimeraFecha, mesPrimeraFecha + 1, 0);
         console.log(`  → Mensual: día ${diaPago} no existe en el mes, ajustado al último día: ${fechaMensual.toLocaleDateString()}`);
@@ -81,20 +123,17 @@ function calcularPrimeraFechaPago(fechaPrestamo, frecuencia, config = {}) {
       if (config.fechasPersonalizadas && config.fechasPersonalizadas.length > 0) {
         const fechas = config.fechasPersonalizadas.map(f => new Date(f));
         fechas.sort((a, b) => a - b);
-        // Buscar la primera fecha después de la fecha del préstamo
         for (const fechaPago of fechas) {
           if (fechaPago > fecha) {
             console.log('  Resultado (personalizado):', fechaPago.toLocaleDateString());
             return fechaPago;
           }
         }
-        // Si todas las fechas son anteriores, usar la primera del próximo año
         const primeraFecha = new Date(fechas[0]);
         primeraFecha.setFullYear(primeraFecha.getFullYear() + 1);
         console.log('  Resultado (personalizado - próximo año):', primeraFecha.toLocaleDateString());
         return primeraFecha;
       }
-      // Fallback: sumar 30 días
       const fechaDefault = new Date(fecha);
       fechaDefault.setDate(dia + 30);
       console.log('  Resultado (default):', fechaDefault.toLocaleDateString());
@@ -248,7 +287,7 @@ router.post('/', async (req, res) => {
       fechaPrestamo = new Date(prestamoData.fechaPrestamo);
     }
     
-    // Calcular la PRIMERA fecha de pago usando la función corregida
+    // Calcular la PRIMERA fecha de pago
     const primeraFechaPago = calcularPrimeraFechaPago(
       fechaPrestamo,
       prestamoData.frecuencia,
@@ -310,11 +349,15 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Crear en Firestore
-    const docRef = db.collection('prestamos').doc();
+    // ============================================
+    // CREAR PRÉSTAMO CON ID PERSONALIZADO
+    // ============================================
+    const idPersonalizado = generarIdPrestamo(prestamo.clienteNombre, fechaPrestamo);
+    const docRef = db.collection('prestamos').doc(idPersonalizado);
     prestamo.id = docRef.id;
 
     await docRef.set({
+      id: idPersonalizado,
       clienteID: prestamo.clienteID,
       clienteNombre: prestamo.clienteNombre,
       montoPrestado: prestamo.montoPrestado,
@@ -338,7 +381,8 @@ router.post('/', async (req, res) => {
       porcentajeComision: prestamo.porcentajeComision
     });
 
-    console.log('✅ Préstamo creado con comisión:', {
+    console.log('✅ Préstamo creado con ID personalizado:', idPersonalizado);
+    console.log('✅ Comisión configurada:', {
       generarComision: prestamo.generarComision,
       garanteID: prestamo.garanteID,
       garanteNombre: prestamo.garanteNombre,

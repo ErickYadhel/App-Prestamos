@@ -2,10 +2,78 @@ const express = require('express');
 const admin = require('firebase-admin');
 const Pago = require('../models/Pago');
 const Prestamo = require('../models/Prestamo');
-const Comision = require('../models/Comision'); // 👈 NUEVA IMPORTACIÓN
+const Comision = require('../models/Comision');
 const router = express.Router();
 
 const db = admin.firestore();
+
+// ============================================
+// FUNCIÓN PARA GENERAR ID PERSONALIZADO DEL PAGO
+// ============================================
+const generarIdPago = (clienteNombre, fechaPago) => {
+  if (!clienteNombre || !fechaPago) {
+    return null;
+  }
+  
+  // Limpiar el nombre del cliente (eliminar acentos, espacios, caracteres especiales)
+  const nombreLimpio = clienteNombre
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Eliminar acentos
+    .replace(/[^a-zA-Z0-9\s]/g, '') // Eliminar caracteres especiales
+    .trim()
+    .replace(/\s+/g, ' ');
+  
+  // Convertir a PascalCase (JuanPerez)
+  const nombrePascalCase = nombreLimpio
+    .split(' ')
+    .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase())
+    .join('');
+  
+  // Formatear fecha: DD-M-YY (ej: 18-4-26)
+  let fecha;
+  if (fechaPago instanceof Date) {
+    fecha = fechaPago;
+  } else if (fechaPago?.toDate) {
+    fecha = fechaPago.toDate();
+  } else {
+    fecha = new Date(fechaPago);
+  }
+  
+  const dia = fecha.getDate();
+  const mes = fecha.getMonth() + 1;
+  const anio = fecha.getFullYear().toString().slice(-2);
+  
+  const fechaFormateada = `${dia}-${mes}-${anio}`;
+  
+  return `${nombrePascalCase}-${fechaFormateada}`;
+};
+
+// ============================================
+// FUNCIÓN PARA GENERAR ID ÚNICO DE PAGO (con contador si colisión)
+// ============================================
+const generarIdPagoUnico = async (clienteNombre, fechaPago, contador = 0) => {
+  let idBase = generarIdPago(clienteNombre, fechaPago);
+  
+  if (!idBase) {
+    // Fallback a timestamp si no hay nombre
+    return `pago-${Date.now()}`;
+  }
+  
+  if (contador > 0) {
+    idBase = `${idBase}-${contador}`;
+  }
+  
+  // Verificar si ya existe un pago con ese ID
+  const pagoRef = db.collection('pagos').doc(idBase);
+  const pagoSnap = await pagoRef.get();
+  
+  if (pagoSnap.exists) {
+    // Si existe, intentar con contador +1
+    return generarIdPagoUnico(clienteNombre, fechaPago, contador + 1);
+  }
+  
+  return idBase;
+};
 
 // ============================================
 // FUNCIONES AUXILIARES
@@ -79,10 +147,6 @@ async function crearNotificacionCompletado(prestamo) {
   }
 }
 
-// ============================================
-// FUNCIÓN PARA OBTENER DATOS DEL GARANTE
-// ============================================
-
 async function obtenerGaranteById(garanteID) {
   try {
     const garanteDoc = await db.collection('garantes').doc(garanteID).get();
@@ -97,9 +161,8 @@ async function obtenerGaranteById(garanteID) {
 }
 
 // ============================================
-// FUNCIÓN PARA CREAR COMISIÓN AUTOMÁTICAMENTE (MEJORADA)
+// FUNCIÓN PARA CREAR COMISIÓN AUTOMÁTICA (ACTUALIZADA)
 // ============================================
-
 async function crearComisionAutomatica(prestamo, pagoId, interesPagado, fechaPago) {
   try {
     if (!prestamo.generarComision || !prestamo.garanteID || interesPagado <= 0) {
@@ -111,25 +174,26 @@ async function crearComisionAutomatica(prestamo, pagoId, interesPagado, fechaPag
       return null;
     }
     
-    // Obtener información completa del garante
     const garanteInfo = await obtenerGaranteById(prestamo.garanteID);
     const garanteNombre = garanteInfo?.nombre || prestamo.garanteNombre || prestamo.garanteID;
-    const garanteCedula = garanteInfo?.cedula || '';
     
     const porcentajeComision = prestamo.porcentajeComision || 50;
     const montoComision = (interesPagado * porcentajeComision) / 100;
     
     console.log('💰 Generando comisión automática:');
     console.log('  - Préstamo:', prestamo.id);
-    console.log('  - Garante ID:', prestamo.garanteID);
-    console.log('  - Garante Nombre:', garanteNombre);
-    console.log('  - Garante Cédula:', garanteCedula);
+    console.log('  - Cliente:', prestamo.clienteNombre);
+    console.log('  - Garante:', garanteNombre);
     console.log('  - Interés pagado:', interesPagado);
     console.log('  - Porcentaje comisión:', porcentajeComision);
     console.log('  - Monto comisión:', montoComision);
     
-    // Generar ID personalizado con nombre, cédula y fecha
-    const idPersonalizado = Comision.generarIdPersonalizado(garanteNombre, garanteCedula, fechaPago);
+    // 🔥 NUEVO ID: Cliente-Garante-Fecha (formato legible)
+    const idPersonalizado = Comision.generarIdPersonalizado(
+      prestamo.clienteNombre,
+      garanteNombre,
+      fechaPago
+    );
     
     const comisionData = {
       id: idPersonalizado,
@@ -145,8 +209,8 @@ async function crearComisionAutomatica(prestamo, pagoId, interesPagado, fechaPag
       montoComision: montoComision,
       fechaPago: fechaPago,
       fechaGeneracion: new Date(),
-      estado: 'pagada', // 👈 CAMBIADO: se marca como pagada inmediatamente
-      fechaPagoGarante: new Date(), // 👈 Se registra la fecha de pago al garante
+      estado: 'pagada',
+      fechaPagoGarante: new Date(),
       pagadoPor: 'sistema',
       descripcion: `Comisión automática por pago de interés del préstamo ${prestamo.id} - Cliente: ${prestamo.clienteNombre}`,
       periodo: Comision.prototype._calcularPeriodo(fechaPago),
@@ -168,10 +232,8 @@ async function crearComisionAutomatica(prestamo, pagoId, interesPagado, fechaPag
 }
 
 // ============================================
-// ENDPOINTS
-// ============================================
-
 // POST /api/pagos - Registrar un pago
+// ============================================
 router.post('/', async (req, res) => {
   try {
     const { 
@@ -299,8 +361,12 @@ router.post('/', async (req, res) => {
 
     const batch = db.batch();
     
-    const pagoRef = db.collection('pagos').doc();
-    pago.id = pagoRef.id;
+    // Generar ID personalizado para el pago
+    const idPersonalizado = await generarIdPagoUnico(prestamo.clienteNombre, fechaPagoDate);
+    console.log(`📝 ID de pago generado: ${idPersonalizado}`);
+    
+    const pagoRef = db.collection('pagos').doc(idPersonalizado);
+    pago.id = idPersonalizado;
     batch.set(pagoRef, { ...pago });
 
     const prestamoRef = db.collection('prestamos').doc(prestamoID);
@@ -315,7 +381,7 @@ router.post('/', async (req, res) => {
 
     await batch.commit();
 
-    // CREAR COMISIÓN AUTOMÁTICA si aplica (marcada como PAGADA automáticamente)
+    // Crear comisión automática
     let comisionCreada = null;
     if (distribucion.interes > 0 && prestamo.generarComision && prestamo.garanteID) {
       comisionCreada = await crearComisionAutomatica(
@@ -340,7 +406,7 @@ router.post('/', async (req, res) => {
     res.status(201).json({
       success: true,
       data: {
-        pago: pago,
+        pago: { id: idPersonalizado, ...pago },
         prestamoActualizado: {
           id: prestamo.id,
           capitalRestante: prestamo.capitalRestante,
@@ -366,7 +432,9 @@ router.post('/', async (req, res) => {
   }
 });
 
+// ============================================
 // GET /api/pagos/prestamo/:prestamoID - Obtener pagos de un préstamo
+// ============================================
 router.get('/prestamo/:prestamoID', async (req, res) => {
   try {
     const { limit = 50 } = req.query;
@@ -475,7 +543,9 @@ router.get('/prestamo/:prestamoID', async (req, res) => {
   }
 });
 
+// ============================================
 // GET /api/pagos - Listar todos los pagos
+// ============================================
 router.get('/', async (req, res) => {
   try {
     const { 
@@ -569,7 +639,9 @@ router.get('/', async (req, res) => {
   }
 });
 
+// ============================================
 // GET /api/pagos/:id - Obtener un pago específico
+// ============================================
 router.get('/:id', async (req, res) => {
   try {
     const pagoDoc = await db.collection('pagos').doc(req.params.id).get();
@@ -617,7 +689,9 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// ============================================
 // DELETE /api/pagos/:id - Eliminar pago (con reversión)
+// ============================================
 router.delete('/:id', async (req, res) => {
   try {
     const pagoDoc = await db.collection('pagos').doc(req.params.id).get();
@@ -652,7 +726,6 @@ router.delete('/:id', async (req, res) => {
       
       await db.collection('prestamos').doc(pago.prestamoID).update(actualizaciones);
       
-      // También eliminar las comisiones asociadas a este pago
       const comisionesSnapshot = await db.collection('comisiones')
         .where('pagoID', '==', pagoDoc.id)
         .get();
@@ -679,7 +752,9 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// ============================================
 // POST /api/pagos/recordatorios - Enviar recordatorios manualmente
+// ============================================
 router.post('/recordatorios', async (req, res) => {
   try {
     await enviarRecordatoriosAutomaticos();
@@ -696,7 +771,9 @@ router.post('/recordatorios', async (req, res) => {
   }
 });
 
+// ============================================
 // GET /api/pagos/resumen/:clienteID - Resumen de pagos por cliente
+// ============================================
 router.get('/resumen/:clienteID', async (req, res) => {
   try {
     const { clienteID } = req.params;
@@ -748,7 +825,9 @@ router.get('/resumen/:clienteID', async (req, res) => {
   }
 });
 
+// ============================================
 // Función para enviar recordatorios automáticos
+// ============================================
 async function enviarRecordatoriosAutomaticos() {
   try {
     const hoy = new Date();

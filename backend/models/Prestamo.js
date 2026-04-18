@@ -17,7 +17,6 @@ class Prestamo {
     configuracionMora = null,
     nota = '',
     historialPagos = [],
-    // NUEVOS CAMPOS DE COMISIÓN
     generarComision = false,
     garanteID = null,
     garanteNombre = null,
@@ -41,7 +40,6 @@ class Prestamo {
     this.nota = nota || '';
     this.historialPagos = historialPagos || [];
     this.fechaActualizacion = new Date();
-    // Nuevos campos
     this.generarComision = generarComision;
     this.garanteID = garanteID;
     this.garanteNombre = garanteNombre;
@@ -96,10 +94,6 @@ class Prestamo {
     return moraDiaria * diasMora;
   }
 
-  // ============================================
-  // MÉTODO CORREGIDO PARA CALCULAR SIGUIENTE FECHA DE PAGO
-  // Misma lógica que QUINCENAL: usa this.fechaProximoPago como referencia
-  // ============================================
   calcularSiguienteFechaPago(fechaBase) {
     const fecha = this._normalizarFecha(fechaBase);
     if (!fecha) return new Date();
@@ -124,7 +118,6 @@ class Prestamo {
         return fechaSemanal;
         
       case 'quincenal':
-        // Usar la fecha de próximo pago actual si existe, si no, usar fecha base
         const fechaActualQuincenal = this.fechaProximoPago ? this._normalizarFecha(this.fechaProximoPago) : fecha;
         const diaActualQuincenal = fechaActualQuincenal.getDate();
         const mesActualQuincenal = fechaActualQuincenal.getMonth();
@@ -150,7 +143,6 @@ class Prestamo {
         }
         
       case 'mensual':
-        // 👇 MISMA LÓGICA QUE QUINCENAL: usar fecha de próximo pago actual
         const fechaActualMensual = this.fechaProximoPago ? this._normalizarFecha(this.fechaProximoPago) : fecha;
         const diaActualMensual = fechaActualMensual.getDate();
         const mesActualMensual = fechaActualMensual.getMonth();
@@ -158,11 +150,9 @@ class Prestamo {
         
         console.log(`  Fecha de próximo pago actual: ${fechaActualMensual.toLocaleDateString()}, Día: ${diaActualMensual}`);
         
-        // Usar el día configurado (diaPagoPersonalizado) o mantener el día actual
         let diaPagoMensual = this.diaPagoPersonalizado || diaActualMensual;
         let fechaMensual = new Date(añoActualMensual, mesActualMensual + 1, diaPagoMensual);
         
-        // Si el día no existe en el mes, ajustar al último día
         if (fechaMensual.getMonth() !== (mesActualMensual + 1) % 12) {
           fechaMensual = new Date(añoActualMensual, mesActualMensual + 2, 0);
           console.log(`  → Mensual: día ${diaPagoMensual} no existe, ajustado al último día: ${fechaMensual.toLocaleDateString()}`);
@@ -199,66 +189,126 @@ class Prestamo {
     }
   }
 
+  // ============================================
+  // MÉTODO CORREGIDO PARA DISTRIBUCIÓN DE PAGO (VERSIÓN DEFINITIVA)
+  // ============================================
   calcularDistribucionPago(montoPago, fechaPago = new Date()) {
     const fechaPagoDate = this._normalizarFecha(fechaPago);
-    const diasTranscurridos = this.calcularDiasDesdeUltimoPago(fechaPagoDate);
-    const interesAdeudado = this.calcularInteresPorDias(Math.min(diasTranscurridos, 30));
     
+    // Calcular días transcurridos desde el último pago o desde la fecha del préstamo
+    let diasTranscurridos = 0;
+    let fechaBase = this.fechaUltimoPago || this.fechaPrestamo;
+    
+    if (fechaBase) {
+      const fechaBaseDate = this._normalizarFecha(fechaBase);
+      diasTranscurridos = Math.max(1, Math.ceil((fechaPagoDate - fechaBaseDate) / (1000 * 60 * 60 * 24)));
+    } else {
+      diasTranscurridos = 30; // Default: un mes
+    }
+    
+    // Calcular el interés adeudado basado en los días transcurridos
+    const interesDiario = this.calcularInteresDiario();
+    const interesAdeudado = interesDiario * Math.min(diasTranscurridos, 30);
+    
+    // Calcular días de atraso para mora
     const fechaBaseParaMora = this.fechaProximoPago || this.fechaPrestamo;
-    const diasAtraso = fechaBaseParaMora 
-      ? Math.max(0, Math.ceil((fechaPagoDate - this._normalizarFecha(fechaBaseParaMora)) / (1000 * 60 * 60 * 24)))
-      : 0;
-    const mora = this.calcularMora(diasAtraso, interesAdeudado);
+    let diasAtraso = 0;
+    let mora = 0;
     
-    let distribucion = {
-      interes: 0,
-      capital: 0,
-      mora: 0,
-      restoInteres: 0,
-      nuevoCapital: this.capitalRestante,
-      prestamoCompletado: false,
-      periodosPagados: 0,
-      diasCubiertos: 0
-    };
+    if (fechaBaseParaMora) {
+      const fechaEsperada = this._normalizarFecha(fechaBaseParaMora);
+      diasAtraso = Math.max(0, Math.ceil((fechaPagoDate - fechaEsperada) / (1000 * 60 * 60 * 24)));
+      
+      if (diasAtraso > 0 && this.configuracionMora?.enabled) {
+        const diasGracia = this.configuracionMora.diasGracia || 3;
+        if (diasAtraso > diasGracia) {
+          const diasMora = diasAtraso - diasGracia;
+          const porcentajeMora = this.configuracionMora.porcentaje || 5;
+          mora = (interesAdeudado * porcentajeMora / 100) * (diasMora / 30);
+        }
+      }
+    }
     
     let montoRestante = montoPago;
+    let interesAplicado = 0;
+    let moraAplicada = 0;
+    let capitalAplicado = 0;
+    let restoInteres = 0;
     
-    if (montoRestante >= mora) {
-      distribucion.mora = mora;
-      montoRestante -= mora;
-    } else {
-      distribucion.mora = montoRestante;
-      distribucion.restoInteres = interesAdeudado;
-      return distribucion;
+    console.log(`💰 Calculando distribución del pago: RD$ ${montoPago.toFixed(2)}`);
+    console.log(`   Días transcurridos: ${diasTranscurridos}`);
+    console.log(`   Interés diario: RD$ ${interesDiario.toFixed(4)}`);
+    console.log(`   Interés adeudado: RD$ ${interesAdeudado.toFixed(2)}`);
+    console.log(`   Mora calculada: RD$ ${mora.toFixed(2)}`);
+    console.log(`   Capital restante: RD$ ${this.capitalRestante.toFixed(2)}`);
+    console.log(`   Fecha último pago: ${this.fechaUltimoPago?.toLocaleDateString() || 'No hay'}`);
+    console.log(`   Fecha préstamo: ${this.fechaPrestamo?.toLocaleDateString()}`);
+    
+    // PASO 1: APLICAR A MORA
+    if (mora > 0 && montoRestante > 0) {
+      moraAplicada = Math.min(montoRestante, mora);
+      montoRestante -= moraAplicada;
+      console.log(`   ✅ Mora aplicada: RD$ ${moraAplicada.toFixed(2)}, Restante: RD$ ${montoRestante.toFixed(2)}`);
     }
     
-    if (montoRestante >= interesAdeudado) {
-      distribucion.interes = interesAdeudado;
-      montoRestante -= interesAdeudado;
+    // PASO 2: APLICAR A INTERÉS
+    if (montoRestante > 0) {
+      interesAplicado = Math.min(montoRestante, interesAdeudado);
+      montoRestante -= interesAplicado;
       
+      console.log(`   ✅ Interés aplicado: RD$ ${interesAplicado.toFixed(2)}, Restante: RD$ ${montoRestante.toFixed(2)}`);
+      
+      if (interesAplicado < interesAdeudado) {
+        restoInteres = interesAdeudado - interesAplicado;
+        console.log(`   ⚠️ Interés incompleto! Pendiente: RD$ ${restoInteres.toFixed(2)}`);
+      }
+    } else {
+      restoInteres = interesAdeudado;
+      console.log(`   ⚠️ No hay dinero para interés después de mora. Pendiente: RD$ ${restoInteres.toFixed(2)}`);
+    }
+    
+    // PASO 3: APLICAR A CAPITAL (SOLO si se pagó TODO el interés)
+    if (montoRestante > 0 && restoInteres === 0) {
+      capitalAplicado = Math.min(montoRestante, this.capitalRestante);
+      montoRestante -= capitalAplicado;
+      console.log(`   ✅ Capital aplicado: RD$ ${capitalAplicado.toFixed(2)}, Restante: RD$ ${montoRestante.toFixed(2)}`);
+    } else if (montoRestante > 0 && restoInteres > 0) {
+      console.log(`   ⚠️ No se aplica a capital porque aún hay interés pendiente: RD$ ${restoInteres.toFixed(2)}`);
+    }
+    
+    const nuevoCapital = this.capitalRestante - capitalAplicado;
+    const prestamoCompletado = nuevoCapital <= 0;
+    
+    // Calcular períodos pagados (solo si se pagó el interés completo)
+    let periodosPagados = 0;
+    if (interesAplicado >= interesAdeudado && interesAdeudado > 0) {
       const interesPeriodo = this.calcularInteresPeriodo();
       if (interesPeriodo > 0) {
-        distribucion.periodosPagados = Math.floor(interesAdeudado / interesPeriodo);
+        periodosPagados = Math.floor(interesAplicado / interesPeriodo);
+      } else {
+        periodosPagados = 1;
       }
-      distribucion.diasCubiertos = distribucion.periodosPagados * 
-        (this.frecuencia === 'quincenal' ? 15 : 
-         this.frecuencia === 'semanal' ? 7 : 
-         this.frecuencia === 'diario' ? 1 : 30);
-      
-      if (montoRestante > 0 && this.capitalRestante > 0) {
-        distribucion.capital = Math.min(montoRestante, this.capitalRestante);
-        distribucion.nuevoCapital = this.capitalRestante - distribucion.capital;
-        distribucion.prestamoCompletado = distribucion.nuevoCapital <= 0;
-      }
-    } else {
-      distribucion.interes = montoRestante;
-      distribucion.restoInteres = interesAdeudado - montoRestante;
     }
     
-    return distribucion;
+    console.log(`   📊 Resultado final:`);
+    console.log(`      - Interés pagado: RD$ ${interesAplicado.toFixed(2)}`);
+    console.log(`      - Mora pagada: RD$ ${moraAplicada.toFixed(2)}`);
+    console.log(`      - Capital pagado: RD$ ${capitalAplicado.toFixed(2)}`);
+    console.log(`      - Nuevo capital: RD$ ${nuevoCapital.toFixed(2)}`);
+    console.log(`      - Interés pendiente: RD$ ${restoInteres.toFixed(2)}`);
+    
+    return {
+      interes: interesAplicado,
+      capital: capitalAplicado,
+      mora: moraAplicada,
+      restoInteres: restoInteres,
+      nuevoCapital: nuevoCapital,
+      prestamoCompletado: prestamoCompletado,
+      periodosPagados: periodosPagados,
+      diasCubiertos: diasTranscurridos
+    };
   }
 
-  // Método para calcular la comisión del garante
   calcularComision(interesPagado) {
     if (!this.generarComision || !this.garanteID || interesPagado <= 0) {
       return { monto: 0, porcentaje: 0 };
@@ -281,16 +331,19 @@ class Prestamo {
     this.capitalRestante = resultado.nuevoCapital;
     this.fechaUltimoPago = fechaPagoDate;
     
-    // Solo actualizar la fecha de próximo pago si se pagó interés
-    if (resultado.interes > 0) {
+    // Solo actualizar la fecha de próximo pago si se pagó interés COMPLETO
+    if (resultado.interes > 0 && resultado.restoInteres === 0) {
       this.fechaProximoPago = this.calcularSiguienteFechaPago(fechaPagoDate);
-      console.log(`✅ Nueva fecha de próximo pago calculada (se pagó interés): ${this.fechaProximoPago.toLocaleDateString()}`);
+      console.log(`✅ Nueva fecha de próximo pago calculada (se pagó interés completo): ${this.fechaProximoPago.toLocaleDateString()}`);
+    } else if (resultado.interes > 0 && resultado.restoInteres > 0) {
+      console.log(`⚠️ Se pagó interés parcial (RD$ ${resultado.interes.toFixed(2)}), pero no es suficiente. Fecha de próximo pago NO cambia.`);
+      console.log(`   Pendiente: RD$ ${resultado.restoInteres.toFixed(2)}`);
     } else {
       console.log(`⚠️ No se pagó interés, la fecha de próximo pago NO cambia: ${this.fechaProximoPago?.toLocaleDateString()}`);
     }
     
     console.log(`   Fecha base utilizada: ${fechaPagoDate.toLocaleDateString()}`);
-    console.log(`   Interés pagado: ${resultado.interes}, Capital pagado: ${resultado.capital}`);
+    console.log(`   Interés pagado: ${resultado.interes.toFixed(2)}, Capital pagado: ${resultado.capital.toFixed(2)}`);
     
     if (this.capitalRestante <= 0) {
       this.estado = 'completado';
@@ -347,7 +400,6 @@ class Prestamo {
       enMora: this.estaEnMora(fechaRef),
       fechaProximoPago: this.fechaProximoPago,
       fechaUltimoPago: this.fechaUltimoPago,
-      // Información de comisión
       generarComision: this.generarComision,
       garanteID: this.garanteID,
       garanteNombre: this.garanteNombre,

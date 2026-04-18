@@ -1,5 +1,3 @@
-// E:\prestamos-eys\backend\models\Comision.js
-
 class Comision {
   constructor({
     id,
@@ -45,30 +43,91 @@ class Comision {
     this.updatedAt = updatedAt instanceof Date ? updatedAt : new Date(updatedAt);
   }
 
-  // Generar ID personalizado: NOMBRECEDULA + FECHA
-  static generarIdPersonalizado(garanteNombre, garanteCedula, fechaPago) {
-    // Limpiar nombre: quitar tildes, espacios, mayúsculas
+  // ============================================
+  // MÉTODO PARA GENERAR ID PERSONALIZADO LEGIBLE
+  // Formato: ClienteNombre-GaranteNombre-Fecha (ej: JuanPerez-PedritoPerez-18-4-26)
+  // ============================================
+  static generarIdPersonalizado(clienteNombre, garanteNombre, fechaPago) {
+    if (!clienteNombre && !garanteNombre) {
+      return `comision-${Date.now()}`;
+    }
+    
+    // Función para limpiar nombre (quitar tildes, espacios, caracteres especiales)
+    const limpiarNombre = (nombre) => {
+      if (!nombre) return '';
+      return nombre
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Eliminar acentos
+        .replace(/[^a-zA-Z0-9\s]/g, '') // Eliminar caracteres especiales
+        .trim()
+        .replace(/\s+/g, '')
+        .split(' ')
+        .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase())
+        .join('');
+    };
+    
+    // Limpiar nombres
+    const clienteLimpio = limpiarNombre(clienteNombre);
+    const garanteLimpio = limpiarNombre(garanteNombre);
+    
+    // Formatear fecha: DD-M-YY (ej: 18-4-26)
+    let fecha;
+    if (fechaPago instanceof Date) {
+      fecha = fechaPago;
+    } else if (fechaPago?.toDate) {
+      fecha = fechaPago.toDate();
+    } else {
+      fecha = new Date(fechaPago);
+    }
+    
+    const dia = fecha.getDate();
+    const mes = fecha.getMonth() + 1;
+    const anio = fecha.getFullYear().toString().slice(-2);
+    const fechaFormateada = `${dia}-${mes}-${anio}`;
+    
+    // Construir ID base
+    let idBase = '';
+    if (clienteLimpio && garanteLimpio) {
+      idBase = `${clienteLimpio}-${garanteLimpio}-${fechaFormateada}`;
+    } else if (clienteLimpio) {
+      idBase = `${clienteLimpio}-${fechaFormateada}`;
+    } else if (garanteLimpio) {
+      idBase = `${garanteLimpio}-${fechaFormateada}`;
+    } else {
+      idBase = `comision-${fechaFormateada}`;
+    }
+    
+    // Limitar longitud máxima
+    if (idBase.length > 100) {
+      idBase = idBase.substring(0, 100);
+    }
+    
+    console.log(`🔑 ID de comisión generado: ${idBase}`);
+    console.log(`   Cliente: ${clienteNombre} → ${clienteLimpio}`);
+    console.log(`   Garante: ${garanteNombre} → ${garanteLimpio}`);
+    console.log(`   Fecha: ${fechaFormateada}`);
+    
+    return idBase;
+  }
+
+  // Método alternativo para compatibilidad con código existente (legacy)
+  static generarIdPersonalizadoLegacy(garanteNombre, garanteCedula, fechaPago) {
+    const fecha = fechaPago ? new Date(fechaPago) : new Date();
+    const fechaStr = `${fecha.getDate()}-${fecha.getMonth() + 1}-${fecha.getFullYear().toString().slice(-2)}`;
+    
     const nombreLimpio = garanteNombre
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/\s/g, '')
       .toUpperCase()
-      .substring(0, 15);
+      .substring(0, 20);
     
-    const cedulaLimpia = garanteCedula ? garanteCedula.replace(/\D/g, '').substring(0, 11) : 'XXXX';
+    const cedulaLimpia = garanteCedula ? garanteCedula.replace(/\D/g, '').substring(0, 8) : '';
     
-    const fecha = fechaPago ? new Date(fechaPago) : new Date();
-    const fechaStr = `${fecha.getDate().toString().padStart(2, '0')}${(fecha.getMonth() + 1).toString().padStart(2, '0')}${fecha.getFullYear()}`;
+    let idBase = `${nombreLimpio}${cedulaLimpia}-${fechaStr}`;
+    idBase = idBase.replace(/[^A-Za-z0-9-]/g, '').substring(0, 50);
     
-    let idBase = `${nombreLimpio}${cedulaLimpia}${fechaStr}`;
-    
-    // Limitar a 50 caracteres y eliminar caracteres especiales
-    idBase = idBase.replace(/[^A-Z0-9]/g, '').substring(0, 50);
-    
-    // Agregar timestamp para evitar duplicados
-    const timestamp = Date.now().toString().slice(-6);
-    
-    return `${idBase}${timestamp}`;
+    return idBase;
   }
 
   _calcularPeriodo(fecha) {

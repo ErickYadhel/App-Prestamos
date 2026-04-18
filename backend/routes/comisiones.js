@@ -1,5 +1,3 @@
-// E:\prestamos-eys\backend\routes\comisiones.js
-
 const express = require('express');
 const admin = require('firebase-admin');
 const Comision = require('../models/Comision');
@@ -216,14 +214,18 @@ router.post('/', async (req, res) => {
     // Obtener información del garante
     const garanteInfo = await obtenerGaranteById(comisionData.garanteID);
     const garanteNombre = garanteInfo?.nombre || comisionData.garanteNombre || comisionData.garanteID;
-    const garanteCedula = garanteInfo?.cedula || '';
+    const clienteNombre = comisionData.clienteNombre || '';
     
     const porcentaje = parseFloat(comisionData.porcentaje) || 50;
     const montoComision = (parseFloat(comisionData.montoBase) * porcentaje) / 100;
     const fechaPago = comisionData.fechaPago ? new Date(comisionData.fechaPago) : new Date();
     
-    // Generar ID personalizado con nombre y fecha
-    const idPersonalizado = Comision.generarIdPersonalizado(garanteNombre, garanteCedula, fechaPago);
+    // Generar ID personalizado con formato Cliente-Garante-Fecha
+    const idPersonalizado = Comision.generarIdPersonalizado(
+      clienteNombre,
+      garanteNombre,
+      fechaPago
+    );
     
     const nuevaComision = {
       id: idPersonalizado,
@@ -232,7 +234,7 @@ router.post('/', async (req, res) => {
       garanteNombre: garanteNombre,
       prestamoID: comisionData.prestamoID || null,
       clienteID: comisionData.clienteID || null,
-      clienteNombre: comisionData.clienteNombre || '',
+      clienteNombre: clienteNombre,
       pagoID: comisionData.pagoID || null,
       montoBase: parseFloat(comisionData.montoBase),
       porcentaje: porcentaje,

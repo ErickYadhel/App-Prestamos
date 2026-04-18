@@ -23,14 +23,15 @@ import {
   TrashIcon,
   SparklesIcon,
   CpuChipIcon,
-  // 👇 NUEVOS ICONOS
   PresentationChartLineIcon,
   LockClosedIcon,
   KeyIcon,
   FingerPrintIcon,
   ClockIcon,
   UserGroupIcon as UserGroupSolidIcon,
-  MagnifyingGlassIcon
+  MagnifyingGlassIcon,
+  GiftIcon,
+  InformationCircleIcon
 } from '@heroicons/react/24/outline';
 import { doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
@@ -93,7 +94,7 @@ const ColorSelector = ({ selectedColor, onSelectColor }) => {
 };
 
 // ============================================
-// MODAL PARA CREAR/EDITAR ROL (MEJORADO)
+// MODAL PARA CREAR/EDITAR ROL
 // ============================================
 const RolModal = ({ isOpen, onClose, rol, onGuardar, modo }) => {
   const [nombre, setNombre] = useState(rol?.nombre || '');
@@ -236,7 +237,6 @@ const RolModal = ({ isOpen, onClose, rol, onGuardar, modo }) => {
                 />
               </div>
 
-              {/* Selector de color */}
               <ColorSelector selectedColor={color} onSelectColor={setColor} />
             </div>
 
@@ -279,9 +279,9 @@ const RolModal = ({ isOpen, onClose, rol, onGuardar, modo }) => {
 };
 
 // ============================================
-// MODAL DE CONFIGURACIÓN DE PERMISOS (MEJORADO CON BÚSQUEDA)
+// MODAL DE CONFIGURACIÓN DE PERMISOS
 // ============================================
-const PermisosModal = ({ isOpen, onClose, rol, permisos, onGuardar, modulos }) => {
+const PermisosModal = ({ isOpen, onClose, rol, permisos, onGuardar, modulos, totalAcciones }) => {
   const [permisosEdit, setPermisosEdit] = useState({});
   const [guardando, setGuardando] = useState(false);
   const [busqueda, setBusqueda] = useState('');
@@ -292,7 +292,6 @@ const PermisosModal = ({ isOpen, onClose, rol, permisos, onGuardar, modulos }) =
     setPermisosEdit(permisos || {});
   }, [permisos, isOpen]);
 
-  // Filtrar módulos por búsqueda
   useEffect(() => {
     if (busqueda.trim() === '') {
       setFiltroModulos(modulos);
@@ -332,15 +331,17 @@ const PermisosModal = ({ isOpen, onClose, rol, permisos, onGuardar, modulos }) =
   };
 
   const calcularProgreso = () => {
-    const totalAcciones = modulos.reduce((acc, m) => acc + m.acciones.length, 0);
+    const total = totalAcciones;
     const activas = Object.values(permisosEdit).reduce((acc, arr) => acc + arr.length, 0);
-    return { activas, total: totalAcciones };
+    return { activas, total };
   };
 
   if (!isOpen || !rol) return null;
 
   const progreso = calcularProgreso();
   const IconoRol = rol.icon || ShieldCheckIcon;
+  const totalModulos = modulos.length;
+  const modulosActivos = Object.keys(permisosEdit).length;
 
   return (
     <AnimatePresence>
@@ -368,7 +369,6 @@ const PermisosModal = ({ isOpen, onClose, rol, permisos, onGuardar, modulos }) =
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent animate-scan" />
             </div>
 
-            {/* Header responsive */}
             <div className={`p-4 sm:p-6 border-b ${
               theme === 'dark' ? 'border-red-600/20 bg-gray-900' : 'border-gray-200 bg-white'
             }`}>
@@ -399,13 +399,23 @@ const PermisosModal = ({ isOpen, onClose, rol, permisos, onGuardar, modulos }) =
                 </div>
 
                 <div className="flex flex-wrap items-center gap-4 sm:gap-6 w-full sm:w-auto">
+                  {/* Resumen de Módulos */}
                   <div className="flex-1 sm:flex-initial text-right">
-                    <div className={`text-2xl sm:text-3xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    <div className={`text-xl sm:text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                      {modulosActivos}
+                      <span className={`text-base sm:text-lg ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>/{totalModulos}</span>
+                    </div>
+                    <div className={`text-xs sm:text-sm ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>Módulos activos</div>
+                  </div>
+                  {/* Resumen de Permisos */}
+                  <div className="flex-1 sm:flex-initial text-right">
+                    <div className={`text-xl sm:text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                       {progreso.activas}
                       <span className={`text-base sm:text-lg ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>/{progreso.total}</span>
                     </div>
                     <div className={`text-xs sm:text-sm ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>Permisos activos</div>
                   </div>
+                  {/* Barra de progreso */}
                   <div className="flex-1 sm:flex-initial w-full sm:w-32 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                     <motion.div
                       initial={{ width: 0 }}
@@ -453,7 +463,6 @@ const PermisosModal = ({ isOpen, onClose, rol, permisos, onGuardar, modulos }) =
               </div>
             </div>
 
-            {/* Grid de módulos responsive con filtro */}
             <div className="p-4 sm:p-6 overflow-y-auto max-h-[calc(95vh-250px)] sm:max-h-[calc(90vh-250px)]">
               {filtroModulos.length === 0 ? (
                 <div className="text-center py-12">
@@ -467,6 +476,7 @@ const PermisosModal = ({ isOpen, onClose, rol, permisos, onGuardar, modulos }) =
                     const ModuloIcon = modulo.icon;
                     const permisosModulo = permisosEdit[modulo.id] || [];
                     const progresoModulo = permisosModulo.length;
+                    const totalAccionesModulo = modulo.acciones.length;
 
                     return (
                       <motion.div
@@ -497,14 +507,14 @@ const PermisosModal = ({ isOpen, onClose, rol, permisos, onGuardar, modulos }) =
                                     <div className="w-16 sm:w-20 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                       <motion.div
                                         initial={{ width: 0 }}
-                                        animate={{ width: `${(progresoModulo / modulo.acciones.length) * 100}%` }}
+                                        animate={{ width: `${(progresoModulo / totalAccionesModulo) * 100}%` }}
                                         className="h-full bg-gradient-to-r from-red-600 to-red-400"
                                       />
                                     </div>
                                     <span className={`text-xs ${
                                       theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
                                     }`}>
-                                      {progresoModulo}/{modulo.acciones.length}
+                                      {progresoModulo}/{totalAccionesModulo}
                                     </span>
                                   </div>
                                 </div>
@@ -513,14 +523,14 @@ const PermisosModal = ({ isOpen, onClose, rol, permisos, onGuardar, modulos }) =
                               <button
                                 onClick={() => toggleTodos(modulo.id, modulo.acciones.map(a => a))}
                                 className={`w-full sm:w-auto px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                                  progresoModulo === modulo.acciones.length
+                                  progresoModulo === totalAccionesModulo
                                     ? 'bg-red-600 text-white hover:bg-red-700'
                                     : theme === 'dark'
                                       ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                                 }`}
                               >
-                                {progresoModulo === modulo.acciones.length ? 'Quitar todos' : 'Todos'}
+                                {progresoModulo === totalAccionesModulo ? 'Quitar todos' : 'Todos'}
                               </button>
                             </div>
                           </div>
@@ -577,10 +587,14 @@ const PermisosModal = ({ isOpen, onClose, rol, permisos, onGuardar, modulos }) =
               )}
             </div>
 
-            {/* Footer responsive */}
             <div className={`p-4 sm:p-6 border-t flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-4 ${
               theme === 'dark' ? 'border-red-600/20 bg-gray-800/50' : 'border-gray-200 bg-gray-50'
             }`}>
+              <div className="flex-1 text-left">
+                <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                  <span className="font-semibold">📊 Resumen:</span> {modulosActivos} de {totalModulos} módulos activos | {progreso.activas} de {progreso.total} permisos activos
+                </p>
+              </div>
               <button
                 onClick={onClose}
                 className={`w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-colors ${
@@ -623,7 +637,99 @@ const PermisosModal = ({ isOpen, onClose, rol, permisos, onGuardar, modulos }) =
 };
 
 // ============================================
-// COMPONENTE PRINCIPAL (MEJORADO)
+// MÓDULOS CORREGIDOS - CON ACCIONES REALISTAS
+// ============================================
+const MODULOS = [
+  {
+    id: 'dashboard',
+    nombre: 'Dashboard',
+    icon: HomeIcon,
+    acciones: ['ver', 'exportar']
+  },
+  {
+    id: 'clientes',
+    nombre: 'Clientes',
+    icon: UsersIcon,
+    acciones: ['ver', 'crear', 'editar', 'eliminar']
+  },
+  {
+    id: 'prestamos',
+    nombre: 'Préstamos',
+    icon: CurrencyDollarIcon,
+    acciones: ['ver', 'crear', 'editar', 'eliminar', 'aprobar']
+  },
+  {
+    id: 'pagos',
+    nombre: 'Pagos',
+    icon: CreditCardIcon,
+    acciones: ['ver', 'registrar', 'editar', 'eliminar']
+  },
+  {
+    id: 'solicitudes',
+    nombre: 'Solicitudes',
+    icon: DocumentTextIcon,
+    acciones: ['ver', 'crear', 'editar', 'eliminar', 'aprobar', 'rechazar']
+  },
+  {
+    id: 'comisiones',
+    nombre: 'Comisiones',
+    icon: GiftIcon,
+    acciones: ['ver']
+  },
+  {
+    id: 'garantes',
+    nombre: 'Garantes',
+    icon: UserGroupSolidIcon,
+    acciones: ['ver', 'crear', 'editar', 'eliminar']
+  },
+  {
+    id: 'usuarios',
+    nombre: 'Usuarios',
+    icon: UsersIcon,
+    acciones: ['ver', 'crear', 'editar', 'eliminar']
+  },
+  {
+    id: 'notificaciones',
+    nombre: 'Notificaciones',
+    icon: BellIcon,
+    acciones: ['ver', 'enviar']
+  },
+  {
+    id: 'operaciones',
+    nombre: 'Operaciones',
+    icon: PresentationChartLineIcon,
+    acciones: ['ver']
+  },
+  {
+    id: 'seguridad',
+    nombre: 'Seguridad',
+    icon: LockClosedIcon,
+    acciones: ['ver']
+  },
+  {
+    id: 'configuracion',
+    nombre: 'Configuración',
+    icon: CogIcon,
+    acciones: ['ver', 'editar']
+  },
+  {
+    id: 'informacion',
+    nombre: 'Información del Sistema',
+    icon: InformationCircleIcon,
+    acciones: ['ver']
+  }
+];
+
+// Calcular total de acciones disponibles
+const TOTAL_ACCIONES = MODULOS.reduce((acc, m) => acc + m.acciones.length, 0);
+const TOTAL_MODULOS = MODULOS.length;
+
+console.log('📊 Estadísticas del sistema de permisos:');
+console.log(`   - Total de módulos: ${TOTAL_MODULOS}`);
+console.log(`   - Total de acciones/permisos: ${TOTAL_ACCIONES}`);
+
+// ============================================
+// COMPONENTE PRINCIPAL
 // ============================================
 const Roles = () => {
   const [roles, setRoles] = useState([]);
@@ -673,114 +779,6 @@ const Roles = () => {
       color: 'from-blue-500 to-blue-700',
       icon: DocumentTextIcon,
       fijo: true
-    }
-  ];
-
-  // 👇 MÓDULOS ACTUALIZADOS CON OPERACIONES Y SEGURIDAD
-  const MODULOS = [
-    {
-      id: 'dashboard',
-      nombre: 'Dashboard',
-      icon: HomeIcon,
-      acciones: ['ver', 'exportar']
-    },
-    {
-      id: 'clientes',
-      nombre: 'Clientes',
-      icon: UsersIcon,
-      acciones: ['ver', 'crear', 'editar', 'eliminar']
-    },
-    {
-      id: 'prestamos',
-      nombre: 'Préstamos',
-      icon: CurrencyDollarIcon,
-      acciones: ['ver', 'crear', 'editar', 'eliminar', 'aprobar']
-    },
-    {
-      id: 'pagos',
-      nombre: 'Pagos',
-      icon: CreditCardIcon,
-      acciones: ['ver', 'registrar', 'editar', 'eliminar']
-    },
-    {
-      id: 'solicitudes',
-      nombre: 'Solicitudes',
-      icon: DocumentTextIcon,
-      acciones: ['ver', 'crear', 'editar', 'eliminar', 'aprobar', 'rechazar']
-    },
-    {
-      id: 'garantes',
-      nombre: 'Garantes',
-      icon: UserGroupSolidIcon,
-      acciones: ['ver', 'crear', 'editar', 'eliminar']
-    },
-    {
-      id: 'usuarios',
-      nombre: 'Usuarios',
-      icon: UsersIcon,
-      acciones: ['ver', 'crear', 'editar', 'eliminar']
-    },
-    {
-      id: 'notificaciones',
-      nombre: 'Notificaciones',
-      icon: BellIcon,
-      acciones: ['ver', 'enviar', 'configurar']
-    },
-    // 👇 NUEVO MÓDULO DE OPERACIONES
-    {
-      id: 'operaciones',
-      nombre: 'Operaciones',
-      icon: PresentationChartLineIcon,
-      acciones: ['ver', 'crear_formularios', 'ver_reportes', 'exportar_reportes', 'gestionar_documentos', 'calcular']
-    },
-    // 👇 NUEVO MÓDULO DE SEGURIDAD (DESGLOSADO)
-    {
-      id: 'seguridad_roles',
-      nombre: 'Seguridad - Roles',
-      icon: ShieldCheckIcon,
-      acciones: ['ver', 'crear', 'editar', 'eliminar', 'asignar_permisos']
-    },
-    {
-      id: 'seguridad_autenticacion',
-      nombre: 'Seguridad - Autenticación',
-      icon: KeyIcon,
-      acciones: ['ver', 'configurar_2fa', 'gestionar_sesiones', 'politicas_contraseñas']
-    },
-    {
-      id: 'seguridad_auditoria',
-      nombre: 'Seguridad - Auditoría',
-      icon: ClockIcon,
-      acciones: ['ver_logs', 'exportar_logs', 'configurar_alertas']
-    },
-    {
-      id: 'seguridad_accesos',
-      nombre: 'Seguridad - Accesos',
-      icon: LockClosedIcon,
-      acciones: ['ver', 'bloquear', 'desbloquear', 'configurar_restricciones']
-    },
-    {
-      id: 'reportes',
-      nombre: 'Reportes',
-      icon: ChartBarIcon,
-      acciones: ['ver', 'generar', 'exportar', 'programar']
-    },
-    {
-      id: 'configuracion',
-      nombre: 'Configuración General',
-      icon: CogIcon,
-      acciones: ['ver', 'editar']
-    },
-    {
-      id: 'backup',
-      nombre: 'Backup',
-      icon: FolderIcon,
-      acciones: ['ver', 'crear', 'restaurar', 'programar']
-    },
-    {
-      id: 'apariencia',
-      nombre: 'Apariencia',
-      icon: PaintBrushIcon,
-      acciones: ['ver', 'editar', 'personalizar']
     }
   ];
 
@@ -1057,10 +1055,9 @@ const Roles = () => {
             const totalPermisos = permisos[rol.id] 
               ? Object.values(permisos[rol.id]).reduce((acc, arr) => acc + arr.length, 0)
               : 0;
-            const totalModulos = permisos[rol.id] 
+            const totalModulosActivos = permisos[rol.id] 
               ? Object.keys(permisos[rol.id]).length 
               : 0;
-            const totalAcciones = MODULOS.reduce((acc, m) => acc + m.acciones.length, 0);
             const isHovered = hoveredRole === rol.id;
 
             return (
@@ -1126,17 +1123,17 @@ const Roles = () => {
 
                     <div className="space-y-2 sm:space-y-3">
                       <div className="flex items-center justify-between text-xs sm:text-sm">
-                        <span className="text-white/70">Módulos</span>
+                        <span className="text-white/70">Módulos con acceso</span>
                         <div className="flex items-center space-x-1 sm:space-x-2">
-                          <span className="text-white font-bold">{totalModulos}</span>
-                          <span className="text-white/50">/{MODULOS.length}</span>
+                          <span className="text-white font-bold">{totalModulosActivos}</span>
+                          <span className="text-white/50">/{TOTAL_MODULOS}</span>
                         </div>
                       </div>
                       <div className="flex items-center justify-between text-xs sm:text-sm">
-                        <span className="text-white/70">Permisos</span>
+                        <span className="text-white/70">Permisos activos</span>
                         <div className="flex items-center space-x-1 sm:space-x-2">
                           <span className="text-white font-bold">{totalPermisos}</span>
-                          <span className="text-white/50">/{totalAcciones}</span>
+                          <span className="text-white/50">/{TOTAL_ACCIONES}</span>
                         </div>
                       </div>
 
@@ -1144,7 +1141,7 @@ const Roles = () => {
                         <div className="h-1.5 sm:h-2 bg-white/20 rounded-full overflow-hidden">
                           <motion.div
                             initial={{ width: 0 }}
-                            animate={{ width: `${(totalPermisos / totalAcciones) * 100}%` }}
+                            animate={{ width: `${(totalPermisos / TOTAL_ACCIONES) * 100}%` }}
                             className="h-full bg-white rounded-full"
                           />
                         </div>
@@ -1181,6 +1178,7 @@ const Roles = () => {
         permisos={permisos[rolSeleccionado?.id] || {}}
         onGuardar={handleGuardarPermisos}
         modulos={MODULOS}
+        totalAcciones={TOTAL_ACCIONES}
       />
     </div>
   );

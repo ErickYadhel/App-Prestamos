@@ -33,12 +33,16 @@ import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firesto
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import PerfilModal from './PerfilModal';
+import NotificacionesPanel from './NotificacionesPanel';
 
 const Sidebar = ({ children }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isFixed, setIsFixed] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showPerfilModal, setShowPerfilModal] = useState(false);
+  const [showNotificaciones, setShowNotificaciones] = useState(false);
   const [logoUrl, setLogoUrl] = useState(null);
   const [empresaNombre, setEmpresaNombre] = useState('EYS Inversiones');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -50,6 +54,7 @@ const Sidebar = ({ children }) => {
   const [nombreRol, setNombreRol] = useState('');
   const [colorRol, setColorRol] = useState('bg-gradient-to-br from-gray-500 to-gray-700');
   const [iconoRol, setIconoRol] = useState(null);
+  const [notificacionesNoLeidas, setNotificacionesNoLeidas] = useState(0);
   
   const location = useLocation();
   const navigate = useNavigate();
@@ -81,7 +86,12 @@ const Sidebar = ({ children }) => {
     setIsMobileMenuOpen(false);
   }, [location]);
 
-  // 👇 NUEVO: Cargar configuración de la empresa desde Firestore
+  // Cerrar panel de notificaciones al cambiar de ruta
+  useEffect(() => {
+    setShowNotificaciones(false);
+  }, [location]);
+
+  // Cargar configuración de la empresa desde Firestore
   useEffect(() => {
     const cargarConfiguracionEmpresa = async () => {
       try {
@@ -128,6 +138,27 @@ const Sidebar = ({ children }) => {
       default: return <UserCircleIcon className="h-5 w-5" />;
     }
   };
+
+  // Cargar notificaciones no leídas
+  const cargarNotificacionesNoLeidas = async () => {
+    try {
+      const notificacionesRef = collection(db, 'notificaciones');
+      const q = query(notificacionesRef, where('leida', '==', false));
+      const snapshot = await getDocs(q);
+      setNotificacionesNoLeidas(snapshot.size);
+    } catch (error) {
+      console.error('Error cargando notificaciones no leídas:', error);
+    }
+  };
+
+  // Recargar notificaciones periódicamente
+  useEffect(() => {
+    if (!loadingPermisos && (esAdmin || permisosUsuario['notificaciones']?.includes('ver'))) {
+      cargarNotificacionesNoLeidas();
+      const interval = setInterval(cargarNotificacionesNoLeidas, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [loadingPermisos, permisosUsuario]);
 
   // Cargar el rol REAL del usuario desde Firebase
   useEffect(() => {
@@ -207,6 +238,7 @@ const Sidebar = ({ children }) => {
 
         const rolId = usuarioEncontrado.rol || 'solicitante';
         setRolReal(rolId);
+        console.log('✅ Rol del usuario encontrado:', rolId);
 
         const rolRef = doc(db, 'Roles', rolId);
         const rolSnap = await getDoc(rolRef);
@@ -217,11 +249,13 @@ const Sidebar = ({ children }) => {
           setColorRol(data.color || getDefaultRoleColor(rolId));
           setPermisosUsuario(data.permisos || {});
           setIconoRol(getDefaultRoleIcon(rolId));
+          console.log('✅ Permisos cargados:', data.permisos);
         } else {
           setNombreRol(rolId.charAt(0).toUpperCase() + rolId.slice(1));
           setColorRol(getDefaultRoleColor(rolId));
           setPermisosUsuario({});
           setIconoRol(getDefaultRoleIcon(rolId));
+          console.log('⚠️ Rol no encontrado en Firestore, usando permisos por defecto');
         }
       } catch (error) {
         console.error('❌ Error cargando rol:', error);
@@ -252,7 +286,7 @@ const Sidebar = ({ children }) => {
     return colorRol;
   };
 
-  // Escuchar cambios en el logo y nombre de empresa (desde el evento)
+  // Escuchar cambios en el logo y nombre de empresa
   useEffect(() => {
     const handleLogoUpdate = (event) => {
       setLogoUrl(event.detail);
@@ -299,11 +333,24 @@ const Sidebar = ({ children }) => {
 
   // Filtrar menú según permisos
   const filteredMenu = todosLosMenuItems.filter(item => {
-    if (esAdmin) return true;
+    // ADMIN tiene acceso a TODO
+    if (esAdmin) {
+      console.log(`🔓 ADMIN: ${item.name} - ACCESO TOTAL`);
+      return true;
+    }
+    
+    // Si aún cargando permisos, no mostrar nada
     if (loadingPermisos) return false;
+    
+    // Verificar si el usuario tiene permiso para este módulo
     const tienePermiso = permisosUsuario[item.modulo]?.includes(item.accion);
+    
+    console.log(`🔍 Verificando permiso para ${item.name} (${item.modulo}.${item.accion}):`, tienePermiso);
+    
     return tienePermiso;
   });
+
+  console.log('📋 Menú filtrado:', filteredMenu.map(m => m.name));
 
   // Sidebar para móvil y tablet (overlay con scroll invisible)
   const MobileSidebar = () => (
@@ -582,21 +629,43 @@ const Sidebar = ({ children }) => {
                 <span className="absolute inset-0 border-2 border-red-600 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></span>
               </button>
 
-              {/* Notificaciones */}
+              {/* Notificaciones con panel desplegable */}
               {!loadingPermisos && (esAdmin || permisosUsuario['notificaciones']?.includes('ver')) && (
-                <button 
-                  onClick={() => navigate('/notificaciones')}
-                  className={`p-2 rounded-lg transition-colors relative overflow-hidden group ${
-                    theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                  }`}
-                >
-                  <BellIcon className={`h-5 w-5 ${
-                    theme === 'dark' ? 'text-gray-300' : 'text-gray-600'
-                  } group-hover:text-red-600 transition-colors`} />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-600 rounded-full animate-ping"></span>
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-600 rounded-full"></span>
-                  <span className="absolute inset-0 border-2 border-red-600 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></span>
-                </button>
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowNotificaciones(!showNotificaciones)}
+                    className={`p-2 rounded-lg transition-colors relative overflow-hidden group ${
+                      theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                    }`}
+                  >
+                    <BellIcon className={`h-5 w-5 ${
+                      theme === 'dark' ? 'text-gray-300' : 'text-gray-600'
+                    } group-hover:text-red-600 transition-colors`} />
+                    
+                    {/* Indicador de notificaciones no leídas */}
+                    {notificacionesNoLeidas > 0 && (
+                      <>
+                        <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-600 rounded-full animate-ping"></span>
+                        <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-600 rounded-full"></span>
+                      </>
+                    )}
+                    
+                    {/* Contador de notificaciones */}
+                    {notificacionesNoLeidas > 0 && (
+                      <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-red-600 text-white text-[10px] font-bold rounded-full shadow-lg">
+                        {notificacionesNoLeidas > 9 ? '9+' : notificacionesNoLeidas}
+                      </span>
+                    )}
+                    
+                    <span className="absolute inset-0 border-2 border-red-600 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></span>
+                  </button>
+                  
+                  {/* Panel de notificaciones */}
+                  <NotificacionesPanel
+                    isOpen={showNotificaciones}
+                    onClose={() => setShowNotificaciones(false)}
+                  />
+                </div>
               )}
               
               {/* Perfil de usuario */}
@@ -643,7 +712,7 @@ const Sidebar = ({ children }) => {
                                 {user?.nombre}
                               </p>
                               <div className="flex items-center mt-1">
-                                <span className={`w-2 h-2 rounded-full mr-2 ${getRoleColorClass()}`}></span>
+                                <span className={`w-2 h-2 rounded-full mr-2 bg-red-500`}></span>
                                 <p className="text-red-200 text-sm font-medium">
                                   {nombreRol || rolReal}
                                 </p>
@@ -665,10 +734,11 @@ const Sidebar = ({ children }) => {
                         </div>
 
                         <div className="space-y-2">
+                          {/* Botón Mi Perfil - Abre modal */}
                           <motion.button
                             whileHover={{ x: 5 }}
                             onClick={() => {
-                              navigate('/perfil');
+                              setShowPerfilModal(true);
                               setShowUserMenu(false);
                             }}
                             className="w-full text-left px-4 py-3 rounded-lg flex items-center space-x-3 transition-all relative overflow-hidden group bg-black/20 hover:bg-black/40"
@@ -757,6 +827,12 @@ const Sidebar = ({ children }) => {
           {children}
         </main>
       </div>
+
+      {/* Modal de Perfil */}
+      <PerfilModal
+        isOpen={showPerfilModal}
+        onClose={() => setShowPerfilModal(false)}
+      />
     </>
   );
 };

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ErrorProvider } from './context/ErrorContext';
@@ -19,13 +19,11 @@ import Notificaciones from './pages/Notificaciones';
 import Perfil from './pages/Usuarios';
 import ErrorBoundary from './components/ErrorBoundary';
 import Informacion from './pages/Informacion';
-
-// 👇 IMPORTACIONES EXISTENTES
 import Operaciones from './pages/Operaciones';
 import Seguridad from './pages/Seguridad';
-
-// 👇 NUEVA IMPORTACIÓN - COMISIONES
 import Comisiones from './pages/Operaciones/Comisiones';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { db } from './services/firebase';
 
 // Componente de carga mejorado
 const LoadingScreen = () => (
@@ -39,11 +37,71 @@ const LoadingScreen = () => (
   </div>
 );
 
-// Componente para rutas protegidas con manejo de roles
-const ProtectedRoute = ({ children, allowedRoles = [] }) => {
+// ============================================
+// COMPONENTE DE PROTECCIÓN BASADO EN PERMISOS
+// ============================================
+const ProtectedRoute = ({ children, modulo, accion = 'ver' }) => {
   const { user, loading } = useAuth();
+  const [permisosUsuario, setPermisosUsuario] = useState({});
+  const [loadingPermisos, setLoadingPermisos] = useState(true);
+  const [rolReal, setRolReal] = useState(null);
 
-  if (loading) {
+  // Cargar permisos del usuario desde Firestore
+  useEffect(() => {
+    const cargarPermisos = async () => {
+      if (!user?.email) {
+        setLoadingPermisos(false);
+        return;
+      }
+
+      try {
+        // Buscar el rol del usuario
+        const posiblesColecciones = ['Usuarios', 'usuarios', 'Users', 'users'];
+        let usuarioEncontrado = null;
+
+        for (const nombreColeccion of posiblesColecciones) {
+          try {
+            const usuariosRef = collection(db, nombreColeccion);
+            const q = query(usuariosRef, where('email', '==', user.email));
+            const querySnapshot = await getDocs(q);
+            
+            if (!querySnapshot.empty) {
+              querySnapshot.forEach(doc => {
+                usuarioEncontrado = { id: doc.id, ...doc.data() };
+              });
+              break;
+            }
+          } catch (error) {
+            console.log(`⚠️ Error en colección ${nombreColeccion}:`, error.message);
+          }
+        }
+
+        const rolId = usuarioEncontrado?.rol || user.rol || 'solicitante';
+        setRolReal(rolId);
+
+        // Cargar permisos del rol
+        const rolRef = doc(db, 'Roles', rolId);
+        const rolSnap = await getDoc(rolRef);
+        
+        if (rolSnap.exists()) {
+          const data = rolSnap.data();
+          setPermisosUsuario(data.permisos || {});
+          console.log(`✅ Permisos cargados para rol ${rolId}:`, data.permisos);
+        } else {
+          setPermisosUsuario({});
+        }
+      } catch (error) {
+        console.error('Error cargando permisos:', error);
+        setPermisosUsuario({});
+      } finally {
+        setLoadingPermisos(false);
+      }
+    };
+
+    cargarPermisos();
+  }, [user]);
+
+  if (loading || loadingPermisos) {
     return <LoadingScreen />;
   }
 
@@ -51,8 +109,24 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     return <Navigate to="/login" />;
   }
 
-  // Verificar si el usuario tiene el rol permitido
-  if (allowedRoles.length > 0 && !allowedRoles.includes(user.rol)) {
+  // ADMIN tiene acceso a TODO
+  if (rolReal === 'admin') {
+    console.log(`🔓 ADMIN: Acceso permitido a ${modulo || 'ruta'}`);
+    return children;
+  }
+
+  // Si no hay módulo especificado, permitir acceso (para rutas como /perfil)
+  if (!modulo) {
+    return children;
+  }
+
+  // Verificar si el usuario tiene permiso para este módulo
+  const tienePermiso = permisosUsuario[modulo]?.includes(accion);
+  
+  console.log(`🔍 Verificando permiso para ${modulo}.${accion}:`, tienePermiso);
+
+  if (!tienePermiso) {
+    console.log(`⛔ Acceso denegado a ${modulo}`);
     return <Navigate to="/" />;
   }
 
@@ -83,111 +157,115 @@ function App() {
                     
                     {/* Dashboard */}
                     <Route path="/dashboard" element={
-                      <ProtectedRoute allowedRoles={['admin', 'consultor', 'solicitante', 'supervisor']}>
+                      <ProtectedRoute modulo="dashboard" accion="ver">
                         <Layout>
                           <Dashboard />
                         </Layout>
                       </ProtectedRoute>
                     } />
                     
-                    {/* Rutas de gestión principal */}
+                    {/* Clientes */}
                     <Route path="/clientes" element={
-                      <ProtectedRoute allowedRoles={['admin', 'consultor', 'supervisor']}>
+                      <ProtectedRoute modulo="clientes" accion="ver">
                         <Layout>
                           <Clientes />
                         </Layout>
                       </ProtectedRoute>
                     } />
                     
+                    {/* Préstamos */}
                     <Route path="/prestamos" element={
-                      <ProtectedRoute allowedRoles={['admin', 'consultor', 'supervisor']}>
+                      <ProtectedRoute modulo="prestamos" accion="ver">
                         <Layout>
                           <Prestamos />
                         </Layout>
                       </ProtectedRoute>
                     } />
                     
+                    {/* Pagos */}
                     <Route path="/pagos" element={
-                      <ProtectedRoute allowedRoles={['admin', 'consultor', 'supervisor']}>
+                      <ProtectedRoute modulo="pagos" accion="ver">
                         <Layout>
                           <Pagos />
                         </Layout>
                       </ProtectedRoute>
                     } />
                     
+                    {/* Solicitudes */}
                     <Route path="/solicitudes" element={
-                      <ProtectedRoute allowedRoles={['admin', 'consultor', 'solicitante']}>
+                      <ProtectedRoute modulo="solicitudes" accion="ver">
                         <Layout>
                           <Solicitudes />
                         </Layout>
                       </ProtectedRoute>
                     } />
                     
+                    {/* Garantes */}
                     <Route path="/garantes" element={
-                      <ProtectedRoute allowedRoles={['admin', 'consultor']}>
+                      <ProtectedRoute modulo="garantes" accion="ver">
                         <Layout>
                           <Garantes />
                         </Layout>
                       </ProtectedRoute>
                     } />
                     
+                    {/* Usuarios */}
                     <Route path="/usuarios" element={
-                      <ProtectedRoute allowedRoles={['admin']}>
+                      <ProtectedRoute modulo="usuarios" accion="ver">
                         <Layout>
                           <Usuarios />
                         </Layout>
                       </ProtectedRoute>
                     } />
                     
+                    {/* Notificaciones */}
                     <Route path="/notificaciones" element={
-                      <ProtectedRoute allowedRoles={['admin', 'consultor', 'solicitante', 'supervisor']}>
+                      <ProtectedRoute modulo="notificaciones" accion="ver">
                         <Layout>
                           <Notificaciones />
                         </Layout>
                       </ProtectedRoute>
                     } />
                     
-                    {/* 👇 RUTA DE COMISIONES - ACCESIBLE PARA TODOS LOS USUARIOS LOGUEADOS */}
+                    {/* Comisiones */}
                     <Route path="/comisiones" element={
-                      <ProtectedRoute>
+                      <ProtectedRoute modulo="comisiones" accion="ver">
                         <Layout>
                           <Comisiones />
                         </Layout>
                       </ProtectedRoute>
                     } />
                     
-                    {/* 👇 RUTA DE COMISIONES DENTRO DE OPERACIONES (REDIRECCIÓN) */}
+                    {/* Operaciones/comisiones (redirección) */}
                     <Route path="/operaciones/comisiones" element={
-                      <ProtectedRoute>
+                      <ProtectedRoute modulo="comisiones" accion="ver">
                         <Layout>
                           <Comisiones />
                         </Layout>
                       </ProtectedRoute>
                     } />
                     
-                    {/* 👇 NUEVAS RUTAS */}
-                    
-                    {/* Operaciones - Acceso para admin, supervisor y consultor */}
+                    {/* Operaciones */}
                     <Route path="/operaciones" element={
-                      <ProtectedRoute allowedRoles={['admin', 'supervisor', 'consultor']}>
+                      <ProtectedRoute modulo="operaciones" accion="ver">
                         <Layout>
                           <Operaciones />
                         </Layout>
                       </ProtectedRoute>
                     } />
                     
-                    {/* Seguridad - Solo admin */}
+                    {/* Seguridad */}
                     <Route path="/seguridad" element={
-                      <ProtectedRoute allowedRoles={['admin']}>
+                      <ProtectedRoute modulo="seguridad" accion="ver">
                         <Layout>
                           <Seguridad />
                         </Layout>
                       </ProtectedRoute>
                     } />
                     
-                    {/* Configuración - Solo admin */}
+                    {/* Configuración */}
                     <Route path="/configuracion" element={
-                      <ProtectedRoute allowedRoles={['admin']}>
+                      <ProtectedRoute modulo="configuracion" accion="ver">
                         <Layout>
                           <Configuracion />
                         </Layout>
@@ -196,7 +274,7 @@ function App() {
                     
                     {/* Información del Sistema */}
                     <Route path="/informacion" element={
-                      <ProtectedRoute allowedRoles={['admin', 'consultor', 'solicitante', 'supervisor']}>
+                      <ProtectedRoute modulo="informacion" accion="ver">
                         <Layout>
                           <Informacion />
                         </Layout>
@@ -221,9 +299,9 @@ function App() {
                       </ProtectedRoute>
                     } />
                     
-                    {/* Ruta para editar usuario específico (solo admin) */}
+                    {/* Ruta para editar usuario específico */}
                     <Route path="/usuarios/editar/:id" element={
-                      <ProtectedRoute allowedRoles={['admin']}>
+                      <ProtectedRoute modulo="usuarios" accion="editar">
                         <Layout>
                           <Usuarios editMode={true} />
                         </Layout>

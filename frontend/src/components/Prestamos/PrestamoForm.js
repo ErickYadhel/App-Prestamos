@@ -230,6 +230,17 @@ const PrestamoForm = ({ prestamo, clientes = [], onSave, onCancel, error }) => {
     return calcularInteresQuincenal() / 15;
   };
 
+  // Función para generar el ID de vista previa
+  const generarIdPreview = () => {
+    const nombre = clienteSeleccionado?.nombre || formData.clienteNombre || 'cliente';
+    const fecha = formData.fechaPrestamo ? new Date(formData.fechaPrestamo) : new Date();
+    const nombreLimpio = nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+    const dia = fecha.getDate();
+    const mes = fecha.getMonth() + 1;
+    const año = fecha.getFullYear().toString().slice(-2);
+    return `${nombreLimpio}${dia}-${mes}-${año}`;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -250,7 +261,7 @@ const PrestamoForm = ({ prestamo, clientes = [], onSave, onCancel, error }) => {
         montoPrestado: parseFloat(formData.montoPrestado),
         interesPercent: parseFloat(formData.interesPercent),
         capitalRestante: parseFloat(formData.montoPrestado),
-        fechaPrestamo: fechaPrestamo, // 👈 Enviar Date, no string
+        fechaPrestamo: fechaPrestamo,
         diaPagoPersonalizado: formData.frecuencia === 'mensual' && formData.diaPagoPersonalizado ? 
           parseInt(formData.diaPagoPersonalizado) : null,
         diaSemana: formData.frecuencia === 'semanal' ? formData.diaSemana : null,
@@ -818,9 +829,7 @@ const PrestamoForm = ({ prestamo, clientes = [], onSave, onCancel, error }) => {
 
         {/* Panel de Resumen */}
         <div className="space-y-6">
-          <div className={`shadow rounded-lg ${
-            theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-          }`}>
+          <div className={`shadow rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
             <div className={`px-6 py-4 border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
               <h3 className={`text-lg font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                 Resumen del Préstamo
@@ -840,6 +849,14 @@ const PrestamoForm = ({ prestamo, clientes = [], onSave, onCancel, error }) => {
                     {formData.interesPercent || '0'}%
                   </p>
                 </div>
+              </div>
+
+              {/* ID del Préstamo - Vista Previa */}
+              <div className="flex justify-between border-t pt-2">
+                <span className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>ID del Préstamo:</span>
+                <span className={`font-mono text-xs ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {generarIdPreview()}
+                </span>
               </div>
 
               <div className={`border-t pt-4 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>

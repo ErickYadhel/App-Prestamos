@@ -42,6 +42,27 @@ const BorderGlow = ({ children, isHovered, color = 'from-red-600 via-red-500 to-
 );
 
 // ============================================
+// FUNCIÓN PARA GENERAR PREVIEW DEL ID
+// ============================================
+const generarPreviewId = (nombre) => {
+  if (!nombre || nombre.trim().length === 0) return '';
+  
+  const limpio = nombre
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9\s]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  
+  const pascalCase = limpio
+    .split(' ')
+    .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase())
+    .join('');
+  
+  return pascalCase;
+};
+
+// ============================================
 // COMPONENTE DE INPUT TECNOLÓGICO
 // ============================================
 const TechInput = ({ icon: Icon, label, error, value, onChange, type = 'text', placeholder, required, disabled, name, ...props }) => {
@@ -296,6 +317,7 @@ const ClienteForm = ({ cliente, onSave, onCancel }) => {
   const { theme } = useTheme();
   const { user } = useAuth();
   const [isHovered, setIsHovered] = useState(false);
+  const [previewId, setPreviewId] = useState('');
   
   const [formData, setFormData] = useState({
     nombre: '',
@@ -338,6 +360,12 @@ const ClienteForm = ({ cliente, onSave, onCancel }) => {
       });
     }
   }, [cliente]);
+
+  // Actualizar preview del ID cuando cambia el nombre
+  useEffect(() => {
+    const idPreview = generarPreviewId(formData.nombre);
+    setPreviewId(idPreview);
+  }, [formData.nombre]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -578,6 +606,39 @@ const ClienteForm = ({ cliente, onSave, onCancel }) => {
                       error={errors.email}
                     />
                   </div>
+
+                  {/* 🔥 PREVIEW DEL ID PERSONALIZADO - NUEVO */}
+                  {formData.nombre && (
+                    <div className="mt-4 md:col-span-2">
+                      <div className={`p-3 rounded-lg ${
+                        theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100'
+                      } border border-red-600/30`}>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <div className="flex items-center space-x-2">
+                            <CpuChipIcon className={`h-4 w-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`} />
+                            <span className={`text-xs font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                              ID del documento en Firestore:
+                            </span>
+                            <code className={`text-xs font-mono px-2 py-1 rounded ${
+                              theme === 'dark' ? 'bg-gray-900 text-green-400' : 'bg-white text-green-600'
+                            }`}>
+                              {previewId || '...'}
+                            </code>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <span className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>
+                              ID legible y personalizado
+                            </span>
+                          </div>
+                        </div>
+                        <p className={`text-xs mt-2 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>
+                          📌 <span className="font-medium">Importante:</span> El cliente se guardará con este ID personalizado en Firestore. 
+                          Ejemplo: <code className="px-1 bg-gray-200 dark:bg-gray-700 rounded">JuanPerez</code> en lugar de códigos aleatorios.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Información Laboral */}

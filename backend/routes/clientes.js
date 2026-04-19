@@ -3,6 +3,7 @@ const express = require('express');
 const admin = require('firebase-admin');
 const Cliente = require('../models/Cliente');
 const router = express.Router();
+const { notificarClienteNuevo } = require('../services/notificationService');
 
 const db = admin.firestore();
 
@@ -96,6 +97,11 @@ router.post('/', async (req, res) => {
     await docRef.set({ ...cliente });
 
     console.log('✅ Cliente creado exitosamente con ID:', idPersonalizado);
+
+    // ============================================
+    // 🔥 NUEVA NOTIFICACIÓN
+    // ============================================
+    await notificarClienteNuevo({ id: idPersonalizado, ...cliente });
 
     res.status(201).json({
       success: true,

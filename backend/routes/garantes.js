@@ -5,13 +5,68 @@ const router = express.Router();
 
 const db = admin.firestore();
 
+// ============================================
+// FUNCIÓN PARA GENERAR ID PERSONALIZADO DEL GARANTE
+// ============================================
+const generarIdGarante = (nombre) => {
+  if (!nombre || nombre.trim().length === 0) {
+    return null;
+  }
+  
+  // Limpiar el nombre: eliminar acentos, espacios y caracteres especiales
+  const nombreLimpio = nombre
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Eliminar acentos
+    .replace(/[^a-zA-Z0-9\s]/g, '') // Eliminar caracteres especiales
+    .trim()
+    .replace(/\s+/g, ' ');
+  
+  // Convertir a PascalCase (JuanPerez)
+  const idGenerado = nombreLimpio
+    .split(' ')
+    .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase())
+    .join('');
+  
+  console.log('🔑 ID generado para garante:', idGenerado);
+  console.log('   Nombre original:', nombre);
+  console.log('   Nombre limpio:', nombreLimpio);
+  
+  return idGenerado;
+};
+
+// ============================================
+// FUNCIÓN PARA VERIFICAR Y GENERAR ID ÚNICO (con contador si colisión)
+// ============================================
+const generarIdGaranteUnico = async (nombreBase, contador = 0) => {
+  let idBase = generarIdGarante(nombreBase);
+  
+  if (!idBase) {
+    // Fallback a timestamp si no hay nombre
+    return `garante-${Date.now()}`;
+  }
+  
+  if (contador > 0) {
+    idBase = `${idBase}${contador}`;
+  }
+  
+  // Verificar si ya existe un garante con ese ID
+  const garanteRef = db.collection('garantes').doc(idBase);
+  const garanteSnap = await garanteRef.get();
+  
+  if (garanteSnap.exists) {
+    // Si existe, intentar con contador +1
+    return generarIdGaranteUnico(nombreBase, contador + 1);
+  }
+  
+  return idBase;
+};
+
 // GET /api/garantes - Listar todos los garantes con filtros
 router.get('/', async (req, res) => {
   try {
     const { clienteID, activo, search, tipoGarante } = req.query;
     let query = db.collection('garantes');
 
-    // Aplicar filtros
     if (clienteID) {
       query = query.where('clienteID', '==', clienteID);
     }
@@ -110,7 +165,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/garantes - Crear nuevo garante
+// POST /api/garantes - Crear nuevo garante (MODIFICADO - ID PERSONALIZADO)
 router.post('/', async (req, res) => {
   try {
     const garanteData = req.body;
@@ -121,6 +176,14 @@ router.post('/', async (req, res) => {
       celular: garanteData.celular,
       clienteID: garanteData.clienteID
     });
+    
+    // Validar que el nombre existe para generar el ID
+    if (!garanteData.nombre || garanteData.nombre.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'El nombre del garante es requerido'
+      });
+    }
     
     const garante = new Garante(garanteData);
     
@@ -169,18 +232,23 @@ router.post('/', async (req, res) => {
       garante.capacidadEndeudamiento = garante.calcularCapacidadEndeudamiento();
     }
 
-    // Crear en Firestore
-    const docRef = db.collection('garantes').doc();
-    garante.id = docRef.id;
+    // ============================================
+    // GENERAR ID PERSONALIZADO BASADO EN EL NOMBRE
+    // ============================================
+    const idPersonalizado = await generarIdGaranteUnico(garanteData.nombre);
+    console.log(`📝 ID generado para garante: ${idPersonalizado}`);
+    
+    const docRef = db.collection('garantes').doc(idPersonalizado);
+    garante.id = idPersonalizado;
     garante.fechaCreacion = new Date();
 
     await docRef.set({ ...garante });
 
-    console.log(`✅ Garante creado: ${garante.nombre} (${garante.id})`);
+    console.log(`✅ Garante creado: ${garante.nombre} (${idPersonalizado})`);
 
     res.status(201).json({
       success: true,
-      data: garante,
+      data: { id: idPersonalizado, ...garante },
       message: 'Garante creado exitosamente'
     });
   } catch (error) {
@@ -192,7 +260,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/garantes/:id - Actualizar garante
+// PUT /api/garantes/:id - Actualizar garante (MODIFICADO - ACTUALIZAR ID SI CAMBIA EL NOMBRE)
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -249,9 +317,39 @@ router.put('/:id', async (req, res) => {
       garanteData.capacidadEndeudamiento = garanteTemp.calcularCapacidadEndeudamiento();
     }
 
-    // Actualizar fecha de modificación
-    garanteData.fechaModificacion = new Date();
+    // 🔥 Si el nombre cambió, necesitamos cambiar el ID del documento
+    if (garanteData.nombre && garanteData.nombre !== garanteActual.nombre) {
+      const nuevoId = await generarIdGaranteUnico(garanteData.nombre);
+      console.log(`🔄 Nombre cambiado: ${garanteActual.nombre} → ${garanteData.nombre}`);
+      console.log(`📝 Nuevo ID: ${nuevoId} (anterior: ${id})`);
+      
+      // Crear nuevo documento con el nuevo ID
+      const nuevoDocRef = db.collection('garantes').doc(nuevoId);
+      const nuevoDocData = {
+        ...garanteActual,
+        ...garanteData,
+        id: nuevoId,
+        nombreOriginal: garanteData.nombre,
+        fechaModificacion: new Date(),
+        idAnterior: id // Registrar cambio de ID
+      };
+      
+      await nuevoDocRef.set(nuevoDocData);
+      
+      // Eliminar documento antiguo
+      await garanteRef.delete();
+      
+      console.log(`✅ Garante migrado a nuevo ID: ${nuevoId}`);
+      
+      return res.json({
+        success: true,
+        data: { id: nuevoId, ...nuevoDocData },
+        message: 'Garante actualizado exitosamente (ID cambiado)'
+      });
+    }
 
+    // Si el nombre no cambió, solo actualizar
+    garanteData.fechaModificacion = new Date();
     await garanteRef.update(garanteData);
 
     console.log(`✅ Garante actualizado: ${id}`);

@@ -2,6 +2,7 @@ const express = require('express');
 const admin = require('firebase-admin');
 const Comision = require('../models/Comision');
 const router = express.Router();
+const { notificarComisionGenerada } = require('../services/notificationService');
 
 const db = admin.firestore();
 
@@ -253,6 +254,16 @@ router.post('/', async (req, res) => {
     await comisionRef.set(nuevaComision);
     
     console.log(`✅ Comisión manual creada: ${idPersonalizado}`);
+
+    // ============================================
+    // 🔥 NUEVA NOTIFICACIÓN
+    // ============================================
+    if (comisionData.clienteID && garanteInfo) {
+      const clienteDoc = await db.collection('clientes').doc(comisionData.clienteID).get();
+      if (clienteDoc.exists()) {
+        await notificarComisionGenerada(nuevaComision, garanteInfo, clienteDoc.data());
+      }
+    }
     
     res.status(201).json({
       success: true,

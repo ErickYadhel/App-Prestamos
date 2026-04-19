@@ -5,7 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "notificaciones": "node scripts/generarNotificaciones.js",
+    "notificaciones:generar": "node scripts/generarNotificacionesProgramadas.js",
+    "notificaciones:automaticas": "node scripts/generarNotificacionesAutomaticas.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

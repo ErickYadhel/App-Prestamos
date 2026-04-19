@@ -4,6 +4,7 @@ const Solicitud = require('../models/Solicitud');
 const Prestamo = require('../models/Prestamo');
 const Cliente = require('../models/Cliente');
 const router = express.Router();
+const { notificarNuevaSolicitud, notificarSolicitudAprobada, notificarSolicitudRechazada } = require('../services/notificationService');
 
 const db = admin.firestore();
 
@@ -57,11 +58,6 @@ function calcularPrimeraFechaPago(fechaPrestamo, frecuencia, config = {}) {
       return fechaSemanal;
       
     case 'quincenal':
-      // LOGICA PARA PRIMERA FECHA DE PAGO:
-      // Si la fecha del préstamo es menor a 15 -> primera fecha es 15 del mismo mes
-      // Si la fecha del préstamo es 15 o mayor pero menor a 30 -> primera fecha es 30 del mismo mes
-      // Si la fecha del préstamo es 30 o mayor -> primera fecha es 15 del mes siguiente
-      
       if (dia < 15) {
         const fecha15 = new Date(año, mes, 15);
         console.log(`  → Día ${dia} < 15, primera fecha: 15 del mismo mes (${fecha15.toLocaleDateString()})`);
@@ -253,7 +249,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// POST /api/solicitudes - Crear nueva solicitud
+// POST /api/solicitudes - Crear nueva solicitud (MODIFICADO - CON NOTIFICACIÓN)
 router.post('/', async (req, res) => {
   try {
     const solicitudData = req.body;
@@ -308,6 +304,10 @@ router.post('/', async (req, res) => {
     console.log(`📱 WhatsApp Admin: ${whatsappLink}`);
     console.log(`✅ Solicitud creada con ID: ${solicitud.id}`);
 
+    // 🔥 NOTIFICACIÓN: Nueva solicitud (GUARDAR EN FIRESTORE)
+    const clienteParaNotificacion = { id: null, nombre: solicitud.clienteNombre };
+    await notificarNuevaSolicitud(solicitud, clienteParaNotificacion);
+
     res.status(201).json({
       success: true,
       data: solicitud,
@@ -326,7 +326,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/solicitudes/:id/aprobar - Aprobar solicitud y crear préstamo (MODIFICADO CON COMISIONES)
+// PUT /api/solicitudes/:id/aprobar - Aprobar solicitud y crear préstamo (MODIFICADO CON COMISIONES Y NOTIFICACIÓN)
 router.put('/:id/aprobar', async (req, res) => {
   try {
     const { id } = req.params;
@@ -336,7 +336,6 @@ router.put('/:id/aprobar', async (req, res) => {
       montoAprobado, 
       interesPercent, 
       frecuencia,
-      // NUEVOS CAMPOS DE COMISIÓN
       generarComision,
       garanteID,
       garanteNombre,
@@ -419,7 +418,6 @@ router.put('/:id/aprobar', async (req, res) => {
     const frecuenciaFinal = frecuencia || solicitudData.frecuencia || 'quincenal';
     const fechaPrestamo = new Date();
     
-    // Calcular la primera fecha de pago usando la función correcta
     const primeraFechaPago = calcularPrimeraFechaPago(fechaPrestamo, frecuenciaFinal, {});
     
     console.log('📊 Datos del préstamo a crear:');
@@ -454,7 +452,6 @@ router.put('/:id/aprobar', async (req, res) => {
       tipoCuenta: solicitudData.tipoCuenta,
       historialPagos: [],
       fechaActualizacion: new Date(),
-      // NUEVOS CAMPOS DE COMISIÓN
       generarComision: generarComision || false,
       garanteID: garanteID || null,
       garanteNombre: garanteNombre || null,
@@ -510,6 +507,10 @@ Su solicitud de préstamo ha sido APROBADA:
     console.log(`📱 WhatsApp Cliente: ${whatsappCliente}`);
     console.log(`💰 Préstamo creado: ${prestamoRef.id}`);
 
+    // 🔥 NOTIFICACIÓN: Solicitud aprobada (GUARDAR EN FIRESTORE)
+    const clienteParaNotificacion = { id: clienteID, nombre: solicitudData.clienteNombre };
+    await notificarSolicitudAprobada(solicitudData, clienteParaNotificacion);
+
     res.json({
       success: true,
       data: { 
@@ -536,7 +537,7 @@ Su solicitud de préstamo ha sido APROBADA:
   }
 });
 
-// PUT /api/solicitudes/:id/rechazar - Rechazar solicitud
+// PUT /api/solicitudes/:id/rechazar - Rechazar solicitud (MODIFICADO - CON NOTIFICACIÓN)
 router.put('/:id/rechazar', async (req, res) => {
   try {
     const { id } = req.params;
@@ -588,6 +589,10 @@ Agradecemos su interés en nuestros servicios. Puede volver a solicitar en el fu
 
     console.log(`❌ Solicitud rechazada: ${solicitudData.clienteNombre}`);
     console.log(`📱 WhatsApp Cliente: ${whatsappCliente}`);
+
+    // 🔥 NOTIFICACIÓN: Solicitud rechazada (GUARDAR EN FIRESTORE)
+    const clienteParaNotificacion = { id: solicitudData.clienteID, nombre: solicitudData.clienteNombre };
+    await notificarSolicitudRechazada(solicitudData, clienteParaNotificacion, observaciones);
 
     res.json({
       success: true,

@@ -4,6 +4,7 @@ const Pago = require('../models/Pago');
 const Prestamo = require('../models/Prestamo');
 const Comision = require('../models/Comision');
 const router = express.Router();
+const { notificarPagoRegistrado, notificarPrestamoCompletado } = require('../services/notificationService');
 
 const db = admin.firestore();
 
@@ -396,7 +397,16 @@ router.post('/', async (req, res) => {
       await crearNotificacionResto(prestamo, distribucion.restoInteres);
     }
 
+    // ============================================
+    // 🔥 NUEVAS NOTIFICACIONES
+    // ============================================
+    // Notificar pago registrado
+    const clienteData = { id: prestamo.clienteID, nombre: prestamo.clienteNombre };
+    await notificarPagoRegistrado(pagoData, prestamo, clienteData);
+
+    // Si el préstamo se completó, notificar
     if (prestamo.capitalRestante <= 0) {
+      await notificarPrestamoCompletado(prestamo, clienteData);
       await crearNotificacionCompletado(prestamo);
     }
 

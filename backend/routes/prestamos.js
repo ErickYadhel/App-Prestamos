@@ -2,6 +2,7 @@ const express = require('express');
 const admin = require('firebase-admin');
 const Prestamo = require('../models/Prestamo');
 const router = express.Router();
+const { notificarNuevoPrestamo, notificarGaranteAsignado } = require('../services/notificationService');
 
 const db = admin.firestore();
 
@@ -303,11 +304,13 @@ router.post('/', async (req, res) => {
 
     // Obtener nombre del garante si se seleccionó uno
     let garanteNombre = null;
+    let garanteData = null;
     if (prestamoData.garanteID) {
       try {
         const garanteDoc = await db.collection('garantes').doc(prestamoData.garanteID).get();
         if (garanteDoc.exists) {
           garanteNombre = garanteDoc.data().nombre;
+          garanteData = garanteDoc.data();
         }
       } catch (error) {
         console.warn('Error obteniendo garante:', error);
@@ -388,6 +391,17 @@ router.post('/', async (req, res) => {
       garanteNombre: prestamo.garanteNombre,
       porcentajeComision: prestamo.porcentajeComision
     });
+
+    // ============================================
+    // 🔥 NUEVAS NOTIFICACIONES
+    // ============================================
+    // Notificar nuevo préstamo
+    await notificarNuevoPrestamo(prestamo, { id: prestamo.clienteID, nombre: prestamo.clienteNombre });
+
+    // Si tiene garante, notificar asignación
+    if (prestamo.garanteID && garanteData) {
+      await notificarGaranteAsignado(prestamo, { nombre: prestamo.clienteNombre }, garanteData);
+    }
 
     res.status(201).json({
       success: true,

@@ -348,7 +348,7 @@ const Garantes = () => {
         clienteID: '1',
         clienteNombre: 'Juan Pérez',
         nombre: 'Roberto Pérez',
-        cedula: '00111111111',
+        cedula: '00112345678',
         edad: 45,
         celular: '8091112222',
         email: 'roberto@email.com',
@@ -377,104 +377,6 @@ const Garantes = () => {
             estado: 'activo'
           }
         ]
-      },
-      {
-        id: '2',
-        clienteID: '1',
-        clienteNombre: 'Juan Pérez',
-        nombre: 'Ana Pérez',
-        cedula: '00222222222',
-        edad: 42,
-        celular: '8093334444',
-        email: 'ana@email.com',
-        trabajo: 'Escuela Nacional',
-        sueldo: 35000,
-        puesto: 'Maestra',
-        direccion: 'Calle Principal #123',
-        sector: 'Sector Norte',
-        provincia: 'Santo Domingo',
-        pais: 'República Dominicana',
-        cedulaFotoUrl: null,
-        fotoUrl: null,
-        activo: true,
-        fechaCreacion: '2024-01-15T10:00:00',
-        tipoGarante: 'personal',
-        relacionCliente: 'Esposa',
-        capacidadEndeudamiento: 168000,
-        observaciones: '',
-        prestamosGarantizados: ['P-001'],
-        prestamosActivos: 1,
-        historialGarantias: [
-          {
-            prestamoID: 'P-001',
-            monto: 50000,
-            fecha: '2024-01-15',
-            estado: 'activo'
-          }
-        ]
-      },
-      {
-        id: '3',
-        clienteID: '2',
-        clienteNombre: 'María Rodríguez',
-        nombre: 'Carlos Rodríguez',
-        cedula: '00333333333',
-        edad: 50,
-        celular: '8095556666',
-        email: 'carlos@email.com',
-        trabajo: 'Constructor Independiente',
-        sueldo: 45000,
-        puesto: 'Contratista',
-        direccion: 'Av. Independencia #456',
-        sector: 'Sector Este',
-        provincia: 'Santo Domingo',
-        pais: 'República Dominicana',
-        cedulaFotoUrl: null,
-        fotoUrl: null,
-        activo: true,
-        fechaCreacion: '2024-01-20T14:30:00',
-        tipoGarante: 'comercial',
-        relacionCliente: 'Socio',
-        capacidadEndeudamiento: 216000,
-        observaciones: 'Capacidad de endeudamiento alta',
-        prestamosGarantizados: ['P-002'],
-        prestamosActivos: 1,
-        historialGarantias: [
-          {
-            prestamoID: 'P-002',
-            monto: 75000,
-            fecha: '2024-01-20',
-            estado: 'activo'
-          }
-        ]
-      },
-      {
-        id: '4',
-        clienteID: '3',
-        clienteNombre: 'Carlos López',
-        nombre: 'Miguel López',
-        cedula: '00444444444',
-        edad: 38,
-        celular: '8097778888',
-        email: 'miguel@email.com',
-        trabajo: 'Taller Mecánico',
-        sueldo: 30000,
-        puesto: 'Mecánico',
-        direccion: 'Calle 27 de Febrero #789',
-        sector: 'Sector Oeste',
-        provincia: 'Santiago',
-        pais: 'República Dominicana',
-        cedulaFotoUrl: null,
-        fotoUrl: null,
-        activo: false,
-        fechaCreacion: '2024-02-01T09:15:00',
-        tipoGarante: 'personal',
-        relacionCliente: 'Primo',
-        capacidadEndeudamiento: 144000,
-        observaciones: 'Garante inactivo por solicitud',
-        prestamosGarantizados: [],
-        prestamosActivos: 0,
-        historialGarantias: []
       }
     ];
   };
@@ -488,9 +390,7 @@ const Garantes = () => {
       } catch (apiError) {
         console.log('Usando datos de ejemplo para clientes');
         clientesReales = [
-          { id: '1', nombre: 'Juan Pérez', prestamosActivos: 1 },
-          { id: '2', nombre: 'María Rodríguez', prestamosActivos: 1 },
-          { id: '3', nombre: 'Carlos López', prestamosActivos: 1 }
+          { id: '1', nombre: 'Juan Pérez', prestamosActivos: 1 }
         ];
       }
       setClientes(clientesReales);
@@ -622,7 +522,27 @@ const Garantes = () => {
   };
 
   // ============================================
-  // COMPONENTE FORMULARIO DE GARANTE CORREGIDO
+  // FUNCIÓN SIMPLIFICADA - SOLO VALIDA 11 DÍGITOS
+  // ============================================
+  const validarCedula = (cedula) => {
+    // Limpiar caracteres no numéricos
+    const cedulaLimpia = cedula.replace(/\D/g, '');
+    
+    // Validar que tenga exactamente 11 dígitos
+    if (cedulaLimpia.length !== 11) {
+      return { valida: false, mensaje: 'La cédula debe tener 11 dígitos' };
+    }
+    
+    // Validar que no esté vacía
+    if (cedulaLimpia.length === 0) {
+      return { valida: false, mensaje: 'La cédula es requerida' };
+    }
+    
+    return { valida: true, mensaje: '' };
+  };
+
+  // ============================================
+  // COMPONENTE FORMULARIO DE GARANTE
   // ============================================
   const GaranteForm = () => {
     const [formData, setFormData] = useState({
@@ -674,41 +594,6 @@ const Garantes = () => {
       }
     }, [editingGarante]);
 
-    // Función CORREGIDA de validación de cédula dominicana
-    const validarCedula = (cedula) => {
-      const cedulaLimpia = cedula.replace(/\D/g, '');
-      
-      if (cedulaLimpia.length !== 11) {
-        return { valida: false, mensaje: 'La cédula debe tener 11 dígitos' };
-      }
-      
-      if (/^0+$/.test(cedulaLimpia)) {
-        return { valida: false, mensaje: 'Cédula inválida' };
-      }
-      
-      const digitoVerificador = parseInt(cedulaLimpia[10]);
-      let suma = 0;
-      
-      for (let i = 0; i < 10; i++) {
-        let digito = parseInt(cedulaLimpia[i]);
-        let multiplicador = i % 2 === 0 ? 1 : 2;
-        let resultado = digito * multiplicador;
-        
-        if (resultado > 9) {
-          resultado = resultado - 9;
-        }
-        suma += resultado;
-      }
-      
-      const resto = suma % 10;
-      const digitoCalculado = resto === 0 ? 0 : 10 - resto;
-      
-      return {
-        valida: digitoCalculado === digitoVerificador,
-        mensaje: digitoCalculado === digitoVerificador ? '' : 'La cédula no es válida'
-      };
-    };
-
     const validateForm = () => {
       const errors = {};
       
@@ -722,13 +607,11 @@ const Garantes = () => {
       
       if (!formData.cedula || formData.cedula.trim() === '') {
         errors.cedula = 'La cédula es requerida';
-      } else if (formData.cedula.length === 11) {
+      } else {
         const cedulaValidation = validarCedula(formData.cedula);
         if (!cedulaValidation.valida) {
           errors.cedula = cedulaValidation.mensaje;
         }
-      } else {
-        errors.cedula = 'La cédula debe tener 11 dígitos';
       }
       
       if (!formData.celular || formData.celular.trim() === '') {
@@ -741,16 +624,14 @@ const Garantes = () => {
 
     const handleCedulaChange = (e) => {
       let value = e.target.value;
+      // Permitir solo números y máximo 11 dígitos
       value = value.replace(/\D/g, '').slice(0, 11);
       
       setFormData(prev => ({ ...prev, cedula: value }));
       
       if (value.length === 11) {
-        const validation = validarCedula(value);
-        setCedulaError(validation.valida ? '' : validation.mensaje);
-        if (validation.valida) {
-          setFormErrors(prev => ({ ...prev, cedula: '' }));
-        }
+        setCedulaError('');
+        setFormErrors(prev => ({ ...prev, cedula: '' }));
       } else if (value.length > 0) {
         setCedulaError('La cédula debe tener 11 dígitos');
       } else {

@@ -610,6 +610,9 @@ const Prestamos = () => {
     await fetchClientes();
   };
 
+  // ============================================
+  // HANDLE SAVE PRESTAMO - CON EVENTO
+  // ============================================
   const handleSavePrestamo = async (prestamoData) => {
     try {
       setError('');
@@ -623,6 +626,8 @@ const Prestamos = () => {
 
       if (response.success) {
         await fetchPrestamos();
+        // 👇 DISPARAR EVENTO PARA ACTUALIZAR DASHBOARD
+        window.dispatchEvent(new CustomEvent('datos-actualizados'));
         handleBackToList();
       } else {
         throw new Error(response.error || `Error al ${editingPrestamo ? 'actualizar' : 'crear'} el préstamo`);
@@ -633,6 +638,9 @@ const Prestamos = () => {
     }
   };
 
+  // ============================================
+  // HANDLE DELETE PRESTAMO - CON EVENTO
+  // ============================================
   const handleDeletePrestamo = async (prestamoId) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este préstamo? Esta acción no se puede deshacer.')) {
       try {
@@ -641,6 +649,8 @@ const Prestamos = () => {
         
         if (response.success) {
           fetchPrestamos();
+          // 👇 DISPARAR EVENTO PARA ACTUALIZAR DASHBOARD
+          window.dispatchEvent(new CustomEvent('datos-actualizados'));
         } else {
           throw new Error(response.error || 'Error al eliminar el préstamo');
         }

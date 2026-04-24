@@ -759,12 +759,18 @@ const Clientes = () => {
       await fetchClientes();
       setViewMode('list');
       
+      // 👇 DISPARAR EVENTO PARA ACTUALIZAR DASHBOARD
+      window.dispatchEvent(new CustomEvent('datos-actualizados'));
+      
     } catch (error) {
       console.error('Error saving client:', error);
       showError(error.message || 'Error al guardar el cliente');
     }
   };
 
+  // ============================================
+  // HANDLE DELETE CLIENTE - CON EVENTO
+  // ============================================
   const handleDeleteCliente = async (clienteId) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este cliente?')) {
       try {
@@ -773,6 +779,10 @@ const Clientes = () => {
         showSuccess('Cliente eliminado exitosamente');
         await registrarAuditoria('eliminar', 'cliente', cliente, user);
         await fetchClientes();
+        
+        // 👇 DISPARAR EVENTO PARA ACTUALIZAR DASHBOARD
+        window.dispatchEvent(new CustomEvent('datos-actualizados'));
+        
       } catch (error) {
         console.error('Error deleting client:', error);
         showError(error.message || 'Error al eliminar el cliente');
@@ -1291,7 +1301,6 @@ const Clientes = () => {
         </motion.div>
       )}
 
-      {/* Estilos CSS para animaciones */}
       <style jsx>{`
         @keyframes gradient-xy {
           0%, 100% {

@@ -687,12 +687,17 @@ const Pagos = () => {
     setShowModal(true);
   };
 
+  // ============================================
+  // HANDLE PAGO REGISTRADO - CON EVENTO
+  // ============================================
   const handlePagoRegistrado = () => {
     setShowModal(false);
     setSuccess('Pago registrado exitosamente');
     setTimeout(() => setSuccess(''), 3000);
     fetchPagos();
     fetchPrestamosActivos();
+    // 👇 DISPARAR EVENTO PARA ACTUALIZAR DASHBOARD
+    window.dispatchEvent(new CustomEvent('datos-actualizados'));
   };
 
   const handleViewDetails = (pago) => {

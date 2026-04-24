@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; // 👈 NUEVA IMPORTACIÓN
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   PlusIcon, 
@@ -27,7 +27,7 @@ import {
   BriefcaseIcon,
   HomeIcon,
   DocumentTextIcon,
-  GiftIcon  // 👈 NUEVO ÍCONO
+  GiftIcon
 } from '@heroicons/react/24/outline';
 import api from '../services/api';
 import { useTheme } from '../context/ThemeContext';
@@ -276,7 +276,7 @@ const InfoCard = ({ icon: Icon, label, value, color }) => {
 // COMPONENTE PRINCIPAL
 // ============================================
 const Garantes = () => {
-  const navigate = useNavigate(); // 👈 NUEVO - Para navegar a comisiones
+  const navigate = useNavigate();
   const [garantes, setGarantes] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -299,7 +299,6 @@ const Garantes = () => {
 
   const { theme } = useTheme();
 
-  // 👈 NUEVA FUNCIÓN - Ver comisiones del garante
   const handleVerComisiones = (garante) => {
     navigate(`/comisiones?garanteID=${garante.id}`);
   };
@@ -528,16 +527,21 @@ const Garantes = () => {
 
   const handleCreateGarante = () => {
     setEditingGarante(null);
+    setError('');
     setShowForm(true);
+    setSelectedGarante(null);
   };
 
   const handleEditGarante = (garante) => {
     setEditingGarante(garante);
+    setError('');
     setShowForm(true);
+    setSelectedGarante(null);
   };
 
   const handleViewGarante = (garante) => {
     setSelectedGarante(garante);
+    setShowForm(false);
   };
 
   const handleCloseForm = () => {
@@ -560,9 +564,9 @@ const Garantes = () => {
       const garanteCompleto = {
         ...garanteData,
         capacidadEndeudamiento,
-        prestamosActivos: 0,
-        prestamosGarantizados: [],
-        historialGarantias: []
+        prestamosActivos: editingGarante ? (editingGarante.prestamosActivos || 0) : 0,
+        prestamosGarantizados: editingGarante ? (editingGarante.prestamosGarantizados || []) : [],
+        historialGarantias: editingGarante ? (editingGarante.historialGarantias || []) : []
       };
 
       if (editingGarante) {
@@ -573,6 +577,7 @@ const Garantes = () => {
       
       await fetchGarantes();
       setShowForm(false);
+      setEditingGarante(null);
     } catch (error) {
       console.error('Error saving guarantor:', error);
       setError(error.response?.data?.error || error.message || 'Error al guardar el garante');
@@ -617,7 +622,7 @@ const Garantes = () => {
   };
 
   // ============================================
-  // COMPONENTE FORMULARIO DE GARANTE CON VALIDACIÓN DE CÉDULA
+  // COMPONENTE FORMULARIO DE GARANTE CORREGIDO
   // ============================================
   const GaranteForm = () => {
     const [formData, setFormData] = useState({
@@ -641,38 +646,44 @@ const Garantes = () => {
       activo: true
     });
     const [cedulaError, setCedulaError] = useState('');
+    const [formErrors, setFormErrors] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
       if (editingGarante) {
         setFormData({
-          clienteID: editingGarante.clienteID,
-          clienteNombre: editingGarante.clienteNombre,
-          nombre: editingGarante.nombre,
-          cedula: editingGarante.cedula,
-          edad: editingGarante.edad,
-          celular: editingGarante.celular,
-          email: editingGarante.email,
-          trabajo: editingGarante.trabajo,
-          sueldo: editingGarante.sueldo,
-          puesto: editingGarante.puesto,
-          direccion: editingGarante.direccion,
-          sector: editingGarante.sector,
-          provincia: editingGarante.provincia,
-          pais: editingGarante.pais,
+          clienteID: editingGarante.clienteID || '',
+          clienteNombre: editingGarante.clienteNombre || '',
+          nombre: editingGarante.nombre || '',
+          cedula: editingGarante.cedula || '',
+          edad: editingGarante.edad || '',
+          celular: editingGarante.celular || '',
+          email: editingGarante.email || '',
+          trabajo: editingGarante.trabajo || '',
+          sueldo: editingGarante.sueldo || '',
+          puesto: editingGarante.puesto || '',
+          direccion: editingGarante.direccion || '',
+          sector: editingGarante.sector || '',
+          provincia: editingGarante.provincia || '',
+          pais: editingGarante.pais || 'República Dominicana',
           tipoGarante: editingGarante.tipoGarante || 'personal',
           relacionCliente: editingGarante.relacionCliente || '',
           observaciones: editingGarante.observaciones || '',
-          activo: editingGarante.activo
+          activo: editingGarante.activo !== false
         });
       }
     }, [editingGarante]);
 
-    // Función de validación de cédula dominicana
+    // Función CORREGIDA de validación de cédula dominicana
     const validarCedula = (cedula) => {
       const cedulaLimpia = cedula.replace(/\D/g, '');
       
       if (cedulaLimpia.length !== 11) {
         return { valida: false, mensaje: 'La cédula debe tener 11 dígitos' };
+      }
+      
+      if (/^0+$/.test(cedulaLimpia)) {
+        return { valida: false, mensaje: 'Cédula inválida' };
       }
       
       const digitoVerificador = parseInt(cedulaLimpia[10]);
@@ -682,60 +693,110 @@ const Garantes = () => {
         let digito = parseInt(cedulaLimpia[i]);
         let multiplicador = i % 2 === 0 ? 1 : 2;
         let resultado = digito * multiplicador;
+        
         if (resultado > 9) {
-          resultado = resultado.toString().split('').reduce((a, b) => parseInt(a) + parseInt(b), 0);
+          resultado = resultado - 9;
         }
         suma += resultado;
       }
       
-      const digitoCalculado = (10 - (suma % 10)) % 10;
+      const resto = suma % 10;
+      const digitoCalculado = resto === 0 ? 0 : 10 - resto;
       
       return {
         valida: digitoCalculado === digitoVerificador,
-        mensaje: digitoCalculado === digitoVerificador ? '' : 'La cédula no es válida (dígito verificador incorrecto)'
+        mensaje: digitoCalculado === digitoVerificador ? '' : 'La cédula no es válida'
       };
     };
 
-    // Manejar cambio de cédula con validación en tiempo real
+    const validateForm = () => {
+      const errors = {};
+      
+      if (!formData.clienteID) {
+        errors.clienteID = 'Seleccione un cliente';
+      }
+      
+      if (!formData.nombre || formData.nombre.trim() === '') {
+        errors.nombre = 'El nombre es requerido';
+      }
+      
+      if (!formData.cedula || formData.cedula.trim() === '') {
+        errors.cedula = 'La cédula es requerida';
+      } else if (formData.cedula.length === 11) {
+        const cedulaValidation = validarCedula(formData.cedula);
+        if (!cedulaValidation.valida) {
+          errors.cedula = cedulaValidation.mensaje;
+        }
+      } else {
+        errors.cedula = 'La cédula debe tener 11 dígitos';
+      }
+      
+      if (!formData.celular || formData.celular.trim() === '') {
+        errors.celular = 'El celular es requerido';
+      }
+      
+      setFormErrors(errors);
+      return Object.keys(errors).length === 0;
+    };
+
     const handleCedulaChange = (e) => {
-      const value = e.target.value;
+      let value = e.target.value;
+      value = value.replace(/\D/g, '').slice(0, 11);
+      
       setFormData(prev => ({ ...prev, cedula: value }));
       
-      if (value && value.trim() !== '') {
+      if (value.length === 11) {
         const validation = validarCedula(value);
         setCedulaError(validation.valida ? '' : validation.mensaje);
+        if (validation.valida) {
+          setFormErrors(prev => ({ ...prev, cedula: '' }));
+        }
+      } else if (value.length > 0) {
+        setCedulaError('La cédula debe tener 11 dígitos');
       } else {
-        setCedulaError('La cédula es requerida');
+        setCedulaError('');
       }
     };
 
-    const handleSubmit = (e) => {
+    const handleInputChange = (e) => {
+      const { name, value, type, checked } = e.target;
+      setFormData(prev => ({
+        ...prev,
+        [name]: type === 'checkbox' ? checked : value
+      }));
+      if (formErrors[name]) {
+        setFormErrors(prev => ({ ...prev, [name]: '' }));
+      }
+    };
+
+    const handleSubmit = async (e) => {
       e.preventDefault();
       
-      // Validar cédula antes de enviar
-      if (!formData.cedula || formData.cedula.trim() === '') {
-        setError('La cédula es requerida');
+      if (isSubmitting) return;
+      
+      if (!validateForm()) {
+        setError('Por favor complete todos los campos obligatorios correctamente');
         return;
       }
       
-      const cedulaValidation = validarCedula(formData.cedula);
-      if (!cedulaValidation.valida) {
-        setError(cedulaValidation.mensaje);
-        return;
-      }
+      setIsSubmitting(true);
       
-      if (!formData.clienteID || !formData.nombre || !formData.celular) {
-        setError('Por favor complete los campos obligatorios');
-        return;
+      try {
+        const clienteSeleccionado = clientes.find(c => c.id === formData.clienteID);
+        const garanteData = {
+          ...formData,
+          clienteNombre: clienteSeleccionado?.nombre || '',
+          sueldo: parseFloat(formData.sueldo) || 0,
+          edad: parseInt(formData.edad) || null
+        };
+        
+        await handleSaveGarante(garanteData);
+      } catch (err) {
+        console.error('Error en submit:', err);
+        setError('Error al guardar el garante. Intente nuevamente.');
+      } finally {
+        setIsSubmitting(false);
       }
-
-      const clienteSeleccionado = clientes.find(c => c.id === formData.clienteID);
-      const garanteData = {
-        ...formData,
-        clienteNombre: clienteSeleccionado?.nombre || ''
-      };
-
-      handleSaveGarante(garanteData);
     };
 
     const provinciasRD = [
@@ -786,14 +847,16 @@ const Garantes = () => {
                   Cliente Principal
                 </h4>
                 <select
+                  name="clienteID"
                   value={formData.clienteID}
-                  onChange={(e) => setFormData(prev => ({ ...prev, clienteID: e.target.value }))}
+                  onChange={handleInputChange}
                   className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
-                    theme === 'dark'
-                      ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
-                      : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                    formErrors.clienteID
+                      ? 'border-red-500 focus:border-red-500'
+                      : theme === 'dark'
+                        ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                        : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
                   }`}
-                  required
                 >
                   <option value="">Seleccionar cliente</option>
                   {clientes.map(cliente => (
@@ -802,6 +865,9 @@ const Garantes = () => {
                     </option>
                   ))}
                 </select>
+                {formErrors.clienteID && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.clienteID}</p>
+                )}
               </div>
 
               {/* Información Personal */}
@@ -819,16 +885,21 @@ const Garantes = () => {
                     </label>
                     <input
                       type="text"
+                      name="nombre"
                       value={formData.nombre}
-                      onChange={(e) => setFormData(prev => ({ ...prev, nombre: e.target.value }))}
+                      onChange={handleInputChange}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
-                        theme === 'dark'
-                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
-                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                        formErrors.nombre
+                          ? 'border-red-500 focus:border-red-500'
+                          : theme === 'dark'
+                            ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                            : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
                       }`}
                       placeholder="Ej: Roberto Pérez"
-                      required
                     />
+                    {formErrors.nombre && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.nombre}</p>
+                    )}
                   </div>
 
                   <div>
@@ -837,20 +908,21 @@ const Garantes = () => {
                     </label>
                     <input
                       type="text"
+                      name="cedula"
                       value={formData.cedula}
                       onChange={handleCedulaChange}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
-                        cedulaError
+                        cedulaError || formErrors.cedula
                           ? 'border-red-500 focus:border-red-500'
                           : theme === 'dark'
                             ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
                             : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
                       }`}
                       placeholder="00112345678"
-                      required
+                      maxLength="11"
                     />
-                    {cedulaError && (
-                      <p className="text-red-500 text-xs mt-1">{cedulaError}</p>
+                    {(cedulaError || formErrors.cedula) && (
+                      <p className="text-red-500 text-xs mt-1">{cedulaError || formErrors.cedula}</p>
                     )}
                     <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
                       Ingrese los 11 dígitos de la cédula (Ej: 00112345678)
@@ -863,8 +935,9 @@ const Garantes = () => {
                     </label>
                     <input
                       type="number"
+                      name="edad"
                       value={formData.edad}
-                      onChange={(e) => setFormData(prev => ({ ...prev, edad: e.target.value }))}
+                      onChange={handleInputChange}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
                         theme === 'dark'
                           ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
@@ -882,16 +955,21 @@ const Garantes = () => {
                     </label>
                     <input
                       type="tel"
+                      name="celular"
                       value={formData.celular}
-                      onChange={(e) => setFormData(prev => ({ ...prev, celular: e.target.value }))}
+                      onChange={handleInputChange}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
-                        theme === 'dark'
-                          ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
-                          : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
+                        formErrors.celular
+                          ? 'border-red-500 focus:border-red-500'
+                          : theme === 'dark'
+                            ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
+                            : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'
                       }`}
                       placeholder="8091234567"
-                      required
                     />
+                    {formErrors.celular && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.celular}</p>
+                    )}
                   </div>
 
                   <div>
@@ -900,8 +978,9 @@ const Garantes = () => {
                     </label>
                     <input
                       type="email"
+                      name="email"
                       value={formData.email}
-                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                      onChange={handleInputChange}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
                         theme === 'dark'
                           ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
@@ -916,8 +995,9 @@ const Garantes = () => {
                       Tipo de Garante
                     </label>
                     <select
+                      name="tipoGarante"
                       value={formData.tipoGarante}
-                      onChange={(e) => setFormData(prev => ({ ...prev, tipoGarante: e.target.value }))}
+                      onChange={handleInputChange}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
                         theme === 'dark'
                           ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
@@ -934,8 +1014,9 @@ const Garantes = () => {
                       Relación con el Cliente
                     </label>
                     <select
+                      name="relacionCliente"
                       value={formData.relacionCliente}
-                      onChange={(e) => setFormData(prev => ({ ...prev, relacionCliente: e.target.value }))}
+                      onChange={handleInputChange}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
                         theme === 'dark'
                           ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
@@ -966,8 +1047,9 @@ const Garantes = () => {
                     </label>
                     <input
                       type="text"
+                      name="trabajo"
                       value={formData.trabajo}
-                      onChange={(e) => setFormData(prev => ({ ...prev, trabajo: e.target.value }))}
+                      onChange={handleInputChange}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
                         theme === 'dark'
                           ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
@@ -983,8 +1065,9 @@ const Garantes = () => {
                     </label>
                     <input
                       type="text"
+                      name="puesto"
                       value={formData.puesto}
-                      onChange={(e) => setFormData(prev => ({ ...prev, puesto: e.target.value }))}
+                      onChange={handleInputChange}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
                         theme === 'dark'
                           ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
@@ -1000,8 +1083,9 @@ const Garantes = () => {
                     </label>
                     <input
                       type="number"
+                      name="sueldo"
                       value={formData.sueldo}
-                      onChange={(e) => setFormData(prev => ({ ...prev, sueldo: e.target.value }))}
+                      onChange={handleInputChange}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
                         theme === 'dark'
                           ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
@@ -1033,8 +1117,9 @@ const Garantes = () => {
                     </label>
                     <input
                       type="text"
+                      name="direccion"
                       value={formData.direccion}
-                      onChange={(e) => setFormData(prev => ({ ...prev, direccion: e.target.value }))}
+                      onChange={handleInputChange}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
                         theme === 'dark'
                           ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
@@ -1050,8 +1135,9 @@ const Garantes = () => {
                     </label>
                     <input
                       type="text"
+                      name="sector"
                       value={formData.sector}
-                      onChange={(e) => setFormData(prev => ({ ...prev, sector: e.target.value }))}
+                      onChange={handleInputChange}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
                         theme === 'dark'
                           ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
@@ -1066,8 +1152,9 @@ const Garantes = () => {
                       Provincia
                     </label>
                     <select
+                      name="provincia"
                       value={formData.provincia}
-                      onChange={(e) => setFormData(prev => ({ ...prev, provincia: e.target.value }))}
+                      onChange={handleInputChange}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
                         theme === 'dark'
                           ? 'bg-gray-800 border-gray-700 text-white focus:border-red-500'
@@ -1087,6 +1174,7 @@ const Garantes = () => {
                     </label>
                     <input
                       type="text"
+                      name="pais"
                       value={formData.pais}
                       className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
                         theme === 'dark'
@@ -1107,8 +1195,9 @@ const Garantes = () => {
                   Observaciones
                 </label>
                 <textarea
+                  name="observaciones"
                   value={formData.observaciones}
-                  onChange={(e) => setFormData(prev => ({ ...prev, observaciones: e.target.value }))}
+                  onChange={handleInputChange}
                   rows="3"
                   className={`w-full px-4 py-2 rounded-lg border-2 outline-none transition-all ${
                     theme === 'dark'
@@ -1123,8 +1212,9 @@ const Garantes = () => {
               <div className="flex items-center">
                 <input
                   type="checkbox"
+                  name="activo"
                   checked={formData.activo}
-                  onChange={(e) => setFormData(prev => ({ ...prev, activo: e.target.checked }))}
+                  onChange={handleInputChange}
                   className="w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
                 />
                 <span className={`ml-2 text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -1139,11 +1229,12 @@ const Garantes = () => {
                   whileTap={{ scale: 0.95 }}
                   type="button"
                   onClick={handleCloseForm}
+                  disabled={isSubmitting}
                   className={`px-6 py-2 rounded-lg font-medium transition-colors ${
                     theme === 'dark'
                       ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   Cancelar
                 </motion.button>
@@ -1151,9 +1242,10 @@ const Garantes = () => {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   type="submit"
-                  className="px-6 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all"
+                  disabled={isSubmitting}
+                  className="px-6 py-2 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {editingGarante ? 'Actualizar Garante' : 'Crear Garante'}
+                  {isSubmitting ? 'Guardando...' : (editingGarante ? 'Actualizar Garante' : 'Crear Garante')}
                 </motion.button>
               </div>
             </form>
@@ -1164,7 +1256,7 @@ const Garantes = () => {
   };
 
   // ============================================
-  // COMPONENTE DETALLES DEL GARANTE (MODIFICADO - AGREGAR BOTÓN COMISIONES)
+  // COMPONENTE DETALLES DEL GARANTE
   // ============================================
   const GaranteDetails = () => {
     if (!selectedGarante) return null;
@@ -1208,7 +1300,6 @@ const Garantes = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Columna Izquierda - Información Principal (sin cambios) */}
               <div className="lg:col-span-2 space-y-4">
                 {/* Cliente Principal */}
                 <div className={`p-4 rounded-lg border-2 ${
@@ -1332,9 +1423,8 @@ const Garantes = () => {
                 )}
               </div>
 
-              {/* Columna Derecha - Estadísticas (MODIFICADA - AGREGAR BOTÓN COMISIONES) */}
+              {/* Columna Derecha */}
               <div className="space-y-4">
-                {/* Estado */}
                 <div className={`p-4 rounded-lg border-2 ${
                   selectedGarante.activo
                     ? theme === 'dark' ? 'border-green-700 bg-green-900/20' : 'border-green-200 bg-green-50'
@@ -1364,7 +1454,6 @@ const Garantes = () => {
                   </p>
                 </div>
 
-                {/* Préstamos Garantizados */}
                 <div className={`p-4 rounded-lg border-2 ${
                   theme === 'dark' ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'
                 }`}>
@@ -1388,7 +1477,6 @@ const Garantes = () => {
                   </div>
                 </div>
 
-                {/* 👇 NUEVO BOTÓN - Ver Comisiones */}
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -1402,7 +1490,6 @@ const Garantes = () => {
                   <span>Ver Comisiones</span>
                 </motion.button>
 
-                {/* Botones de Acción existentes */}
                 <div className="space-y-2">
                   <motion.button
                     whileHover={{ scale: 1.05 }}
@@ -1463,7 +1550,7 @@ const Garantes = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header Mejorado */}
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1616,7 +1703,7 @@ const Garantes = () => {
       {/* Solo mostrar el contenido principal si no hay formulario ni detalles */}
       {!showForm && !selectedGarante && (
         <>
-          {/* Stats Cards Mejoradas */}
+          {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatsCard
               icon={UserGroupIcon}
@@ -1712,7 +1799,7 @@ const Garantes = () => {
             </div>
           </GlassCard>
 
-          {/* Tabla de Garantes (MODIFICADA - AGREGAR BOTÓN VER COMISIONES) */}
+          {/* Tabla de Garantes */}
           <GlassCard>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -1853,7 +1940,6 @@ const Garantes = () => {
                                 <PencilIcon className="h-4 w-4" />
                               </motion.button>
 
-                              {/* 👇 NUEVO BOTÓN - Ver Comisiones en la tabla */}
                               <motion.button
                                 whileHover={{ scale: 1.1 }}
                                 whileTap={{ scale: 0.9 }}

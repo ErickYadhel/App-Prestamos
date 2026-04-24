@@ -69,16 +69,16 @@ class Garante {
       errors.push('El nombre es requerido');
     }
 
-    // Validar cédula (requerida y debe tener 11 dígitos)
+    // Validar cédula (solo verificar que tenga 11 dígitos)
     if (!this.cedula || this.cedula.trim() === '') {
       errors.push('La cédula es requerida');
     } else {
       const cedulaLimpia = this.cedula.replace(/\D/g, '');
       if (cedulaLimpia.length !== 11) {
         errors.push('La cédula debe tener 11 dígitos (Ej: 00112345678)');
-      } else if (!this.validarCedula(cedulaLimpia)) {
-        errors.push('La cédula no es válida (dígito verificador incorrecto)');
       }
+      // NOTA: La validación del dígito verificador está DESACTIVADA
+      // para permitir cualquier cédula de 11 dígitos
     }
 
     // Validar celular
@@ -118,30 +118,13 @@ class Garante {
     return true;
   }
 
+  // Función de validación de cédula DESACTIVADA (siempre retorna true)
+  // Se mantiene por compatibilidad pero no bloquea el registro
   validarCedula(cedula) {
-    // Algoritmo de validación de cédula dominicana (módulo 11)
+    // Esta función ya no valida el dígito verificador
+    // Solo verifica que tenga 11 dígitos
     const cedulaLimpia = cedula.replace(/\D/g, '');
-    
-    if (cedulaLimpia.length !== 11) {
-      return false;
-    }
-    
-    const digitoVerificador = parseInt(cedulaLimpia[10]);
-    let suma = 0;
-    
-    for (let i = 0; i < 10; i++) {
-      let digito = parseInt(cedulaLimpia[i]);
-      let multiplicador = i % 2 === 0 ? 1 : 2;
-      let resultado = digito * multiplicador;
-      if (resultado > 9) {
-        resultado = resultado.toString().split('').reduce((a, b) => parseInt(a) + parseInt(b), 0);
-      }
-      suma += resultado;
-    }
-    
-    const digitoCalculado = (10 - (suma % 10)) % 10;
-    
-    return digitoCalculado === digitoVerificador;
+    return cedulaLimpia.length === 11;
   }
 
   validarEmail(email) {

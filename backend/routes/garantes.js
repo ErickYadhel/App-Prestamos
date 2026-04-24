@@ -165,7 +165,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/garantes - Crear nuevo garante (MODIFICADO - ID PERSONALIZADO)
+// POST /api/garantes - Crear nuevo garante
 router.post('/', async (req, res) => {
   try {
     const garanteData = req.body;
@@ -187,7 +187,7 @@ router.post('/', async (req, res) => {
     
     const garante = new Garante(garanteData);
     
-    // Validar datos del garante
+    // Validar datos del garante (ya no valida dígito verificador)
     try {
       garante.validar();
     } catch (validationError) {
@@ -232,9 +232,7 @@ router.post('/', async (req, res) => {
       garante.capacidadEndeudamiento = garante.calcularCapacidadEndeudamiento();
     }
 
-    // ============================================
-    // GENERAR ID PERSONALIZADO BASADO EN EL NOMBRE
-    // ============================================
+    // Generar ID personalizado basado en el nombre
     const idPersonalizado = await generarIdGaranteUnico(garanteData.nombre);
     console.log(`📝 ID generado para garante: ${idPersonalizado}`);
     
@@ -260,7 +258,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/garantes/:id - Actualizar garante (MODIFICADO - ACTUALIZAR ID SI CAMBIA EL NOMBRE)
+// PUT /api/garantes/:id - Actualizar garante
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -286,13 +284,22 @@ router.put('/:id', async (req, res) => {
       });
     }
 
-    // Validar cédula si se está actualizando
+    // Validar cédula si se está actualizando (solo validar que tenga 11 dígitos)
     if (garanteData.cedula && garanteData.cedula !== garanteActual.cedula) {
+      const cedulaLimpia = garanteData.cedula.replace(/\D/g, '');
+      if (cedulaLimpia.length !== 11) {
+        return res.status(400).json({
+          success: false,
+          error: 'La cédula debe tener 11 dígitos'
+        });
+      }
+      
+      // Verificar que no exista otro garante con esa cédula
       const cedulaExistente = await db.collection('garantes')
         .where('cedula', '==', garanteData.cedula)
         .get();
 
-      if (!cedulaExistente.empty) {
+      if (!cedulaExistente.empty && cedulaExistente.docs[0].id !== id) {
         return res.status(400).json({
           success: false,
           error: 'Ya existe un garante con esta cédula'
@@ -317,7 +324,7 @@ router.put('/:id', async (req, res) => {
       garanteData.capacidadEndeudamiento = garanteTemp.calcularCapacidadEndeudamiento();
     }
 
-    // 🔥 Si el nombre cambió, necesitamos cambiar el ID del documento
+    // Si el nombre cambió, necesitamos cambiar el ID del documento
     if (garanteData.nombre && garanteData.nombre !== garanteActual.nombre) {
       const nuevoId = await generarIdGaranteUnico(garanteData.nombre);
       console.log(`🔄 Nombre cambiado: ${garanteActual.nombre} → ${garanteData.nombre}`);
@@ -331,7 +338,7 @@ router.put('/:id', async (req, res) => {
         id: nuevoId,
         nombreOriginal: garanteData.nombre,
         fechaModificacion: new Date(),
-        idAnterior: id // Registrar cambio de ID
+        idAnterior: id
       };
       
       await nuevoDocRef.set(nuevoDocData);

@@ -9,6 +9,41 @@ const { notificarPagoRegistrado, notificarPrestamoCompletado } = require('../ser
 const db = admin.firestore();
 
 // ============================================
+// FUNCIÓN PARA NORMALIZAR FECHA LOCAL (AGREGADA - NUEVA)
+// ============================================
+function normalizarFechaLocal(fecha) {
+  if (!fecha) return new Date();
+  if (fecha instanceof Date) {
+    return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+  }
+  if (typeof fecha === 'string') {
+    const parts = fecha.split('T')[0].split('-');
+    if (parts.length === 3) {
+      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    }
+  }
+  if (fecha && typeof fecha === 'object') {
+    if (fecha._seconds !== undefined) {
+      const d = new Date(fecha._seconds * 1000);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    }
+    if (fecha.seconds !== undefined) {
+      const d = new Date(fecha.seconds * 1000);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    }
+    if (fecha.toDate) {
+      const d = fecha.toDate();
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    }
+  }
+  const d = new Date(fecha);
+  if (!isNaN(d.getTime())) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  return new Date();
+}
+
+// ============================================
 // FUNCIÓN PARA GENERAR ID PERSONALIZADO DEL PAGO
 // ============================================
 const generarIdPago = (clienteNombre, fechaPago) => {
@@ -233,7 +268,7 @@ async function crearComisionAutomatica(prestamo, pagoId, interesPagado, fechaPag
 }
 
 // ============================================
-// POST /api/pagos - Registrar un pago
+// POST /api/pagos - Registrar un pago (CORREGIDO - SOLO LA FECHA)
 // ============================================
 router.post('/', async (req, res) => {
   try {
@@ -271,7 +306,32 @@ router.post('/', async (req, res) => {
     }
 
     const prestamo = new Prestamo({ id: prestamoDoc.id, ...prestamoData });
-    const fechaPagoDate = new Date(fechaPago || new Date());
+    
+    // 🔧 CORREGIDO: Normalizar fecha pago (sin zona horaria)
+    let fechaPagoDate;
+    if (fechaPago) {
+      if (fechaPago instanceof Date) {
+        fechaPagoDate = normalizarFechaLocal(fechaPago);
+      } else if (typeof fechaPago === 'string') {
+        const parts = fechaPago.split('T')[0].split('-');
+        if (parts.length === 3) {
+          fechaPagoDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        } else {
+          fechaPagoDate = normalizarFechaLocal(fechaPago);
+        }
+      } else if (fechaPago?.toDate) {
+        const d = fechaPago.toDate();
+        fechaPagoDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      } else {
+        fechaPagoDate = normalizarFechaLocal(fechaPago);
+      }
+    } else {
+      const hoy = new Date();
+      fechaPagoDate = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    }
+    
+    console.log('✅ Fecha pago normalizada:', fechaPagoDate.toLocaleDateString());
+    
     let distribucion;
     let pagoData;
 

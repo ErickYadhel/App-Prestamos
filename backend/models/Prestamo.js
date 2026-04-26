@@ -46,13 +46,59 @@ class Prestamo {
     this.porcentajeComision = porcentajeComision;
   }
 
+  // ============================================
+  // FUNCIÓN CORREGIDA PARA NORMALIZAR FECHAS
+  // Mantiene la fecha LOCAL sin conversión UTC
+  // ============================================
   _normalizarFecha(fecha) {
     if (!fecha) return null;
-    if (fecha instanceof Date) return fecha;
-    if (fecha.toDate) return fecha.toDate();
-    if (fecha._seconds) return new Date(fecha._seconds * 1000);
-    if (fecha.seconds) return new Date(fecha.seconds * 1000);
-    return new Date(fecha);
+    
+    // Si ya es un objeto Date válido
+    if (fecha instanceof Date && !isNaN(fecha.getTime())) {
+      // Crear nueva fecha manteniendo el día local
+      return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+    }
+    
+    // Si es timestamp de Firestore
+    if (fecha && typeof fecha === 'object') {
+      if (fecha._seconds !== undefined) {
+        const d = new Date(fecha._seconds * 1000);
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      }
+      if (fecha.seconds !== undefined) {
+        const d = new Date(fecha.seconds * 1000);
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      }
+      if (fecha.toDate) {
+        const d = fecha.toDate();
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      }
+    }
+    
+    // Si es string ISO
+    if (typeof fecha === 'string') {
+      // Intentar parsear como fecha local primero (YYYY-MM-DD)
+      const parts = fecha.split('T')[0].split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        if (!isNaN(d.getTime())) return d;
+      }
+      const d = new Date(fecha);
+      if (!isNaN(d.getTime())) {
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      }
+    }
+    
+    // Si es número (timestamp)
+    if (typeof fecha === 'number') {
+      const d = new Date(fecha);
+      if (!isNaN(d.getTime())) {
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      }
+    }
+    
+    console.warn('⚠️ Fecha inválida:', fecha);
+    return new Date();
   }
 
   calcularInteresDiario() {
@@ -189,13 +235,9 @@ class Prestamo {
     }
   }
 
-  // ============================================
-  // MÉTODO CORREGIDO PARA DISTRIBUCIÓN DE PAGO (VERSIÓN DEFINITIVA)
-  // ============================================
   calcularDistribucionPago(montoPago, fechaPago = new Date()) {
     const fechaPagoDate = this._normalizarFecha(fechaPago);
     
-    // Calcular días transcurridos desde el último pago o desde la fecha del préstamo
     let diasTranscurridos = 0;
     let fechaBase = this.fechaUltimoPago || this.fechaPrestamo;
     
@@ -203,14 +245,12 @@ class Prestamo {
       const fechaBaseDate = this._normalizarFecha(fechaBase);
       diasTranscurridos = Math.max(1, Math.ceil((fechaPagoDate - fechaBaseDate) / (1000 * 60 * 60 * 24)));
     } else {
-      diasTranscurridos = 30; // Default: un mes
+      diasTranscurridos = 30;
     }
     
-    // Calcular el interés adeudado basado en los días transcurridos
     const interesDiario = this.calcularInteresDiario();
     const interesAdeudado = interesDiario * Math.min(diasTranscurridos, 30);
     
-    // Calcular días de atraso para mora
     const fechaBaseParaMora = this.fechaProximoPago || this.fechaPrestamo;
     let diasAtraso = 0;
     let mora = 0;
@@ -241,17 +281,13 @@ class Prestamo {
     console.log(`   Interés adeudado: RD$ ${interesAdeudado.toFixed(2)}`);
     console.log(`   Mora calculada: RD$ ${mora.toFixed(2)}`);
     console.log(`   Capital restante: RD$ ${this.capitalRestante.toFixed(2)}`);
-    console.log(`   Fecha último pago: ${this.fechaUltimoPago?.toLocaleDateString() || 'No hay'}`);
-    console.log(`   Fecha préstamo: ${this.fechaPrestamo?.toLocaleDateString()}`);
     
-    // PASO 1: APLICAR A MORA
     if (mora > 0 && montoRestante > 0) {
       moraAplicada = Math.min(montoRestante, mora);
       montoRestante -= moraAplicada;
       console.log(`   ✅ Mora aplicada: RD$ ${moraAplicada.toFixed(2)}, Restante: RD$ ${montoRestante.toFixed(2)}`);
     }
     
-    // PASO 2: APLICAR A INTERÉS
     if (montoRestante > 0) {
       interesAplicado = Math.min(montoRestante, interesAdeudado);
       montoRestante -= interesAplicado;
@@ -267,7 +303,6 @@ class Prestamo {
       console.log(`   ⚠️ No hay dinero para interés después de mora. Pendiente: RD$ ${restoInteres.toFixed(2)}`);
     }
     
-    // PASO 3: APLICAR A CAPITAL (SOLO si se pagó TODO el interés)
     if (montoRestante > 0 && restoInteres === 0) {
       capitalAplicado = Math.min(montoRestante, this.capitalRestante);
       montoRestante -= capitalAplicado;
@@ -279,7 +314,6 @@ class Prestamo {
     const nuevoCapital = this.capitalRestante - capitalAplicado;
     const prestamoCompletado = nuevoCapital <= 0;
     
-    // Calcular períodos pagados (solo si se pagó el interés completo)
     let periodosPagados = 0;
     if (interesAplicado >= interesAdeudado && interesAdeudado > 0) {
       const interesPeriodo = this.calcularInteresPeriodo();
@@ -331,7 +365,6 @@ class Prestamo {
     this.capitalRestante = resultado.nuevoCapital;
     this.fechaUltimoPago = fechaPagoDate;
     
-    // Solo actualizar la fecha de próximo pago si se pagó interés COMPLETO
     if (resultado.interes > 0 && resultado.restoInteres === 0) {
       this.fechaProximoPago = this.calcularSiguienteFechaPago(fechaPagoDate);
       console.log(`✅ Nueva fecha de próximo pago calculada (se pagó interés completo): ${this.fechaProximoPago.toLocaleDateString()}`);
@@ -341,9 +374,6 @@ class Prestamo {
     } else {
       console.log(`⚠️ No se pagó interés, la fecha de próximo pago NO cambia: ${this.fechaProximoPago?.toLocaleDateString()}`);
     }
-    
-    console.log(`   Fecha base utilizada: ${fechaPagoDate.toLocaleDateString()}`);
-    console.log(`   Interés pagado: ${resultado.interes.toFixed(2)}, Capital pagado: ${resultado.capital.toFixed(2)}`);
     
     if (this.capitalRestante <= 0) {
       this.estado = 'completado';

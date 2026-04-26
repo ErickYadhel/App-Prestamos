@@ -52,12 +52,45 @@ function generarIdPrestamo(clienteNombre, fechaPrestamo) {
 }
 
 // ============================================
-// FUNCIONES DE FECHA CORREGIDAS
+// FUNCIÓN PARA NORMALIZAR FECHA LOCAL (CORREGIDA)
 // ============================================
+function normalizarFechaLocal(fecha) {
+  if (!fecha) return new Date();
+  if (fecha instanceof Date) {
+    return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+  }
+  if (typeof fecha === 'string') {
+    const parts = fecha.split('T')[0].split('-');
+    if (parts.length === 3) {
+      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    }
+  }
+  if (fecha && typeof fecha === 'object') {
+    if (fecha._seconds !== undefined) {
+      const d = new Date(fecha._seconds * 1000);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    }
+    if (fecha.seconds !== undefined) {
+      const d = new Date(fecha.seconds * 1000);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    }
+    if (fecha.toDate) {
+      const d = fecha.toDate();
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    }
+  }
+  const d = new Date(fecha);
+  if (!isNaN(d.getTime())) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  return new Date();
+}
 
-// Calcular la primera fecha de pago (basada en la fecha del préstamo)
+// ============================================
+// FUNCIÓN PARA CALCULAR LA PRIMERA FECHA DE PAGO
+// ============================================
 function calcularPrimeraFechaPago(fechaPrestamo, frecuencia, config = {}) {
-  const fecha = new Date(fechaPrestamo);
+  const fecha = normalizarFechaLocal(fechaPrestamo);
   const dia = fecha.getDate();
   const mes = fecha.getMonth();
   const año = fecha.getFullYear();
@@ -122,7 +155,7 @@ function calcularPrimeraFechaPago(fechaPrestamo, frecuencia, config = {}) {
       
     case 'personalizado':
       if (config.fechasPersonalizadas && config.fechasPersonalizadas.length > 0) {
-        const fechas = config.fechasPersonalizadas.map(f => new Date(f));
+        const fechas = config.fechasPersonalizadas.map(f => normalizarFechaLocal(f));
         fechas.sort((a, b) => a - b);
         for (const fechaPago of fechas) {
           if (fechaPago > fecha) {
@@ -148,10 +181,8 @@ function calcularPrimeraFechaPago(fechaPrestamo, frecuencia, config = {}) {
 }
 
 // ============================================
-// ENDPOINTS
-// ============================================
-
 // GET /api/prestamos - Listar préstamos
+// ============================================
 router.get('/', async (req, res) => {
   try {
     const { estado, clienteID, search } = req.query;
@@ -205,7 +236,9 @@ router.get('/', async (req, res) => {
   }
 });
 
+// ============================================
 // GET /api/prestamos/:id - Obtener préstamo específico
+// ============================================
 router.get('/:id', async (req, res) => {
   try {
     const doc = await db.collection('prestamos').doc(req.params.id).get();
@@ -240,7 +273,9 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/prestamos - Crear nuevo préstamo
+// ============================================
+// POST /api/prestamos - Crear nuevo préstamo (CORREGIDO)
+// ============================================
 router.post('/', async (req, res) => {
   try {
     const prestamoData = req.body;
@@ -276,17 +311,27 @@ router.post('/', async (req, res) => {
       };
     }
 
-    // Manejo correcto de fecha
+    // ============================================
+    // MANEJO CORREGIDO DE FECHA PRÉSTAMO (SIN ZONA HORARIA)
+    // ============================================
     let fechaPrestamo;
     if (prestamoData.fechaPrestamo instanceof Date) {
-      fechaPrestamo = prestamoData.fechaPrestamo;
+      fechaPrestamo = normalizarFechaLocal(prestamoData.fechaPrestamo);
     } else if (typeof prestamoData.fechaPrestamo === 'string') {
-      fechaPrestamo = new Date(prestamoData.fechaPrestamo);
+      const parts = prestamoData.fechaPrestamo.split('T')[0].split('-');
+      if (parts.length === 3) {
+        fechaPrestamo = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      } else {
+        fechaPrestamo = normalizarFechaLocal(prestamoData.fechaPrestamo);
+      }
     } else if (prestamoData.fechaPrestamo?.toDate) {
-      fechaPrestamo = prestamoData.fechaPrestamo.toDate();
+      const d = prestamoData.fechaPrestamo.toDate();
+      fechaPrestamo = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     } else {
-      fechaPrestamo = new Date(prestamoData.fechaPrestamo);
+      fechaPrestamo = normalizarFechaLocal(new Date());
     }
+    
+    console.log('✅ Fecha préstamo normalizada:', fechaPrestamo.toLocaleDateString());
     
     // Calcular la PRIMERA fecha de pago
     const primeraFechaPago = calcularPrimeraFechaPago(
@@ -393,12 +438,10 @@ router.post('/', async (req, res) => {
     });
 
     // ============================================
-    // 🔥 NUEVAS NOTIFICACIONES
+    // NOTIFICACIONES
     // ============================================
-    // Notificar nuevo préstamo
     await notificarNuevoPrestamo(prestamo, { id: prestamo.clienteID, nombre: prestamo.clienteNombre });
 
-    // Si tiene garante, notificar asignación
     if (prestamo.garanteID && garanteData) {
       await notificarGaranteAsignado(prestamo, { nombre: prestamo.clienteNombre }, garanteData);
     }
@@ -417,7 +460,9 @@ router.post('/', async (req, res) => {
   }
 });
 
+// ============================================
 // PUT /api/prestamos/:id - Actualizar préstamo
+// ============================================
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -455,17 +500,25 @@ router.put('/:id', async (req, res) => {
     if (updates.fechaPrestamo !== undefined) {
       let fechaPrestamo;
       if (updates.fechaPrestamo instanceof Date) {
-        fechaPrestamo = updates.fechaPrestamo;
+        fechaPrestamo = normalizarFechaLocal(updates.fechaPrestamo);
       } else if (typeof updates.fechaPrestamo === 'string') {
-        fechaPrestamo = new Date(updates.fechaPrestamo);
+        const parts = updates.fechaPrestamo.split('T')[0].split('-');
+        if (parts.length === 3) {
+          fechaPrestamo = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        } else {
+          fechaPrestamo = normalizarFechaLocal(updates.fechaPrestamo);
+        }
       } else if (updates.fechaPrestamo?.toDate) {
-        fechaPrestamo = updates.fechaPrestamo.toDate();
+        const d = updates.fechaPrestamo.toDate();
+        fechaPrestamo = new Date(d.getFullYear(), d.getMonth(), d.getDate());
       } else if (updates.fechaPrestamo?._seconds !== undefined) {
         fechaPrestamo = new Date(updates.fechaPrestamo._seconds * 1000);
+        fechaPrestamo = new Date(fechaPrestamo.getFullYear(), fechaPrestamo.getMonth(), fechaPrestamo.getDate());
       } else if (updates.fechaPrestamo?.seconds !== undefined) {
         fechaPrestamo = new Date(updates.fechaPrestamo.seconds * 1000);
+        fechaPrestamo = new Date(fechaPrestamo.getFullYear(), fechaPrestamo.getMonth(), fechaPrestamo.getDate());
       } else {
-        fechaPrestamo = new Date(updates.fechaPrestamo);
+        fechaPrestamo = normalizarFechaLocal(updates.fechaPrestamo);
       }
       
       if (!isNaN(fechaPrestamo.getTime())) {
@@ -503,19 +556,7 @@ router.put('/:id', async (req, res) => {
 
     if (updates.frecuencia || updates.diaPagoPersonalizado || updates.diaSemana || updates.fechasPersonalizadas) {
       const fechaBase = updates.fechaUltimoPago || prestamoActual.fechaUltimoPago || prestamoActual.fechaPrestamo;
-      let fechaBaseDate;
-      
-      if (fechaBase instanceof Date) {
-        fechaBaseDate = fechaBase;
-      } else if (fechaBase?.toDate) {
-        fechaBaseDate = fechaBase.toDate();
-      } else if (fechaBase?._seconds !== undefined) {
-        fechaBaseDate = new Date(fechaBase._seconds * 1000);
-      } else if (fechaBase?.seconds !== undefined) {
-        fechaBaseDate = new Date(fechaBase.seconds * 1000);
-      } else {
-        fechaBaseDate = new Date(fechaBase);
-      }
+      let fechaBaseDate = normalizarFechaLocal(fechaBase);
       
       if (!isNaN(fechaBaseDate.getTime())) {
         updatesData.fechaProximoPago = calcularPrimeraFechaPago(
@@ -557,7 +598,9 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// ============================================
 // DELETE /api/prestamos/:id - Eliminar préstamo
+// ============================================
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -599,7 +642,9 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// ============================================
 // GET /api/prestamos/:id/resumen - Obtener resumen de deuda
+// ============================================
 router.get('/:id/resumen', async (req, res) => {
   try {
     const { id } = req.params;

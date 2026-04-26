@@ -581,6 +581,9 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
     return Object.keys(newErrors).length === 0;
   };
 
+  // ============================================
+  // HANDLE SUBMIT CORREGIDO - FECHA LOCAL
+  // ============================================
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -590,9 +593,21 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
     setErrors({});
 
     try {
+      // 🔧 CORREGIDO: Crear fecha local sin conversión UTC
+      let fechaPagoDate;
+      if (formData.fechaPago) {
+        const [year, month, day] = formData.fechaPago.split('-');
+        fechaPagoDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      } else {
+        const hoy = new Date();
+        fechaPagoDate = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+      }
+      
+      console.log('📅 Fecha pago seleccionada (local):', fechaPagoDate.toLocaleDateString());
+      
       let datosPago = {
         prestamoID: prestamo.id,
-        fechaPago: formData.fechaPago,
+        fechaPago: fechaPagoDate,
         nota: formData.nota,
         tipoPago: formData.tipoPago,
         modoCalculo: formData.modoCalculo,
@@ -617,7 +632,7 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
           nuevoCapital: calculosAvanzados.distribucion?.nuevoCapital,
           pagoId: idPersonalizado,
           idPersonalizado: idPersonalizado,
-          fechaPago: formData.fechaPago
+          fechaPago: fechaPagoDate
         });
         setShowConfirmModal(true);
       } else {

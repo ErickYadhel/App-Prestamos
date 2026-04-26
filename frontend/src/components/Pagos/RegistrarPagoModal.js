@@ -264,7 +264,6 @@ const DistribucionPago = ({ distribucion, configMora, prestamo }) => {
     ? (distribucion.interes * (prestamo.porcentajeComision || 50) / 100)
     : 0;
   
-  // Solo mostrar si el monto es mayor a 0
   const mostrarInteres = distribucion.interes > 0;
   const mostrarMora = configMora.enabled && distribucion.mora > 0;
   const mostrarCapital = distribucion.capital > 0;
@@ -289,7 +288,6 @@ const DistribucionPago = ({ distribucion, configMora, prestamo }) => {
         </div>
         
         <div className="space-y-2">
-          {/* Solo mostrar interés si es > 0 */}
           {mostrarInteres && (
             <div className="flex justify-between items-center">
               <span className={`text-sm flex items-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -302,7 +300,6 @@ const DistribucionPago = ({ distribucion, configMora, prestamo }) => {
             </div>
           )}
           
-          {/* Solo mostrar mora si es > 0 */}
           {mostrarMora && (
             <div className="flex justify-between items-center">
               <span className={`text-sm flex items-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -315,7 +312,6 @@ const DistribucionPago = ({ distribucion, configMora, prestamo }) => {
             </div>
           )}
           
-          {/* Solo mostrar capital si es > 0 */}
           {mostrarCapital && (
             <div className="flex justify-between items-center">
               <span className={`text-sm flex items-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -328,7 +324,6 @@ const DistribucionPago = ({ distribucion, configMora, prestamo }) => {
             </div>
           )}
           
-          {/* Si no hay distribución (pago insuficiente) */}
           {!mostrarInteres && !mostrarMora && !mostrarCapital && distribucion.montoTotal > 0 && (
             <div className="flex justify-between items-center">
               <span className={`text-sm flex items-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -342,7 +337,6 @@ const DistribucionPago = ({ distribucion, configMora, prestamo }) => {
           )}
         </div>
 
-        {/* Comisión del Garante */}
         {comisionGarante > 0 && (
           <div className={`mt-3 pt-3 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
             <div className="flex items-center space-x-2 mb-2">
@@ -496,29 +490,24 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
       let restoInteres = 0;
       let montoRestante = formData.montoTotal;
       
-      // Primero cubrir mora si hay días de atraso
       if (calculosAvanzados.diasAtraso > 0 && configMora.enabled && calculosAvanzados.moraCalculada > 0) {
         moraAplicada = Math.min(montoRestante, calculosAvanzados.moraCalculada);
         montoRestante -= moraAplicada;
       }
       
-      // Luego cubrir interés del período
       if (montoRestante > 0) {
         interesAplicado = Math.min(montoRestante, interesPeriodo);
         montoRestante -= interesAplicado;
         
-        // Si sobra después de cubrir interés, va a capital
         if (montoRestante > 0) {
           capitalAplicado = Math.min(montoRestante, prestamoSeleccionado.capitalRestante);
           montoRestante -= capitalAplicado;
         }
         
-        // Si no se cubrió completamente el interés, guardar resto
         if (interesAplicado < interesPeriodo) {
           restoInteres = interesPeriodo - interesAplicado;
         }
       } else {
-        // Si el pago no cubre ni la mora, no hay interés aplicado
         restoInteres = interesPeriodo;
       }
       
@@ -686,6 +675,9 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
     return true;
   };
 
+  // ============================================
+  // HANDLE SUBMIT CORREGIDO (FECHA LOCAL)
+  // ============================================
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -695,9 +687,21 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
     setError('');
 
     try {
+      // 🔧 CORREGIDO: Crear fecha local sin conversión UTC
+      let fechaPagoDate;
+      if (formData.fechaPago) {
+        const [year, month, day] = formData.fechaPago.split('-');
+        fechaPagoDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      } else {
+        const hoy = new Date();
+        fechaPagoDate = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+      }
+      
+      console.log('📅 Fecha pago seleccionada (local):', fechaPagoDate.toLocaleDateString());
+      
       const datosPago = {
         prestamoID: formData.prestamoID,
-        fechaPago: formData.fechaPago,
+        fechaPago: fechaPagoDate,
         nota: formData.nota,
         tipoPago: formData.tipoPago,
         modoCalculo: formData.modoCalculo
@@ -721,7 +725,7 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
           nuevoCapital: calculosAvanzados.distribucion?.nuevoCapital,
           pagoId: idPersonalizado,
           idPersonalizado: idPersonalizado,
-          fechaPago: formData.fechaPago
+          fechaPago: fechaPagoDate
         });
         setShowConfirmModal(true);
       } else {
@@ -1015,7 +1019,6 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
                                 </p>
                               </div>
                               
-                              {/* 👇 Mostrar cómo se dividirá el pago en modo automático */}
                               {formData.montoTotal > 0 && calculosAvanzados.distribucion && (
                                 <div className={`mt-4 p-3 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-blue-50'} border border-blue-200 dark:border-blue-800`}>
                                   <p className={`text-xs font-medium mb-2 flex items-center ${theme === 'dark' ? 'text-blue-300' : 'text-blue-700'}`}>

@@ -241,6 +241,9 @@ const PrestamoForm = ({ prestamo, clientes = [], onSave, onCancel, error }) => {
     return `${nombreLimpio}${dia}-${mes}-${año}`;
   };
 
+  // ============================================
+  // HANDLE SUBMIT CORREGIDO (FECHA LOCAL)
+  // ============================================
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -248,9 +251,13 @@ const PrestamoForm = ({ prestamo, clientes = [], onSave, onCancel, error }) => {
 
     setLoading(true);
     try {
-      const fechaPrestamo = new Date(formData.fechaPrestamo);
+      // 🔧 CORREGIDO: Crear fecha manteniendo el día local (sin conversión UTC)
+      const fechaPrestamoStr = formData.fechaPrestamo;
+      const [year, month, day] = fechaPrestamoStr.split('-');
+      // Crear fecha local (sin zona horaria)
+      const fechaPrestamo = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
       
-      console.log('📅 Fecha préstamo seleccionada:', fechaPrestamo);
+      console.log('📅 Fecha préstamo seleccionada (local):', fechaPrestamo.toLocaleDateString());
       console.log('📅 Frecuencia:', formData.frecuencia);
       console.log('💰 Generar comisión:', formData.generarComision);
       console.log('👤 Garante ID:', formData.garanteID);

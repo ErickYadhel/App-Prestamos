@@ -82,7 +82,7 @@ const VelocimetroMetricas = ({ title, value, maxValue = 100, unit = '%', color =
         <div className="relative w-72 h-72 mx-auto">
           <svg className="w-full h-full" viewBox="0 0 200 200">
             {/* Fondo del velocímetro con efecto 3D */}
-            <circle cx="100" cy="100" r="92" fill={theme === 'dark' ? '#1f2937' : '#f3f4f6'} stroke={theme === 'dark' ? '#374151' : '#d1d5db'} strokeWidth="4" />
+            <circle cx="100" cy="100" r="92" fill={theme === 'dark' ? '#1f2937' : '#f3f4f6'} stroke={theme === 'dark' ? '#FF0000' : '#FF0000'} strokeWidth="4" />
             <circle cx="100" cy="100" r="85" fill="none" stroke={theme === 'dark' ? '#374151' : '#e5e7eb'} strokeWidth="2" />
             
             {/* Gradiente del arco del velocímetro */}
@@ -198,14 +198,14 @@ const VelocimetroMetricas = ({ title, value, maxValue = 100, unit = '%', color =
           </svg>
           
           {/* Display digital de velocidad */}
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-center">
+          <div className="absolute bottom-9 left-1/2 transform -translate-x-1/2 text-center">
             <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
               {Math.round(displayValue)}
               <span className="text-sm ml-0.5">{unit}</span>
             </div>
-            <div className="text-[10px] text-gray-500 mt-1 flex items-center justify-center gap-1">
+            <div className="text-[13px] text-gray-500 mt-3 flex items-center justify-center gap-1">
               <span className={`w-1.5 h-1.5 rounded-full ${isHovered ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`} />
-              {isHovered ? 'REVOLUCIONANDO' : `${velocidadKMH} km/h`}
+              {isHovered ? 'ACELERANDO' : `${velocidadKMH} km/h`}
             </div>
           </div>
         </div>

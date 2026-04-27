@@ -8,7 +8,8 @@ import {
   ChartBarIcon,
   FireIcon,
   UserGroupIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import {
   Chart as ChartJS,
@@ -35,7 +36,11 @@ ChartJS.register(
 const GlassCard = ({ children, className = '' }) => {
   const { theme } = useTheme();
   return (
-    <div className={`bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-xl shadow-xl border border-red-600/20 hover:border-red-600/40 transition-all duration-300 ${className}`}>
+    <div className={`rounded-xl shadow-xl border transition-all duration-300 ${
+      theme === 'dark' 
+        ? 'bg-gray-800/80 backdrop-blur-lg border-red-600/20 hover:border-red-600/40'
+        : 'bg-white/80 backdrop-blur-lg border-red-600/20 hover:border-red-600/40'
+    } ${className}`}>
       {children}
     </div>
   );
@@ -64,7 +69,13 @@ const ClienteTopInteresWidget = ({
 
   // Calcular estadísticas de clientes basado en pagos recibidos por props
   const estadisticasClientes = useMemo(() => {
+    console.log('📊 ClienteTopInteresWidget - Procesando datos:');
+    console.log('  - Pagos recibidos:', pagos?.length || 0);
+    console.log('  - Préstamos recibidos:', prestamos?.length || 0);
+    console.log('  - Clientes recibidos:', clientes?.length || 0);
+    
     if (!pagos || pagos.length === 0) {
+      console.log('⚠️ No hay pagos para procesar');
       return { topInteres: [], topPagos: [], stats: { totalClientes: 0, totalInteresGeneral: 0, totalPagosGeneral: 0 } };
     }
 
@@ -76,16 +87,26 @@ const ClienteTopInteresWidget = ({
         clientesMap.set(cliente.id?.toLowerCase(), cliente);
         if (cliente.email) clientesMap.set(cliente.email.toLowerCase(), cliente);
         if (cliente.cedula) clientesMap.set(cliente.cedula, cliente);
+        if (cliente.nombre) clientesMap.set(cliente.nombre.toLowerCase(), cliente);
       });
     }
 
     // Agrupar pagos por cliente
     const pagosPorCliente = new Map();
     
-    pagos.forEach(pago => {
+    pagos.forEach((pago, index) => {
       // Buscar el ID del cliente de diferentes formas
       let clienteId = pago.clienteId || pago.cliente_id || pago.cliente;
       let clienteNombre = pago.clienteNombre || pago.nombreCliente || pago.cliente || 'Cliente';
+      
+      // Si hay un prestamoID, intentar obtener el cliente del préstamo
+      if (!clienteId && pago.prestamoID && prestamos && prestamos.length > 0) {
+        const prestamoAsociado = prestamos.find(p => p.id === pago.prestamoID);
+        if (prestamoAsociado) {
+          clienteId = prestamoAsociado.clienteID;
+          clienteNombre = prestamoAsociado.clienteNombre || clienteNombre;
+        }
+      }
       
       // Intentar obtener nombre del cliente desde el mapa de clientes
       if (clienteId && clientesMap.has(clienteId)) {
@@ -97,8 +118,8 @@ const ClienteTopInteresWidget = ({
       }
       
       // Si no hay ID, intentar buscar por nombre
-      if (!clienteId && clienteNombre && clientesMap.has(clienteNombre)) {
-        const clienteEncontrado = clientesMap.get(clienteNombre);
+      if (!clienteId && clienteNombre && clientesMap.has(clienteNombre.toLowerCase())) {
+        const clienteEncontrado = clientesMap.get(clienteNombre.toLowerCase());
         clienteId = clienteEncontrado.id;
         clienteNombre = clienteEncontrado.nombre || clienteEncontrado.nombres || clienteNombre;
       }
@@ -135,8 +156,9 @@ const ClienteTopInteresWidget = ({
       }
       
       if (montoInteres > 0) {
-        if (!pagosPorCliente.has(clienteId)) {
-          pagosPorCliente.set(clienteId, {
+        const key = clienteId || clienteNombre;
+        if (!pagosPorCliente.has(key)) {
+          pagosPorCliente.set(key, {
             id: clienteId,
             nombre: clienteNombre || 'Cliente',
             totalInteres: 0,
@@ -145,7 +167,7 @@ const ClienteTopInteresWidget = ({
           });
         }
         
-        const cliente = pagosPorCliente.get(clienteId);
+        const cliente = pagosPorCliente.get(key);
         cliente.totalInteres += montoInteres;
         cliente.totalPagado += montoPagadoFinal;
         cliente.cantidadPagos += 1;
@@ -191,35 +213,52 @@ const ClienteTopInteresWidget = ({
         totalPagosGeneral
       }
     };
-  }, [pagos, clientes]);
+  }, [pagos, prestamos, clientes]);
 
   const { topInteres, topPagos, stats } = estadisticasClientes;
 
-  // Datos para gráfico de barras
+  // Colores eléctricos para los gráficos
+  const electricColors = {
+    red: '#ef4444',
+    redLight: '#f87171',
+    green: '#10b981',
+    greenLight: '#34d399',
+    blue: '#3b82f6',
+    blueLight: '#60a5fa',
+    purple: '#8b5cf6',
+    purpleLight: '#a78bfa',
+    orange: '#f97316',
+    orangeLight: '#fb923c',
+    cyan: '#06b6d4',
+    cyanLight: '#22d3ee'
+  };
+
+  // Datos para gráfico de barras - COLORES ELÉCTRICOS
   const barChartData = {
     labels: topInteres.map(c => c.nombre?.length > 15 ? c.nombre.substring(0, 12) + '...' : c.nombre || 'Cliente'),
     datasets: [
       {
         label: 'Interés Pagado (RD$)',
         data: topInteres.map(c => c.totalInteres || 0),
-        backgroundColor: 'rgba(16, 185, 129, 0.8)',
-        borderColor: 'rgb(16, 185, 129)',
+        backgroundColor: [electricColors.red, electricColors.green, electricColors.blue],
+        borderColor: [electricColors.redLight, electricColors.greenLight, electricColors.blueLight],
         borderWidth: 2,
         borderRadius: 8,
       }
     ],
   };
 
-  // Datos para gráfico de doughnut
+  // Datos para gráfico de doughnut - COLORES ELÉCTRICOS
   const doughnutData = {
     labels: topInteres.map(c => c.nombre || 'Cliente'),
     datasets: [
       {
         data: topInteres.map(c => c.totalInteres || 0),
-        backgroundColor: ['#10B981', '#3B82F6', '#8B5CF6', '#F59E0B'],
+        backgroundColor: [electricColors.red, electricColors.green, electricColors.blue, electricColors.purple],
         borderColor: 'transparent',
         borderWidth: 2,
         hoverOffset: 8,
+        hoverBackgroundColor: [electricColors.redLight, electricColors.greenLight, electricColors.blueLight, electricColors.purpleLight],
       },
     ],
   };
@@ -232,10 +271,17 @@ const ClienteTopInteresWidget = ({
         position: 'bottom',
         labels: {
           color: theme === 'dark' ? '#9CA3AF' : '#4B5563',
-          font: { size: 10 }
+          font: { size: 11, weight: 'bold' },
+          usePointStyle: true,
+          pointStyle: 'circle'
         }
       },
       tooltip: {
+        backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
+        titleColor: theme === 'dark' ? '#F3F4F6' : '#111827',
+        bodyColor: theme === 'dark' ? '#9CA3AF' : '#4B5563',
+        borderColor: theme === 'dark' ? '#374151' : '#E5E7EB',
+        borderWidth: 1,
         callbacks: {
           label: function(context) {
             return `${context.label}: ${formatearMonto(context.raw)}`;
@@ -271,7 +317,7 @@ const ClienteTopInteresWidget = ({
         <div className="p-6 text-center">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-gradient-to-br from-yellow-500 to-yellow-700 rounded-lg">
+              <div className="p-2 bg-gradient-to-br from-red-600 to-red-800 rounded-lg">
                 <TrophyIcon className="h-5 w-5 text-white" />
               </div>
               <div>
@@ -294,13 +340,18 @@ const ClienteTopInteresWidget = ({
             )}
           </div>
           <div className="py-8">
-            <UserIcon className="h-12 w-12 mx-auto text-gray-400 mb-3" />
+            <ExclamationTriangleIcon className={`h-12 w-12 mx-auto mb-3 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-300'}`} />
             <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
               No hay pagos con intereses registrados
             </p>
             <p className={`text-xs mt-2 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
               Los datos se mostrarán cuando haya pagos registrados
             </p>
+            {pagos && pagos.length > 0 && (
+              <p className={`text-xs mt-2 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                📊 Se encontraron {pagos.length} pagos, pero ninguno tiene intereses registrados
+              </p>
+            )}
           </div>
         </div>
       </GlassCard>
@@ -313,7 +364,7 @@ const ClienteTopInteresWidget = ({
         {/* Header con botón de actualizar */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-gradient-to-br from-yellow-500 to-yellow-700 rounded-lg">
+            <div className="p-2 bg-gradient-to-br from-red-600 to-red-800 rounded-lg shadow-lg">
               <TrophyIcon className="h-5 w-5 text-white" />
             </div>
             <div>
@@ -325,37 +376,53 @@ const ClienteTopInteresWidget = ({
               </p>
             </div>
           </div>
-          {onRefresh && (
-            <button 
-              onClick={onRefresh}
-              className={`p-1.5 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-              title="Actualizar"
-            >
-              <ArrowPathIcon className="h-4 w-4 text-gray-400" />
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <span className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+              Total pagos: {pagos?.length || 0}
+            </span>
+            {onRefresh && (
+              <button 
+                onClick={onRefresh}
+                className={`p-1.5 rounded-lg transition-colors ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                title="Actualizar"
+              >
+                <ArrowPathIcon className="h-4 w-4 text-gray-400" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Top 3 Clientes por Interés */}
         {topInteres.length > 0 && (
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
-              <CurrencyDollarIcon className="h-4 w-4 text-emerald-500" />
+              <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700">
+                <CurrencyDollarIcon className="h-3 w-3 text-white" />
+              </div>
               <h5 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                 Top Clientes por Interés Pagado
               </h5>
+              <span className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} ml-auto`}>
+                Total general: {formatearMonto(stats.totalInteresGeneral)}
+              </span>
             </div>
             <div className="space-y-3">
               {topInteres.map((cliente, index) => {
                 const colores = {
-                  1: 'from-yellow-500 to-yellow-700',
-                  2: 'from-gray-400 to-gray-600',
-                  3: 'from-amber-600 to-amber-800'
+                  1: 'from-red-500 to-red-700',
+                  2: 'from-emerald-500 to-emerald-700',
+                  3: 'from-blue-500 to-blue-700'
                 };
                 const bgColores = {
-                  1: 'bg-gradient-to-r from-yellow-50 to-transparent dark:from-yellow-900/20 border-yellow-200 dark:border-yellow-800',
-                  2: 'bg-gradient-to-r from-gray-50 to-transparent dark:from-gray-800/50 border-gray-200 dark:border-gray-700',
-                  3: 'bg-gradient-to-r from-amber-50 to-transparent dark:from-amber-900/20 border-amber-200 dark:border-amber-800'
+                  1: theme === 'dark' 
+                    ? 'bg-gradient-to-r from-red-950/50 to-transparent border-red-800/50' 
+                    : 'bg-gradient-to-r from-red-50 to-transparent border-red-200',
+                  2: theme === 'dark'
+                    ? 'bg-gradient-to-r from-emerald-950/50 to-transparent border-emerald-800/50'
+                    : 'bg-gradient-to-r from-emerald-50 to-transparent border-emerald-200',
+                  3: theme === 'dark'
+                    ? 'bg-gradient-to-r from-blue-950/50 to-transparent border-blue-800/50'
+                    : 'bg-gradient-to-r from-blue-50 to-transparent border-blue-200'
                 };
                 
                 return (
@@ -364,7 +431,7 @@ const ClienteTopInteresWidget = ({
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    className={`p-3 rounded-xl border ${bgColores[cliente.rank]}`}
+                    className={`p-3 rounded-xl border ${bgColores[cliente.rank]} transition-all duration-300 hover:shadow-lg hover:shadow-red-500/10`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
@@ -380,24 +447,28 @@ const ClienteTopInteresWidget = ({
                               {formatearMonto(cliente.totalInteres)}
                             </p>
                             <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
-                              en {cliente.cantidadPagos} pagos
+                              en {cliente.cantidadPagos} {cliente.cantidadPagos === 1 ? 'pago' : 'pagos'}
                             </p>
                           </div>
                         </div>
                       </div>
                       <div className="text-right">
-                        <span className={`text-xs font-medium px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400`}>
+                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                          theme === 'dark'
+                            ? 'bg-emerald-900/50 text-emerald-300'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}>
                           {cliente.porcentaje}% del total
                         </span>
                       </div>
                     </div>
                     <div className="mt-2">
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
+                      <div className={`w-full ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} rounded-full h-1.5 overflow-hidden`}>
                         <motion.div 
                           initial={{ width: 0 }}
                           animate={{ width: `${cliente.porcentaje}%` }}
                           transition={{ duration: 0.5, delay: index * 0.1 }}
-                          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600"
+                          className="h-full rounded-full bg-gradient-to-r from-red-500 via-emerald-500 to-blue-500"
                         />
                       </div>
                     </div>
@@ -412,7 +483,9 @@ const ClienteTopInteresWidget = ({
         {topPagos.length > 0 && (
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
-              <FireIcon className="h-4 w-4 text-orange-500" />
+              <div className="p-1.5 rounded-lg bg-gradient-to-br from-orange-500 to-orange-700">
+                <FireIcon className="h-3 w-3 text-white" />
+              </div>
               <h5 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                 Top Clientes por Cantidad de Pagos
               </h5>
@@ -421,8 +494,19 @@ const ClienteTopInteresWidget = ({
               {topPagos.map((cliente, index) => {
                 const colores = {
                   1: 'from-orange-500 to-orange-700',
-                  2: 'from-blue-500 to-blue-700',
-                  3: 'from-cyan-500 to-cyan-700'
+                  2: 'from-cyan-500 to-cyan-700',
+                  3: 'from-purple-500 to-purple-700'
+                };
+                const bgColores = {
+                  1: theme === 'dark'
+                    ? 'bg-gradient-to-r from-orange-950/50 to-transparent border-orange-800/50'
+                    : 'bg-gradient-to-r from-orange-50 to-transparent border-orange-200',
+                  2: theme === 'dark'
+                    ? 'bg-gradient-to-r from-cyan-950/50 to-transparent border-cyan-800/50'
+                    : 'bg-gradient-to-r from-cyan-50 to-transparent border-cyan-200',
+                  3: theme === 'dark'
+                    ? 'bg-gradient-to-r from-purple-950/50 to-transparent border-purple-800/50'
+                    : 'bg-gradient-to-r from-purple-50 to-transparent border-purple-200'
                 };
                 
                 return (
@@ -431,7 +515,7 @@ const ClienteTopInteresWidget = ({
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    className={`p-3 rounded-xl border ${theme === 'dark' ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}
+                    className={`p-3 rounded-xl border ${bgColores[cliente.rank]} transition-all duration-300 hover:shadow-lg hover:shadow-orange-500/10`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
@@ -447,13 +531,17 @@ const ClienteTopInteresWidget = ({
                               {cliente.cantidadPagos} {cliente.cantidadPagos === 1 ? 'pago' : 'pagos'}
                             </p>
                             <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
-                              total: {formatearMonto(cliente.totalPagado)}
+                              total pagado: {formatearMonto(cliente.totalPagado)}
                             </p>
                           </div>
                         </div>
                       </div>
                       <div className="text-right">
-                        <span className={`text-xs font-medium px-2 py-1 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400`}>
+                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                          theme === 'dark'
+                            ? 'bg-orange-900/50 text-orange-300'
+                            : 'bg-orange-100 text-orange-700'
+                        }`}>
                           🔥 Activo
                         </span>
                       </div>
@@ -465,11 +553,13 @@ const ClienteTopInteresWidget = ({
           </div>
         )}
 
-        {/* Gráficos de Comparación - AHORA CON > 0 para mostrar aunque sea 1 cliente */}
-        {topInteres.length > 0 && (
+        {/* Gráficos de Comparación */}
+        {topInteres.length >= 1 && (
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-3">
-              <ChartBarIcon className="h-4 w-4 text-purple-500" />
+              <div className="p-1.5 rounded-lg bg-gradient-to-br from-purple-500 to-purple-700">
+                <ChartBarIcon className="h-3 w-3 text-white" />
+              </div>
               <h5 className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                 Comparativa de Intereses por Cliente
               </h5>
@@ -488,29 +578,57 @@ const ClienteTopInteresWidget = ({
         )}
 
         {/* Stats adicionales */}
-        {stats.totalClientes > 0 && (
-          <div className={`mt-4 pt-3 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} grid grid-cols-3 gap-2`}>
-            <div className={`p-2 rounded-lg text-center ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100'}`}>
-              <div className="flex items-center justify-center gap-1">
-                <UserGroupIcon className="h-3 w-3 text-gray-400" />
-                <p className={`text-[10px] ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Clientes</p>
-              </div>
-              <p className="text-sm font-bold text-blue-600">{stats.totalClientes}</p>
+        <div className={`mt-4 pt-3 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} grid grid-cols-3 gap-2`}>
+          <div className={`p-2 rounded-lg text-center transition-all duration-300 hover:scale-105 ${
+            theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100'
+          }`}>
+            <div className="flex items-center justify-center gap-1">
+              <UserGroupIcon className={`h-3 w-3 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`} />
+              <p className={`text-[10px] ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Clientes</p>
             </div>
-            <div className={`p-2 rounded-lg text-center ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100'}`}>
-              <div className="flex items-center justify-center gap-1">
-                <CurrencyDollarIcon className="h-3 w-3 text-gray-400" />
-                <p className={`text-[10px] ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Total intereses</p>
-              </div>
-              <p className="text-xs font-bold text-emerald-600 truncate">{formatearMonto(stats.totalInteresGeneral)}</p>
+            <p className="text-sm font-bold text-blue-600 dark:text-blue-400">{stats.totalClientes}</p>
+          </div>
+          <div className={`p-2 rounded-lg text-center transition-all duration-300 hover:scale-105 ${
+            theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100'
+          }`}>
+            <div className="flex items-center justify-center gap-1">
+              <CurrencyDollarIcon className={`h-3 w-3 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`} />
+              <p className={`text-[10px] ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Total intereses</p>
             </div>
-            <div className={`p-2 rounded-lg text-center ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100'}`}>
-              <div className="flex items-center justify-center gap-1">
-                <ChartBarIcon className="h-3 w-3 text-gray-400" />
-                <p className={`text-[10px] ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Total pagos</p>
-              </div>
-              <p className="text-sm font-bold text-purple-600">{stats.totalPagosGeneral}</p>
+            <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 truncate">
+              {formatearMonto(stats.totalInteresGeneral)}
+            </p>
+          </div>
+          <div className={`p-2 rounded-lg text-center transition-all duration-300 hover:scale-105 ${
+            theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100'
+          }`}>
+            <div className="flex items-center justify-center gap-1">
+              <ChartBarIcon className={`h-3 w-3 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`} />
+              <p className={`text-[10px] ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Total pagos</p>
             </div>
+            <p className="text-sm font-bold text-purple-600 dark:text-purple-400">{stats.totalPagosGeneral}</p>
+          </div>
+        </div>
+        
+        {/* Información de depuración (solo en desarrollo) */}
+        {process.env.NODE_ENV === 'development' && pagos && pagos.length > 0 && (
+          <div className={`mt-4 p-2 rounded-lg text-xs ${
+            theme === 'dark' ? 'bg-gray-800/50 text-gray-500' : 'bg-gray-100 text-gray-500'
+          }`}>
+            <details>
+              <summary className="cursor-pointer hover:text-red-500 transition-colors">🔧 Datos de depuración ({pagos.length} pagos)</summary>
+              <div className="mt-2 space-y-1 max-h-40 overflow-auto">
+                {pagos.slice(0, 5).map((pago, i) => (
+                  <div key={i} className={`border-t pt-1 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                    <p><strong>Pago {i+1}:</strong> {pago.clienteNombre || 'Sin cliente'}</p>
+                    <p>Interés: RD$ {pago.montoInteres || pago.interes || 0}</p>
+                    <p>Capital: RD$ {pago.montoCapital || 0}</p>
+                    <p>Total: RD$ {(pago.montoCapital || 0) + (pago.montoInteres || pago.interes || 0)}</p>
+                  </div>
+                ))}
+                {pagos.length > 5 && <p>... y {pagos.length - 5} pagos más</p>}
+              </div>
+            </details>
           </div>
         )}
       </div>

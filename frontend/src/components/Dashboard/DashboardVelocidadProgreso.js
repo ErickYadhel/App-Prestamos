@@ -88,7 +88,7 @@ const GaugeWidget = ({ title, value, maxValue, unit, color, subtitle }) => {
           
           {/* Marcas */}
           {[0, 25, 50, 75, 100].map((mark) => {
-            const markAngle = (mark / 100) * 180 - 90;
+            const markAngle = (mark / 100) * 180 - 180;
             const radian = (markAngle * Math.PI) / 180;
             const x1 = 60 + 45 * Math.cos(radian);
             const y1 = 60 + 45 * Math.sin(radian);
@@ -112,8 +112,8 @@ const GaugeWidget = ({ title, value, maxValue, unit, color, subtitle }) => {
         </svg>
         
         {/* Velocidad digital pequeña */}
-        <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-center">
-          <div className="text-[10px] text-gray-500">{Math.round(percentage)}%</div>
+        <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 text-center">
+          <div className="text-[20px] text-gray-500">{Math.round(percentage)}%</div>
         </div>
       </div>
     </div>

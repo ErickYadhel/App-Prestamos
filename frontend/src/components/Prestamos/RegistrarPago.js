@@ -582,7 +582,7 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
   };
 
   // ============================================
-  // HANDLE SUBMIT CORREGIDO - FECHA LOCAL
+  // HANDLE SUBMIT CORREGIDO - ENVIAR FECHA COMO STRING
   // ============================================
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -593,21 +593,19 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
     setErrors({});
 
     try {
-      // 🔧 CORREGIDO: Crear fecha local sin conversión UTC
-      let fechaPagoDate;
-      if (formData.fechaPago) {
-        const [year, month, day] = formData.fechaPago.split('-');
-        fechaPagoDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-      } else {
+      // 🔧 CORREGIDO: Enviar fecha como string YYYY-MM-DD (sin convertir a objeto Date)
+      let fechaPagoStr = formData.fechaPago;
+      
+      if (!fechaPagoStr) {
         const hoy = new Date();
-        fechaPagoDate = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+        fechaPagoStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
       }
       
-      console.log('📅 Fecha pago seleccionada (local):', fechaPagoDate.toLocaleDateString());
+      console.log('📅 Fecha pago seleccionada (string):', fechaPagoStr);
       
       let datosPago = {
         prestamoID: prestamo.id,
-        fechaPago: fechaPagoDate,
+        fechaPago: fechaPagoStr, // Enviar como string YYYY-MM-DD
         nota: formData.nota,
         tipoPago: formData.tipoPago,
         modoCalculo: formData.modoCalculo,
@@ -632,7 +630,7 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
           nuevoCapital: calculosAvanzados.distribucion?.nuevoCapital,
           pagoId: idPersonalizado,
           idPersonalizado: idPersonalizado,
-          fechaPago: fechaPagoDate
+          fechaPago: fechaPagoStr
         });
         setShowConfirmModal(true);
       } else {

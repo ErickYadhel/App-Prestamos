@@ -242,7 +242,7 @@ const PrestamoForm = ({ prestamo, clientes = [], onSave, onCancel, error }) => {
   };
 
   // ============================================
-  // HANDLE SUBMIT CORREGIDO (FECHA LOCAL)
+  // HANDLE SUBMIT CORREGIDO - ENVIAR FECHA COMO STRING
   // ============================================
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -251,13 +251,10 @@ const PrestamoForm = ({ prestamo, clientes = [], onSave, onCancel, error }) => {
 
     setLoading(true);
     try {
-      // 🔧 CORREGIDO: Crear fecha manteniendo el día local (sin conversión UTC)
+      // Mantener la fecha como string YYYY-MM-DD (sin convertir a objeto Date)
       const fechaPrestamoStr = formData.fechaPrestamo;
-      const [year, month, day] = fechaPrestamoStr.split('-');
-      // Crear fecha local (sin zona horaria)
-      const fechaPrestamo = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
       
-      console.log('📅 Fecha préstamo seleccionada (local):', fechaPrestamo.toLocaleDateString());
+      console.log('📅 Fecha préstamo seleccionada (string):', fechaPrestamoStr);
       console.log('📅 Frecuencia:', formData.frecuencia);
       console.log('💰 Generar comisión:', formData.generarComision);
       console.log('👤 Garante ID:', formData.garanteID);
@@ -268,7 +265,7 @@ const PrestamoForm = ({ prestamo, clientes = [], onSave, onCancel, error }) => {
         montoPrestado: parseFloat(formData.montoPrestado),
         interesPercent: parseFloat(formData.interesPercent),
         capitalRestante: parseFloat(formData.montoPrestado),
-        fechaPrestamo: fechaPrestamo,
+        fechaPrestamo: fechaPrestamoStr, // 🔧 ENVIAR COMO STRING, NO COMO OBJETO DATE
         diaPagoPersonalizado: formData.frecuencia === 'mensual' && formData.diaPagoPersonalizado ? 
           parseInt(formData.diaPagoPersonalizado) : null,
         diaSemana: formData.frecuencia === 'semanal' ? formData.diaSemana : null,

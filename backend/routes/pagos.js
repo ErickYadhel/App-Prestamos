@@ -9,7 +9,7 @@ const { notificarPagoRegistrado, notificarPrestamoCompletado } = require('../ser
 const db = admin.firestore();
 
 // ============================================
-// FUNCIÓN PARA NORMALIZAR FECHA LOCAL (AGREGADA - NUEVA)
+// FUNCIÓN PARA NORMALIZAR FECHA LOCAL (MANTENER DÍA CORRECTO)
 // ============================================
 function normalizarFechaLocal(fecha) {
   if (!fecha) return new Date();
@@ -44,42 +44,63 @@ function normalizarFechaLocal(fecha) {
 }
 
 // ============================================
-// FUNCIÓN PARA GENERAR ID PERSONALIZADO DEL PAGO
+// FUNCIÓN PARA CONVERTIR FECHA A STRING LOCAL YYYY-MM-DD
+// (EVITA EL PROBLEMA DE UTC EN FIRESTORE)
 // ============================================
-const generarIdPago = (clienteNombre, fechaPago) => {
-  if (!clienteNombre || !fechaPago) {
-    return null;
+function fechaToLocalString(fecha) {
+  if (!fecha) return null;
+  
+  let dateObj;
+  if (fecha instanceof Date) {
+    dateObj = fecha;
+  } else if (typeof fecha === 'string') {
+    // Si ya está en formato YYYY-MM-DD, validar y devolver
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+      return fecha;
+    }
+    dateObj = new Date(fecha);
+  } else if (fecha.toDate) {
+    dateObj = fecha.toDate();
+  } else {
+    dateObj = new Date(fecha);
   }
   
-  // Limpiar el nombre del cliente (eliminar acentos, espacios, caracteres especiales)
+  if (isNaN(dateObj.getTime())) {
+    const hoy = new Date();
+    const y = hoy.getFullYear();
+    const m = String(hoy.getMonth() + 1).padStart(2, '0');
+    const d = String(hoy.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}`;
+}
+
+// ============================================
+// FUNCIÓN PARA GENERAR ID PERSONALIZADO DEL PAGO
+// ============================================
+const generarIdPago = (clienteNombre, fechaPagoStr) => {
+  if (!clienteNombre || !fechaPagoStr) return null;
+  
   const nombreLimpio = clienteNombre
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // Eliminar acentos
-    .replace(/[^a-zA-Z0-9\s]/g, '') // Eliminar caracteres especiales
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9\s]/g, '')
     .trim()
     .replace(/\s+/g, ' ');
   
-  // Convertir a PascalCase (JuanPerez)
   const nombrePascalCase = nombreLimpio
     .split(' ')
     .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase())
     .join('');
   
-  // Formatear fecha: DD-M-YY (ej: 18-4-26)
-  let fecha;
-  if (fechaPago instanceof Date) {
-    fecha = fechaPago;
-  } else if (fechaPago?.toDate) {
-    fecha = fechaPago.toDate();
-  } else {
-    fecha = new Date(fechaPago);
-  }
-  
-  const dia = fecha.getDate();
-  const mes = fecha.getMonth() + 1;
-  const anio = fecha.getFullYear().toString().slice(-2);
-  
-  const fechaFormateada = `${dia}-${mes}-${anio}`;
+  // fechaPagoStr está en YYYY-MM-DD
+  const [year, month, day] = fechaPagoStr.split('-');
+  const fechaFormateada = `${parseInt(day)}-${parseInt(month)}-${year.slice(-2)}`;
   
   return `${nombrePascalCase}-${fechaFormateada}`;
 };
@@ -87,11 +108,10 @@ const generarIdPago = (clienteNombre, fechaPago) => {
 // ============================================
 // FUNCIÓN PARA GENERAR ID ÚNICO DE PAGO (con contador si colisión)
 // ============================================
-const generarIdPagoUnico = async (clienteNombre, fechaPago, contador = 0) => {
-  let idBase = generarIdPago(clienteNombre, fechaPago);
+const generarIdPagoUnico = async (clienteNombre, fechaPagoStr, contador = 0) => {
+  let idBase = generarIdPago(clienteNombre, fechaPagoStr);
   
   if (!idBase) {
-    // Fallback a timestamp si no hay nombre
     return `pago-${Date.now()}`;
   }
   
@@ -99,13 +119,11 @@ const generarIdPagoUnico = async (clienteNombre, fechaPago, contador = 0) => {
     idBase = `${idBase}-${contador}`;
   }
   
-  // Verificar si ya existe un pago con ese ID
   const pagoRef = db.collection('pagos').doc(idBase);
   const pagoSnap = await pagoRef.get();
   
   if (pagoSnap.exists) {
-    // Si existe, intentar con contador +1
-    return generarIdPagoUnico(clienteNombre, fechaPago, contador + 1);
+    return generarIdPagoUnico(clienteNombre, fechaPagoStr, contador + 1);
   }
   
   return idBase;
@@ -197,9 +215,9 @@ async function obtenerGaranteById(garanteID) {
 }
 
 // ============================================
-// FUNCIÓN PARA CREAR COMISIÓN AUTOMÁTICA (ACTUALIZADA)
+// FUNCIÓN PARA CREAR COMISIÓN AUTOMÁTICA
 // ============================================
-async function crearComisionAutomatica(prestamo, pagoId, interesPagado, fechaPago) {
+async function crearComisionAutomatica(prestamo, pagoId, interesPagado, fechaPagoStr) {
   try {
     if (!prestamo.generarComision || !prestamo.garanteID || interesPagado <= 0) {
       console.log('⚠️ No se genera comisión:', {
@@ -224,12 +242,10 @@ async function crearComisionAutomatica(prestamo, pagoId, interesPagado, fechaPag
     console.log('  - Porcentaje comisión:', porcentajeComision);
     console.log('  - Monto comisión:', montoComision);
     
-    // 🔥 NUEVO ID: Cliente-Garante-Fecha (formato legible)
-    const idPersonalizado = Comision.generarIdPersonalizado(
-      prestamo.clienteNombre,
-      garanteNombre,
-      fechaPago
-    );
+    // Usar fechaPagoStr para generar ID legible
+    const idPersonalizado = Comision.generarIdPersonalizado
+      ? Comision.generarIdPersonalizado(prestamo.clienteNombre, garanteNombre, new Date(fechaPagoStr))
+      : `comision-${Date.now()}`;
     
     const comisionData = {
       id: idPersonalizado,
@@ -243,13 +259,13 @@ async function crearComisionAutomatica(prestamo, pagoId, interesPagado, fechaPag
       montoBase: interesPagado,
       porcentaje: porcentajeComision,
       montoComision: montoComision,
-      fechaPago: fechaPago,
+      fechaPago: fechaPagoStr,
       fechaGeneracion: new Date(),
       estado: 'pagada',
       fechaPagoGarante: new Date(),
       pagadoPor: 'sistema',
       descripcion: `Comisión automática por pago de interés del préstamo ${prestamo.id} - Cliente: ${prestamo.clienteNombre}`,
-      periodo: Comision.prototype._calcularPeriodo(fechaPago),
+      periodo: Comision.prototype?._calcularPeriodo ? Comision.prototype._calcularPeriodo(new Date(fechaPagoStr)) : new Date().toISOString().slice(0, 7),
       creadoPor: 'sistema',
       createdAt: new Date(),
       updatedAt: new Date()
@@ -268,7 +284,7 @@ async function crearComisionAutomatica(prestamo, pagoId, interesPagado, fechaPag
 }
 
 // ============================================
-// POST /api/pagos - Registrar un pago (CORREGIDO - SOLO LA FECHA)
+// POST /api/pagos - Registrar un pago (CORREGIDO - FECHA COMO STRING)
 // ============================================
 router.post('/', async (req, res) => {
   try {
@@ -332,6 +348,10 @@ router.post('/', async (req, res) => {
     
     console.log('✅ Fecha pago normalizada:', fechaPagoDate.toLocaleDateString());
     
+    // 🔥 CONVERTIR A STRING para guardar en Firestore (evita problema UTC)
+    const fechaPagoString = fechaToLocalString(fechaPagoDate);
+    console.log('📅 Fecha pago como string (se guardará así):', fechaPagoString);
+    
     let distribucion;
     let pagoData;
 
@@ -363,7 +383,7 @@ router.post('/', async (req, res) => {
         prestamoID,
         clienteID: prestamo.clienteID,
         clienteNombre: prestamo.clienteNombre,
-        fechaPago: fechaPagoDate,
+        fechaPago: fechaPagoString,
         montoCapital: distribucion.capital,
         montoInteres: distribucion.interes,
         montoMora: distribucion.mora,
@@ -385,7 +405,7 @@ router.post('/', async (req, res) => {
         prestamoID,
         clienteID: prestamo.clienteID,
         clienteNombre: prestamo.clienteNombre,
-        fechaPago: fechaPagoDate,
+        fechaPago: fechaPagoString,
         montoCapital: distribucion.capital,
         montoInteres: distribucion.interes,
         montoMora: distribucion.mora || 0,
@@ -422,13 +442,33 @@ router.post('/', async (req, res) => {
 
     const batch = db.batch();
     
-    // Generar ID personalizado para el pago
-    const idPersonalizado = await generarIdPagoUnico(prestamo.clienteNombre, fechaPagoDate);
+    // Generar ID personalizado para el pago (usando string)
+    const idPersonalizado = await generarIdPagoUnico(prestamo.clienteNombre, fechaPagoString);
     console.log(`📝 ID de pago generado: ${idPersonalizado}`);
     
+    // 🔥 CRÍTICO: Guardar fechaPago como STRING, no como Date
+    const pagoParaFirestore = {
+      prestamoID: pago.prestamoID,
+      clienteID: pago.clienteID,
+      clienteNombre: pago.clienteNombre,
+      fechaPago: fechaPagoString,  // ⭐ STRING YYYY-MM-DD
+      montoCapital: pago.montoCapital,
+      montoInteres: pago.montoInteres,
+      montoMora: pago.montoMora,
+      tipoPago: pago.tipoPago,
+      nota: pago.nota,
+      capitalAnterior: pago.capitalAnterior,
+      capitalNuevo: pago.capitalNuevo,
+      modoManual: pago.modoManual,
+      modoCalculo: pago.modoCalculo,
+      periodosPagados: pago.periodosPagados,
+      diasCubiertos: pago.diasCubiertos,
+      fechaRegistro: new Date(),  // Este sí puede ser Date (timestamp administrativo)
+      montoTotal: pago.montoTotal
+    };
+    
     const pagoRef = db.collection('pagos').doc(idPersonalizado);
-    pago.id = idPersonalizado;
-    batch.set(pagoRef, { ...pago });
+    batch.set(pagoRef, pagoParaFirestore);
 
     const prestamoRef = db.collection('prestamos').doc(prestamoID);
     batch.update(prestamoRef, {
@@ -447,9 +487,9 @@ router.post('/', async (req, res) => {
     if (distribucion.interes > 0 && prestamo.generarComision && prestamo.garanteID) {
       comisionCreada = await crearComisionAutomatica(
         prestamo, 
-        pagoRef.id, 
+        idPersonalizado, 
         distribucion.interes, 
-        fechaPagoDate
+        fechaPagoString
       );
     }
 
@@ -457,14 +497,10 @@ router.post('/', async (req, res) => {
       await crearNotificacionResto(prestamo, distribucion.restoInteres);
     }
 
-    // ============================================
-    // 🔥 NUEVAS NOTIFICACIONES
-    // ============================================
-    // Notificar pago registrado
+    // Notificaciones
     const clienteData = { id: prestamo.clienteID, nombre: prestamo.clienteNombre };
     await notificarPagoRegistrado(pagoData, prestamo, clienteData);
 
-    // Si el préstamo se completó, notificar
     if (prestamo.capitalRestante <= 0) {
       await notificarPrestamoCompletado(prestamo, clienteData);
       await crearNotificacionCompletado(prestamo);
@@ -476,7 +512,7 @@ router.post('/', async (req, res) => {
     res.status(201).json({
       success: true,
       data: {
-        pago: { id: idPersonalizado, ...pago },
+        pago: { id: idPersonalizado, ...pagoParaFirestore },
         prestamoActualizado: {
           id: prestamo.id,
           capitalRestante: prestamo.capitalRestante,
@@ -543,7 +579,13 @@ router.get('/prestamo/:prestamoID', async (req, res) => {
         if (pagoData.fechaPago) {
           try {
             let fechaDate;
-            if (typeof pagoData.fechaPago === 'object') {
+            // Soporte para string YYYY-MM-DD
+            if (typeof pagoData.fechaPago === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(pagoData.fechaPago)) {
+              const [y, m, d] = pagoData.fechaPago.split('-');
+              fechaDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+              fechaPagoFormatted = fechaDate.toLocaleDateString('es-DO');
+              fechaPagoISO = `${y}-${m}-${d}T00:00:00.000Z`;
+            } else if (typeof pagoData.fechaPago === 'object') {
               if (pagoData.fechaPago.toDate && typeof pagoData.fechaPago.toDate === 'function') {
                 fechaDate = pagoData.fechaPago.toDate();
               } else if (pagoData.fechaPago._seconds !== undefined) {
@@ -553,15 +595,16 @@ router.get('/prestamo/:prestamoID', async (req, res) => {
               } else {
                 fechaDate = new Date(pagoData.fechaPago);
               }
+              if (!isNaN(fechaDate.getTime())) {
+                fechaPagoFormatted = fechaDate.toLocaleDateString('es-DO');
+                fechaPagoISO = fechaDate.toISOString();
+              }
             } else if (typeof pagoData.fechaPago === 'string') {
               fechaDate = new Date(pagoData.fechaPago);
-            } else {
-              fechaDate = new Date(pagoData.fechaPago);
-            }
-            
-            if (!isNaN(fechaDate.getTime())) {
-              fechaPagoFormatted = fechaDate.toLocaleDateString('es-DO');
-              fechaPagoISO = fechaDate.toISOString();
+              if (!isNaN(fechaDate.getTime())) {
+                fechaPagoFormatted = fechaDate.toLocaleDateString('es-DO');
+                fechaPagoISO = fechaDate.toISOString();
+              }
             }
           } catch (e) {
             console.error(`Error formateando fecha para pago ${doc.id}:`, e);
@@ -669,11 +712,25 @@ router.get('/', async (req, res) => {
 
     pagosSnapshot.forEach(doc => {
       const pagoData = doc.data();
+      
+      let fechaPagoFormatted = 'N/A';
+      if (pagoData.fechaPago) {
+        if (typeof pagoData.fechaPago === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(pagoData.fechaPago)) {
+          const [y, m, d] = pagoData.fechaPago.split('-');
+          const fechaDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+          fechaPagoFormatted = fechaDate.toLocaleDateString('es-DO');
+        } else if (pagoData.fechaPago?.toDate) {
+          fechaPagoFormatted = pagoData.fechaPago.toDate().toLocaleDateString('es-DO');
+        } else if (pagoData.fechaPago instanceof Date) {
+          fechaPagoFormatted = pagoData.fechaPago.toLocaleDateString('es-DO');
+        }
+      }
+      
       const pagoConFormato = { 
         id: doc.id, 
         ...pagoData,
-        fechaPagoFormatted: pagoData.fechaPago?.toDate?.().toLocaleDateString('es-DO') || 'N/A',
-        fechaPagoISO: pagoData.fechaPago?.toDate?.().toISOString() || null
+        fechaPagoFormatted,
+        fechaPagoISO: typeof pagoData.fechaPago === 'string' ? `${pagoData.fechaPago}T00:00:00.000Z` : pagoData.fechaPago?.toDate?.().toISOString() || null
       };
       
       pagos.push(pagoConFormato);
@@ -740,14 +797,25 @@ router.get('/:id', async (req, res) => {
         resumenDeuda: prestamoObj.obtenerResumenDeuda()
       };
     }
+    
+    let fechaPagoFormatted = 'N/A';
+    if (pagoData.fechaPago) {
+      if (typeof pagoData.fechaPago === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(pagoData.fechaPago)) {
+        const [y, m, d] = pagoData.fechaPago.split('-');
+        const fechaDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+        fechaPagoFormatted = fechaDate.toLocaleDateString('es-DO');
+      } else if (pagoData.fechaPago?.toDate) {
+        fechaPagoFormatted = pagoData.fechaPago.toDate().toLocaleDateString('es-DO');
+      }
+    }
 
     res.json({
       success: true,
       data: {
         ...pagoData,
         prestamo: prestamo,
-        fechaPagoFormatted: pagoData.fechaPago?.toDate?.().toLocaleDateString('es-DO') || 'N/A',
-        fechaPagoISO: pagoData.fechaPago?.toDate?.().toISOString() || null
+        fechaPagoFormatted,
+        fechaPagoISO: typeof pagoData.fechaPago === 'string' ? `${pagoData.fechaPago}T00:00:00.000Z` : pagoData.fechaPago?.toDate?.().toISOString() || null
       }
     });
   } catch (error) {
@@ -877,7 +945,7 @@ router.get('/resumen/:clienteID', async (req, res) => {
         resumen.pagosPorTipo[pago.tipoPago]++;
       }
       
-      if (!resumen.ultimoPago || new Date(pago.fechaPago) > new Date(resumen.ultimoPago)) {
+      if (!resumen.ultimoPago || (typeof pago.fechaPago === 'string' ? pago.fechaPago > resumen.ultimoPago : new Date(pago.fechaPago) > new Date(resumen.ultimoPago))) {
         resumen.ultimoPago = pago.fechaPago;
       }
     });

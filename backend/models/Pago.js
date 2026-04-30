@@ -4,7 +4,7 @@ class Pago {
     prestamoID,
     clienteID,
     clienteNombre,
-    fechaPago = new Date(),
+    fechaPago = null,
     montoCapital = 0,
     montoInteres = 0,
     montoMora = 0,
@@ -21,7 +21,10 @@ class Pago {
     this.prestamoID = prestamoID;
     this.clienteID = clienteID;
     this.clienteNombre = clienteNombre;
-    this.fechaPago = fechaPago;
+    
+    // 🔥 CORREGIDO: Normalizar fecha a string YYYY-MM-DD
+    this.fechaPago = this._normalizarFecha(fechaPago);
+    
     this.montoCapital = parseFloat(montoCapital) || 0;
     this.montoInteres = parseFloat(montoInteres) || 0;
     this.montoMora = parseFloat(montoMora) || 0;
@@ -34,6 +37,51 @@ class Pago {
     this.periodosPagados = periodosPagados;
     this.diasCubiertos = diasCubiertos;
     this.fechaRegistro = new Date();
+  }
+
+  // 🔥 NUEVO: Método para normalizar fecha a string local
+  _normalizarFecha(fecha) {
+    if (!fecha) {
+      const hoy = new Date();
+      const year = hoy.getFullYear();
+      const month = String(hoy.getMonth() + 1).padStart(2, '0');
+      const day = String(hoy.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    
+    // Si ya es string YYYY-MM-DD, devolverlo
+    if (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+      return fecha;
+    }
+    
+    let dateObj;
+    if (fecha instanceof Date) {
+      dateObj = fecha;
+    } else if (fecha.toDate) {
+      dateObj = fecha.toDate();
+    } else if (typeof fecha === 'string') {
+      dateObj = new Date(fecha);
+    } else if (fecha._seconds !== undefined) {
+      dateObj = new Date(fecha._seconds * 1000);
+    } else if (fecha.seconds !== undefined) {
+      dateObj = new Date(fecha.seconds * 1000);
+    } else {
+      dateObj = new Date(fecha);
+    }
+    
+    if (isNaN(dateObj.getTime())) {
+      const hoy = new Date();
+      const year = hoy.getFullYear();
+      const month = String(hoy.getMonth() + 1).padStart(2, '0');
+      const day = String(hoy.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}`;
   }
 
   get montoTotal() {

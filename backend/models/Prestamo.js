@@ -75,7 +75,7 @@ class Prestamo {
       }
     }
     
-    // Si es string ISO
+    // Si es string (YYYY-MM-DD o ISO)
     if (typeof fecha === 'string') {
       // Intentar parsear como fecha local primero (YYYY-MM-DD)
       const parts = fecha.split('T')[0].split('-');
@@ -171,12 +171,15 @@ class Prestamo {
         
         console.log(`  Fecha de próximo pago actual: ${fechaActualQuincenal.toLocaleDateString()}, Día: ${diaActualQuincenal}`);
         
+        // Si el día actual es 15, siguiente es 30 del mismo mes
         if (diaActualQuincenal === 15) {
           const ultimoDia = new Date(añoActualQuincenal, mesActualQuincenal + 1, 0).getDate();
           const nuevaFecha = new Date(añoActualQuincenal, mesActualQuincenal, ultimoDia);
           console.log(`  → Quincenal: de 15 a ${ultimoDia} del mismo mes (${nuevaFecha.toLocaleDateString()})`);
           return nuevaFecha;
-        } else {
+        } 
+        // Si el día actual es 30 (o cualquier otro día), siguiente es 15 del próximo mes
+        else {
           let mesSiguiente = mesActualQuincenal + 1;
           let añoSiguiente = añoActualQuincenal;
           if (mesSiguiente > 11) {

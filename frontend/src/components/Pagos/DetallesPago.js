@@ -62,8 +62,8 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
                 color="text-gray-600"
               />
               <InfoRow 
-                label="Fecha y Hora" 
-                value={`${firebaseTimestampToLocalString(pago.fechaPago)} ${pago.fechaPago ? new Date(pago.fechaPago).toLocaleTimeString() : ''}`}
+                label="Fecha" 
+                value={firebaseTimestampToLocalString(pago.fechaPago)}
                 icon={CalendarIcon}
                 color="text-gray-600"
               />

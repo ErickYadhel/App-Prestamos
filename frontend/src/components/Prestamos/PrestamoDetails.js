@@ -45,6 +45,13 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
   const prestamoNormalizado = normalizeFirebaseData(prestamo);
   const configMora = getConfiguracionMora();
 
+  // 🔥 FUNCIÓN PARA FORMATEAR FECHA CORRECTAMENTE (sin desplazamiento UTC)
+  const formatearFechaLocal = (fecha) => {
+    if (!fecha) return 'No disponible';
+    // Usar firebaseTimestampToLocalString que maneja strings YYYY-MM-DD correctamente
+    return firebaseTimestampToLocalString(fecha);
+  };
+
   useEffect(() => {
     if (prestamoNormalizado.id) {
       setPrestamoActual(prestamoNormalizado);
@@ -213,7 +220,8 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
 
   const formatPagoFecha = (fechaPago) => {
     if (!fechaPago) return 'Fecha no disponible';
-    return formatFecha(fechaPago, true);
+    // 🔥 CORREGIDO: Usar firebaseTimestampToLocalString en lugar de formatFecha
+    return firebaseTimestampToLocalString(fechaPago);
   };
 
   if (!prestamoActual && prestamoNormalizado) {
@@ -363,7 +371,7 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
                           ? 'bg-gray-700 text-blue-400 border-gray-600' 
                           : 'bg-white text-blue-600 border-blue-200'
                       }`}>
-                        {formatFecha(fecha)}
+                        {formatearFechaLocal(fecha)}
                       </span>
                     ))}
                   </div>
@@ -496,20 +504,20 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
                 <div className="flex justify-between text-sm">
                   <span className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Fecha préstamo:</span>
                   <span className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                    {prestamoData.fechaPrestamo ? formatFecha(prestamoData.fechaPrestamo) : 'No disponible'}
+                    {formatearFechaLocal(prestamoData.fechaPrestamo)}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Próximo pago:</span>
                   <span className={`font-medium ${informacionMora?.tieneMora ? 'text-red-600 dark:text-red-400' : theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                    {prestamoData.fechaProximoPago ? formatFecha(prestamoData.fechaProximoPago) : 'Por definir'}
+                    {formatearFechaLocal(prestamoData.fechaProximoPago)}
                   </span>
                 </div>
                 {prestamoData.fechaUltimoPago && (
                   <div className="flex justify-between text-sm">
                     <span className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Último pago:</span>
                     <span className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      {formatFecha(prestamoData.fechaUltimoPago)}
+                      {formatearFechaLocal(prestamoData.fechaUltimoPago)}
                     </span>
                   </div>
                 )}
@@ -523,7 +531,7 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
             </div>
           </div>
 
-          {/* Información de Comisión - NUEVO BLOQUE */}
+          {/* Información de Comisión */}
           {prestamoData.generarComision && (
             <div className={`shadow rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
               <div className={`px-6 py-4 border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>

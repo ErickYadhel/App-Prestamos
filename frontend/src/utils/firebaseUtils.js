@@ -1,8 +1,8 @@
 // Utilidades para manejar datos de Firebase
 
 /**
- * Convierte un Timestamp de Firebase a Date de JavaScript
- * @param {Object} timestamp - Timestamp de Firebase
+ * Convierte un Timestamp de Firebase o string YYYY-MM-DD a Date de JavaScript
+ * @param {Object|string} timestamp - Timestamp de Firebase o string YYYY-MM-DD
  * @returns {Date} Fecha de JavaScript
  */
 export const firebaseTimestampToDate = (timestamp) => {
@@ -11,8 +11,19 @@ export const firebaseTimestampToDate = (timestamp) => {
   // Si ya es una fecha, retornarla
   if (timestamp instanceof Date) return timestamp;
   
-  // Si es un string de fecha, convertir a Date
-  if (typeof timestamp === 'string') return new Date(timestamp);
+  // 🔥 NUEVO: Si es string en formato YYYY-MM-DD, crear fecha LOCAL
+  if (typeof timestamp === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(timestamp)) {
+    const [year, month, day] = timestamp.split('-');
+    // Crear fecha en zona horaria local (no UTC)
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  }
+  
+  // Si es un string de fecha ISO, convertir a Date
+  if (typeof timestamp === 'string') {
+    const date = new Date(timestamp);
+    if (!isNaN(date.getTime())) return date;
+    return null;
+  }
   
   // Si es un objeto con _seconds (Firebase Admin)
   if (timestamp._seconds !== undefined) {
@@ -39,9 +50,25 @@ export const firebaseTimestampToDate = (timestamp) => {
 };
 
 /**
+ * 🔥 NUEVA: Convierte una fecha directamente a string YYYY-MM-DD sin zona horaria
+ * @param {Date|string|Object} fecha - Fecha a formatear
+ * @returns {string} Fecha en formato YYYY-MM-DD
+ */
+export const toLocalDateString = (fecha) => {
+  const date = firebaseTimestampToDate(fecha);
+  if (!date) return '';
+  
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}`;
+};
+
+/**
  * Convierte un Timestamp de Firebase a string de fecha local
- * @param {Object} timestamp - Timestamp de Firebase
- * @returns {string} Fecha en formato local
+ * @param {Object|string} timestamp - Timestamp de Firebase o string YYYY-MM-DD
+ * @returns {string} Fecha en formato local DD/MM/YYYY
  */
 export const firebaseTimestampToLocalString = (timestamp) => {
   const date = firebaseTimestampToDate(timestamp);
@@ -56,7 +83,7 @@ export const firebaseTimestampToLocalString = (timestamp) => {
 
 /**
  * Convierte un Timestamp de Firebase a string de fecha y hora local
- * @param {Object} timestamp - Timestamp de Firebase
+ * @param {Object|string} timestamp - Timestamp de Firebase o string YYYY-MM-DD
  * @returns {string} Fecha y hora en formato local
  */
 export const firebaseTimestampToLocalDateTimeString = (timestamp) => {
@@ -73,15 +100,12 @@ export const firebaseTimestampToLocalDateTimeString = (timestamp) => {
 };
 
 /**
- * Convierte un Timestamp de Firebase a string ISO para inputs date
- * @param {Object} timestamp - Timestamp de Firebase
+ * Convierte una fecha a string para inputs date
+ * @param {Date|string|Object} fecha - Fecha a convertir
  * @returns {string} Fecha en formato YYYY-MM-DD
  */
-export const firebaseTimestampToInputDate = (timestamp) => {
-  const date = firebaseTimestampToDate(timestamp);
-  if (!date) return '';
-  
-  return date.toISOString().split('T')[0];
+export const firebaseTimestampToInputDate = (fecha) => {
+  return toLocalDateString(fecha);
 };
 
 /**
@@ -113,6 +137,7 @@ export const formatFecha = (fecha, includeTime = false) => {
 
 /**
  * Normaliza un objeto completo de Firebase convirtiendo todos los Timestamps
+ * 🔥 MODIFICADO: Mantiene strings YYYY-MM-DD como strings, no los convierte a Date
  * @param {Object} obj - Objeto de Firebase
  * @returns {Object} Objeto normalizado
  */
@@ -129,9 +154,14 @@ export const normalizeFirebaseData = (obj) => {
   Object.keys(normalized).forEach(key => {
     const value = normalized[key];
     
-    // Convertir Timestamps
-    if (value && typeof value === 'object') {
-      // Timestamp con _seconds
+    // 🔥 NUEVO: Si es string YYYY-MM-DD, mantenerlo como string, NO convertir
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      // Mantener como string, NO convertir a Date
+      normalized[key] = value;
+    }
+    // Convertir Timestamps solo si son objetos timestamp
+    else if (value && typeof value === 'object') {
+      // Timestamp con _seconds (Firebase Admin)
       if (value._seconds !== undefined) {
         normalized[key] = firebaseTimestampToDate(value);
       }
@@ -154,7 +184,7 @@ export const normalizeFirebaseData = (obj) => {
 };
 
 /**
- * Prepara datos para enviar a Firebase (convierte fechas a ISO string)
+ * Prepara datos para enviar a Firebase (convierte fechas a string YYYY-MM-DD)
  * @param {Object} data - Datos a enviar
  * @returns {Object} Datos preparados
  */
@@ -166,9 +196,12 @@ export const prepareDataForFirebase = (data) => {
   Object.keys(prepared).forEach(key => {
     const value = prepared[key];
     
-    // Si es una fecha, convertir a ISO string
+    // Si es una fecha, convertir a YYYY-MM-DD string
     if (value instanceof Date) {
-      prepared[key] = value.toISOString();
+      const year = value.getFullYear();
+      const month = String(value.getMonth() + 1).padStart(2, '0');
+      const day = String(value.getDate()).padStart(2, '0');
+      prepared[key] = `${year}-${month}-${day}`;
     }
     // Si es un objeto, recursivo
     else if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -257,5 +290,6 @@ export default {
   compararFechas,
   esHoy,
   estaAtrasada,
-  diferenciaDias
+  diferenciaDias,
+  toLocalDateString
 };

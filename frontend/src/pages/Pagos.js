@@ -33,7 +33,7 @@ import api from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import RegistrarPagoModal from '../components/Pagos/RegistrarPagoModal';
 import DetallesPago from '../components/Pagos/DetallesPago';
-import { normalizeFirebaseData, firebaseTimestampToLocalString } from '../utils/firebaseUtils';
+import { normalizeFirebaseData, firebaseTimestampToLocalString, firebaseTimestampToDate } from '../utils/firebaseUtils';
 
 // ============================================
 // IMPORTACIONES PARA GRÁFICOS
@@ -376,8 +376,8 @@ const Pagos = () => {
     const tipos = { normal: 0, adelantado: 0, mora: 0, abono: 0 };
     
     pagosData.forEach(pago => {
-      const fecha = new Date(pago.fechaPago);
-      if (isNaN(fecha.getTime())) return;
+      const fecha = firebaseTimestampToDate(pago.fechaPago);
+      if (!fecha || isNaN(fecha.getTime())) return;
       
       const mesKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
       const mesLabel = fecha.toLocaleDateString('es-DO', { year: 'numeric', month: 'short' });
@@ -432,8 +432,8 @@ const Pagos = () => {
       totalCapital += montoCapital;
       totalInteres += montoInteres;
 
-      const fechaPago = new Date(pago.fechaPago);
-      if (fechaPago >= inicioMes) {
+      const fechaPago = firebaseTimestampToDate(pago.fechaPago);
+      if (fechaPago && fechaPago >= inicioMes) {
         pagosMes += montoTotal;
         const cliente = pago.clienteNombre;
         if (!interesPorCliente[cliente]) interesPorCliente[cliente] = 0;
@@ -462,8 +462,8 @@ const Pagos = () => {
     setTotalGeneralRecaudado(totalRecaudado + totalComisiones);
 
     const pagosHoy = pagosData.filter(pago => {
-      const fechaPago = pago.fechaPago instanceof Date ? pago.fechaPago : new Date(pago.fechaPago);
-      return fechaPago.toDateString() === hoy.toDateString();
+      const fechaPago = firebaseTimestampToDate(pago.fechaPago);
+      return fechaPago && fechaPago.toDateString() === hoy.toDateString();
     }).length;
 
     setStats({
@@ -503,7 +503,7 @@ const Pagos = () => {
           prestamoID: '1',
           clienteID: '1',
           clienteNombre: 'Juan Pérez',
-          fechaPago: new Date('2024-02-01T10:30:00'),
+          fechaPago: '2024-02-01',
           montoCapital: 500,
           montoInteres: 1000,
           tipoPago: 'normal',
@@ -517,7 +517,7 @@ const Pagos = () => {
           prestamoID: '1',
           clienteID: '1',
           clienteNombre: 'Juan Pérez',
-          fechaPago: new Date('2024-02-15T09:15:00'),
+          fechaPago: '2024-02-15',
           montoCapital: 600,
           montoInteres: 900,
           tipoPago: 'normal',
@@ -531,7 +531,7 @@ const Pagos = () => {
           prestamoID: '2',
           clienteID: '2',
           clienteNombre: 'María Rodríguez',
-          fechaPago: new Date('2024-02-05T14:20:00'),
+          fechaPago: '2024-02-05',
           montoCapital: 800,
           montoInteres: 600,
           tipoPago: 'normal',
@@ -545,7 +545,7 @@ const Pagos = () => {
           prestamoID: '1',
           clienteID: '1',
           clienteNombre: 'Juan Pérez',
-          fechaPago: new Date('2024-03-01T11:00:00'),
+          fechaPago: '2024-03-01',
           montoCapital: 700,
           montoInteres: 800,
           tipoPago: 'adelantado',
@@ -559,7 +559,7 @@ const Pagos = () => {
           prestamoID: '3',
           clienteID: '3',
           clienteNombre: 'Carlos López',
-          fechaPago: new Date('2024-02-28T16:45:00'),
+          fechaPago: '2024-02-28',
           montoCapital: 1200,
           montoInteres: 500,
           tipoPago: 'mora',
@@ -643,22 +643,22 @@ const Pagos = () => {
     
     let matchFecha = true;
     if (filtros.rangoFecha !== 'todos') {
-      const fechaPago = pago.fechaPago instanceof Date ? pago.fechaPago : new Date(pago.fechaPago);
+      const fechaPago = firebaseTimestampToDate(pago.fechaPago);
       const hoy = new Date();
       
       if (filtros.rangoFecha === 'hoy') {
-        matchFecha = fechaPago.toDateString() === hoy.toDateString();
+        matchFecha = fechaPago && fechaPago.toDateString() === hoy.toDateString();
       } else if (filtros.rangoFecha === 'semana') {
         const inicioSemana = new Date(hoy);
         inicioSemana.setDate(hoy.getDate() - 7);
-        matchFecha = fechaPago >= inicioSemana;
+        matchFecha = fechaPago && fechaPago >= inicioSemana;
       } else if (filtros.rangoFecha === 'mes') {
         const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-        matchFecha = fechaPago >= inicioMes;
+        matchFecha = fechaPago && fechaPago >= inicioMes;
       } else if (filtros.rangoFecha === 'trimestre') {
         const inicioTrimestre = new Date(hoy);
         inicioTrimestre.setMonth(hoy.getMonth() - 3);
-        matchFecha = fechaPago >= inicioTrimestre;
+        matchFecha = fechaPago && fechaPago >= inicioTrimestre;
       }
     }
 
@@ -1237,9 +1237,6 @@ const Pagos = () => {
                         <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
                           {firebaseTimestampToLocalString(pago.fechaPago)}
                         </div>
-                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>
-                          {pago.fechaPago && new Date(pago.fechaPago).toLocaleTimeString()}
-                        </div>
                       </td>
                       <td className="px-6 py-4">
                         {getTipoPagoBadge(pago.tipoPago)}
@@ -1319,7 +1316,7 @@ const Pagos = () => {
                     </p>
                   </div>
                   <div className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
-                    {new Date(com.fechaPago).toLocaleDateString('es-DO')}
+                    {firebaseTimestampToLocalString(com.fechaPago)}
                   </div>
                 </div>
               ))}

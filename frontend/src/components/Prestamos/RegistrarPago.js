@@ -22,7 +22,7 @@ import {
   getConfiguracionMora,
   calcularDiasTranscurridos
 } from '../../utils/loanCalculations';
-import { formatFecha } from '../../utils/firebaseUtils';
+import { formatFecha, toLocalDateString, toInputDateString } from '../../utils/firebaseUtils';
 
 // ============================================
 // FUNCIÓN PARA FORMATEAR MONTO (mejorada)
@@ -321,7 +321,7 @@ const ConfirmacionPagoModal = ({ isOpen, onClose, pagoData, prestamo }) => {
                   <div className="flex justify-between mt-1">
                     <span className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Fecha:</span>
                     <span className={`text-xs ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                      {new Date(pagoData.fechaPago).toLocaleDateString()}
+                      {pagoData.fechaPago}
                     </span>
                   </div>
                 )}
@@ -435,10 +435,41 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
   // Calcular atraso y mora
   useEffect(() => {
     if (prestamo && formData.fechaPago) {
-      const fechaPagoSeleccionada = new Date(formData.fechaPago);
-      const fechaEsperada = prestamo.fechaProximoPago 
-        ? new Date(prestamo.fechaProximoPago) 
-        : new Date(prestamo.fechaPrestamo);
+      // 🔥 Convertir fecha de input (YYYY-MM-DD) a Date local
+      const fechaPagoSeleccionada = (() => {
+        const [year, month, day] = formData.fechaPago.split('-');
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      })();
+      
+      // 🔥 Convertir fecha esperada (puede ser DD-MM-YYYY o Date)
+      const fechaEsperada = (() => {
+        if (prestamo.fechaProximoPago) {
+          if (typeof prestamo.fechaProximoPago === 'string' && prestamo.fechaProximoPago.includes('-')) {
+            const parts = prestamo.fechaProximoPago.split('-');
+            if (parts[0].length === 4) {
+              // YYYY-MM-DD
+              const [y, m, d] = parts;
+              return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+            } else {
+              // DD-MM-YYYY
+              const [d, m, y] = parts;
+              return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+            }
+          }
+          return new Date(prestamo.fechaProximoPago);
+        }
+        if (typeof prestamo.fechaPrestamo === 'string' && prestamo.fechaPrestamo.includes('-')) {
+          const parts = prestamo.fechaPrestamo.split('-');
+          if (parts[0].length === 4) {
+            const [y, m, d] = parts;
+            return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+          } else {
+            const [d, m, y] = parts;
+            return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+          }
+        }
+        return new Date(prestamo.fechaPrestamo);
+      })();
       
       const diasAtraso = calcularDiasTranscurridos(fechaEsperada, fechaPagoSeleccionada);
       
@@ -582,7 +613,7 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
   };
 
   // ============================================
-  // HANDLE SUBMIT CORREGIDO - ENVIAR FECHA COMO STRING
+  // 🔥 HANDLE SUBMIT CORREGIDO - Enviar fecha como DD-MM-YYYY
   // ============================================
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -593,19 +624,24 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
     setErrors({});
 
     try {
-      // 🔧 CORREGIDO: Enviar fecha como string YYYY-MM-DD (sin convertir a objeto Date)
+      // 🔥 Convertir fecha de YYYY-MM-DD a DD-MM-YYYY
       let fechaPagoStr = formData.fechaPago;
-      
-      if (!fechaPagoStr) {
+      if (fechaPagoStr && fechaPagoStr.includes('-')) {
+        const [year, month, day] = fechaPagoStr.split('-');
+        fechaPagoStr = `${day}-${month}-${year}`;
+      } else if (!fechaPagoStr) {
         const hoy = new Date();
-        fechaPagoStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+        const day = String(hoy.getDate()).padStart(2, '0');
+        const month = String(hoy.getMonth() + 1).padStart(2, '0');
+        const year = hoy.getFullYear();
+        fechaPagoStr = `${day}-${month}-${year}`;
       }
       
-      console.log('📅 Fecha pago seleccionada (string):', fechaPagoStr);
+      console.log('📅 Fecha pago seleccionada (DD-MM-YYYY):', fechaPagoStr);
       
       let datosPago = {
         prestamoID: prestamo.id,
-        fechaPago: fechaPagoStr, // Enviar como string YYYY-MM-DD
+        fechaPago: fechaPagoStr, // Enviar como DD-MM-YYYY
         nota: formData.nota,
         tipoPago: formData.tipoPago,
         modoCalculo: formData.modoCalculo,
@@ -822,7 +858,6 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
                       </p>
                     </div>
                     
-                    {/* 👇 Mostrar cómo se dividirá el pago en modo automático */}
                     {formData.montoTotal > 0 && calculosAvanzados.distribucion && (
                       <div className={`mt-4 p-3 rounded-lg ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-blue-50'} border border-blue-200 dark:border-blue-800`}>
                         <p className={`text-xs font-medium mb-2 flex items-center ${theme === 'dark' ? 'text-blue-300' : 'text-blue-700'}`}>

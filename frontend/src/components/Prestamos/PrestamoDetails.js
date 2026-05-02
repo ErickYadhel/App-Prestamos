@@ -22,7 +22,8 @@ import {
   firebaseTimestampToDate,
   normalizeFirebaseData,
   formatFecha,
-  firebaseTimestampToLocalDateTimeString
+  firebaseTimestampToLocalDateTimeString,
+  toLocalDateString
 } from '../../utils/firebaseUtils';
 import { 
   calcularPagosAtrasados,
@@ -45,10 +46,10 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
   const prestamoNormalizado = normalizeFirebaseData(prestamo);
   const configMora = getConfiguracionMora();
 
-  // 🔥 FUNCIÓN PARA FORMATEAR FECHA CORRECTAMENTE (sin desplazamiento UTC)
+  // 🔥 FUNCIÓN PARA FORMATEAR FECHA CORRECTAMENTE (soporta DD-MM-YYYY)
   const formatearFechaLocal = (fecha) => {
     if (!fecha) return 'No disponible';
-    // Usar firebaseTimestampToLocalString que maneja strings YYYY-MM-DD correctamente
+    // Usar firebaseTimestampToLocalString que maneja ambos formatos
     return firebaseTimestampToLocalString(fecha);
   };
 
@@ -89,8 +90,10 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
       const pagosNormalizados = pagosData.map(pago => normalizeFirebaseData(pago));
       
       pagosNormalizados.sort((a, b) => {
-        const fechaA = a.fechaPago ? new Date(a.fechaPago) : new Date(0);
-        const fechaB = b.fechaPago ? new Date(b.fechaPago) : new Date(0);
+        // 🔥 CORREGIDO: Usar firebaseTimestampToDate para comparar fechas
+        const fechaA = firebaseTimestampToDate(a.fechaPago);
+        const fechaB = firebaseTimestampToDate(b.fechaPago);
+        if (!fechaA || !fechaB) return 0;
         return fechaB - fechaA;
       });
       
@@ -131,8 +134,9 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
     if (!prestamoActual) return;
     
     const hoy = new Date();
+    // 🔥 CORREGIDO: Usar firebaseTimestampToDate para convertir fecha
     const fechaEsperada = prestamoActual.fechaProximoPago 
-      ? new Date(prestamoActual.fechaProximoPago) 
+      ? firebaseTimestampToDate(prestamoActual.fechaProximoPago)
       : null;
     
     if (fechaEsperada && fechaEsperada < hoy) {
@@ -220,7 +224,7 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
 
   const formatPagoFecha = (fechaPago) => {
     if (!fechaPago) return 'Fecha no disponible';
-    // 🔥 CORREGIDO: Usar firebaseTimestampToLocalString en lugar de formatFecha
+    // 🔥 Usar firebaseTimestampToLocalString que maneja DD-MM-YYYY
     return firebaseTimestampToLocalString(fechaPago);
   };
 

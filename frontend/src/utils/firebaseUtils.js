@@ -1,8 +1,8 @@
 // Utilidades para manejar datos de Firebase
 
 /**
- * Convierte un Timestamp de Firebase o string YYYY-MM-DD a Date de JavaScript
- * @param {Object|string} timestamp - Timestamp de Firebase o string YYYY-MM-DD
+ * Convierte un Timestamp de Firebase o string DD-MM-YYYY a Date de JavaScript
+ * @param {Object|string} timestamp - Timestamp de Firebase o string DD-MM-YYYY
  * @returns {Date} Fecha de JavaScript
  */
 export const firebaseTimestampToDate = (timestamp) => {
@@ -11,10 +11,16 @@ export const firebaseTimestampToDate = (timestamp) => {
   // Si ya es una fecha, retornarla
   if (timestamp instanceof Date) return timestamp;
   
-  // 🔥 NUEVO: Si es string en formato YYYY-MM-DD, crear fecha LOCAL
+  // 🔥 NUEVO: Si es string en formato DD-MM-YYYY, crear fecha LOCAL
+  if (typeof timestamp === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(timestamp)) {
+    const [day, month, year] = timestamp.split('-');
+    // Crear fecha en zona horaria local (no UTC)
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  }
+  
+  // 🔥 Compatibilidad: Si es string en formato YYYY-MM-DD (datos antiguos)
   if (typeof timestamp === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(timestamp)) {
     const [year, month, day] = timestamp.split('-');
-    // Crear fecha en zona horaria local (no UTC)
     return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
   }
   
@@ -50,11 +56,27 @@ export const firebaseTimestampToDate = (timestamp) => {
 };
 
 /**
- * 🔥 NUEVA: Convierte una fecha directamente a string YYYY-MM-DD sin zona horaria
+ * 🔥 Convierte una fecha a string en formato DD-MM-YYYY (local)
  * @param {Date|string|Object} fecha - Fecha a formatear
- * @returns {string} Fecha en formato YYYY-MM-DD
+ * @returns {string} Fecha en formato DD-MM-YYYY
  */
 export const toLocalDateString = (fecha) => {
+  const date = firebaseTimestampToDate(fecha);
+  if (!date) return '';
+  
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  
+  return `${day}-${month}-${year}`;
+};
+
+/**
+ * 🔥 Convierte una fecha a string en formato YYYY-MM-DD para inputs date
+ * @param {Date|string|Object} fecha - Fecha a convertir
+ * @returns {string} Fecha en formato YYYY-MM-DD
+ */
+export const toInputDateString = (fecha) => {
   const date = firebaseTimestampToDate(fecha);
   if (!date) return '';
   
@@ -66,8 +88,8 @@ export const toLocalDateString = (fecha) => {
 };
 
 /**
- * Convierte un Timestamp de Firebase a string de fecha local
- * @param {Object|string} timestamp - Timestamp de Firebase o string YYYY-MM-DD
+ * Convierte un Timestamp de Firebase a string de fecha local DD/MM/YYYY
+ * @param {Object|string} timestamp - Timestamp de Firebase o string DD-MM-YYYY
  * @returns {string} Fecha en formato local DD/MM/YYYY
  */
 export const firebaseTimestampToLocalString = (timestamp) => {
@@ -83,7 +105,7 @@ export const firebaseTimestampToLocalString = (timestamp) => {
 
 /**
  * Convierte un Timestamp de Firebase a string de fecha y hora local
- * @param {Object|string} timestamp - Timestamp de Firebase o string YYYY-MM-DD
+ * @param {Object|string} timestamp - Timestamp de Firebase o string DD-MM-YYYY
  * @returns {string} Fecha y hora en formato local
  */
 export const firebaseTimestampToLocalDateTimeString = (timestamp) => {
@@ -100,12 +122,12 @@ export const firebaseTimestampToLocalDateTimeString = (timestamp) => {
 };
 
 /**
- * Convierte una fecha a string para inputs date
+ * Convierte una fecha a string para inputs date (formato YYYY-MM-DD)
  * @param {Date|string|Object} fecha - Fecha a convertir
  * @returns {string} Fecha en formato YYYY-MM-DD
  */
 export const firebaseTimestampToInputDate = (fecha) => {
-  return toLocalDateString(fecha);
+  return toInputDateString(fecha);
 };
 
 /**
@@ -137,7 +159,7 @@ export const formatFecha = (fecha, includeTime = false) => {
 
 /**
  * Normaliza un objeto completo de Firebase convirtiendo todos los Timestamps
- * 🔥 MODIFICADO: Mantiene strings YYYY-MM-DD como strings, no los convierte a Date
+ * 🔥 MODIFICADO: Mantiene strings DD-MM-YYYY como strings
  * @param {Object} obj - Objeto de Firebase
  * @returns {Object} Objeto normalizado
  */
@@ -154,8 +176,13 @@ export const normalizeFirebaseData = (obj) => {
   Object.keys(normalized).forEach(key => {
     const value = normalized[key];
     
-    // 🔥 NUEVO: Si es string YYYY-MM-DD, mantenerlo como string, NO convertir
-    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    // 🔥 NUEVO: Si es string DD-MM-YYYY, mantenerlo como string, NO convertir
+    if (typeof value === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(value)) {
+      // Mantener como string, NO convertir a Date
+      normalized[key] = value;
+    }
+    // 🔥 Compatibilidad: Si es string YYYY-MM-DD, mantenerlo como string
+    else if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
       // Mantener como string, NO convertir a Date
       normalized[key] = value;
     }
@@ -184,7 +211,7 @@ export const normalizeFirebaseData = (obj) => {
 };
 
 /**
- * Prepara datos para enviar a Firebase (convierte fechas a string YYYY-MM-DD)
+ * Prepara datos para enviar a Firebase (convierte fechas a string DD-MM-YYYY)
  * @param {Object} data - Datos a enviar
  * @returns {Object} Datos preparados
  */
@@ -196,12 +223,12 @@ export const prepareDataForFirebase = (data) => {
   Object.keys(prepared).forEach(key => {
     const value = prepared[key];
     
-    // Si es una fecha, convertir a YYYY-MM-DD string
+    // Si es una fecha, convertir a DD-MM-YYYY string
     if (value instanceof Date) {
-      const year = value.getFullYear();
-      const month = String(value.getMonth() + 1).padStart(2, '0');
       const day = String(value.getDate()).padStart(2, '0');
-      prepared[key] = `${year}-${month}-${day}`;
+      const month = String(value.getMonth() + 1).padStart(2, '0');
+      const year = value.getFullYear();
+      prepared[key] = `${day}-${month}-${year}`;
     }
     // Si es un objeto, recursivo
     else if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -291,5 +318,6 @@ export default {
   esHoy,
   estaAtrasada,
   diferenciaDias,
-  toLocalDateString
+  toLocalDateString,
+  toInputDateString
 };

@@ -16,7 +16,7 @@ import {
   obtenerFechasPagoPorFrecuencia,
   DIAS_SEMANA
 } from '../../utils/loanCalculations';
-import { formatFecha } from '../../utils/firebaseUtils';
+import { formatFecha, toLocalDateString, toInputDateString } from '../../utils/firebaseUtils';
 
 const PrestamoForm = ({ prestamo, clientes = [], onSave, onCancel, error }) => {
   const { theme } = useTheme();
@@ -68,15 +68,16 @@ const PrestamoForm = ({ prestamo, clientes = [], onSave, onCancel, error }) => {
 
   useEffect(() => {
     if (prestamo) {
+      // 🔥 Convertir fecha de DD-MM-YYYY a YYYY-MM-DD para el input
+      const fechaParaInput = prestamo.fechaPrestamo ? toInputDateString(prestamo.fechaPrestamo) : new Date().toISOString().split('T')[0];
+      
       setFormData({
         clienteID: prestamo.clienteID || '',
         clienteNombre: prestamo.clienteNombre || '',
         montoPrestado: prestamo.montoPrestado || '',
         interesPercent: prestamo.interesPercent || '',
         frecuencia: prestamo.frecuencia || 'quincenal',
-        fechaPrestamo: prestamo.fechaPrestamo ? 
-          new Date(prestamo.fechaPrestamo).toISOString().split('T')[0] : 
-          new Date().toISOString().split('T')[0],
+        fechaPrestamo: fechaParaInput,
         diaPagoPersonalizado: prestamo.diaPagoPersonalizado || '',
         diaSemana: prestamo.diaSemana || 'Lunes',
         fechasPersonalizadas: prestamo.fechasPersonalizadas || [],
@@ -230,19 +231,31 @@ const PrestamoForm = ({ prestamo, clientes = [], onSave, onCancel, error }) => {
     return calcularInteresQuincenal() / 15;
   };
 
-  // Función para generar el ID de vista previa
+  // 🔥 Función para generar el ID de vista previa con formato DD-MM-YYYY
   const generarIdPreview = () => {
     const nombre = clienteSeleccionado?.nombre || formData.clienteNombre || 'cliente';
-    const fecha = formData.fechaPrestamo ? new Date(formData.fechaPrestamo) : new Date();
+    const fechaStr = formData.fechaPrestamo;
     const nombreLimpio = nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
-    const dia = fecha.getDate();
-    const mes = fecha.getMonth() + 1;
-    const año = fecha.getFullYear().toString().slice(-2);
+    
+    // Si tenemos fecha en YYYY-MM-DD, extraer componentes
+    let dia, mes, año;
+    if (fechaStr && fechaStr.includes('-')) {
+      const [year, month, day] = fechaStr.split('-');
+      dia = parseInt(day);
+      mes = parseInt(month);
+      año = year.slice(-2);
+    } else {
+      const fecha = new Date();
+      dia = fecha.getDate();
+      mes = fecha.getMonth() + 1;
+      año = fecha.getFullYear().toString().slice(-2);
+    }
+    
     return `${nombreLimpio}${dia}-${mes}-${año}`;
   };
 
   // ============================================
-  // HANDLE SUBMIT CORREGIDO - ENVIAR FECHA COMO STRING
+  // 🔥 HANDLE SUBMIT CORREGIDO - CONVERTIR A DD-MM-YYYY
   // ============================================
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -251,25 +264,41 @@ const PrestamoForm = ({ prestamo, clientes = [], onSave, onCancel, error }) => {
 
     setLoading(true);
     try {
-      // Mantener la fecha como string YYYY-MM-DD (sin convertir a objeto Date)
-      const fechaPrestamoStr = formData.fechaPrestamo;
+      // 🔥 Convertir fecha de YYYY-MM-DD a DD-MM-YYYY
+      let fechaPrestamoStr = formData.fechaPrestamo;
+      if (fechaPrestamoStr && fechaPrestamoStr.includes('-')) {
+        const [year, month, day] = fechaPrestamoStr.split('-');
+        fechaPrestamoStr = `${day}-${month}-${year}`;
+      }
       
-      console.log('📅 Fecha préstamo seleccionada (string):', fechaPrestamoStr);
+      console.log('📅 Fecha préstamo seleccionada (DD-MM-YYYY):', fechaPrestamoStr);
       console.log('📅 Frecuencia:', formData.frecuencia);
       console.log('💰 Generar comisión:', formData.generarComision);
       console.log('👤 Garante ID:', formData.garanteID);
       console.log('📊 Porcentaje comisión:', formData.porcentajeComision);
+      
+      // 🔥 Convertir fechas personalizadas también
+      let fechasPersonalizadasConvertidas = null;
+      if (formData.frecuencia === 'personalizado' && formData.fechasPersonalizadas.length > 0) {
+        fechasPersonalizadasConvertidas = formData.fechasPersonalizadas.map(fecha => {
+          if (fecha && fecha.includes('-')) {
+            const [year, month, day] = fecha.split('-');
+            return `${day}-${month}-${year}`;
+          }
+          return fecha;
+        });
+      }
       
       const prestamoData = {
         ...formData,
         montoPrestado: parseFloat(formData.montoPrestado),
         interesPercent: parseFloat(formData.interesPercent),
         capitalRestante: parseFloat(formData.montoPrestado),
-        fechaPrestamo: fechaPrestamoStr, // 🔧 ENVIAR COMO STRING, NO COMO OBJETO DATE
+        fechaPrestamo: fechaPrestamoStr, // 🔧 ENVIAR COMO DD-MM-YYYY
         diaPagoPersonalizado: formData.frecuencia === 'mensual' && formData.diaPagoPersonalizado ? 
           parseInt(formData.diaPagoPersonalizado) : null,
         diaSemana: formData.frecuencia === 'semanal' ? formData.diaSemana : null,
-        fechasPersonalizadas: formData.frecuencia === 'personalizado' ? formData.fechasPersonalizadas : null,
+        fechasPersonalizadas: fechasPersonalizadasConvertidas,
         configuracionMora: formData.activarMora ? {
           enabled: true,
           porcentaje: parseFloat(formData.porcentajeMora),

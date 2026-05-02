@@ -25,7 +25,7 @@ import {
   getConfiguracionMora,
   calcularDiasTranscurridos
 } from '../../utils/loanCalculations';
-import { formatFecha } from '../../utils/firebaseUtils';
+import { formatFecha, toLocalDateString, toInputDateString } from '../../utils/firebaseUtils';
 import { useTheme } from '../../context/ThemeContext';
 
 // ============================================
@@ -217,7 +217,7 @@ const ConfirmacionPagoModal = ({ isOpen, onClose, pagoData, prestamo, onEnviarWh
                       <div className="flex justify-between mt-1">
                         <span className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>Fecha:</span>
                         <span className={`text-xs ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                          {new Date(pagoData.fechaPago).toLocaleDateString()}
+                          {typeof pagoData.fechaPago === 'string' ? pagoData.fechaPago : new Date(pagoData.fechaPago).toLocaleDateString()}
                         </span>
                       </div>
                     )}
@@ -532,10 +532,42 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
   // Calcular atraso y mora
   useEffect(() => {
     if (prestamoSeleccionado && formData.fechaPago) {
-      const fechaPagoSeleccionada = new Date(formData.fechaPago);
+      // 🔥 Convertir fecha de input (YYYY-MM-DD) a Date local
+      const fechaPagoSeleccionada = (() => {
+        const [year, month, day] = formData.fechaPago.split('-');
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      })();
+      
       const fechaEsperada = prestamoSeleccionado.fechaProximoPago 
-        ? new Date(prestamoSeleccionado.fechaProximoPago) 
-        : new Date(prestamoSeleccionado.fechaPrestamo);
+        ? (() => {
+            // Si es string DD-MM-YYYY, convertir a Date
+            if (typeof prestamoSeleccionado.fechaProximoPago === 'string' && prestamoSeleccionado.fechaProximoPago.includes('-')) {
+              const parts = prestamoSeleccionado.fechaProximoPago.split('-');
+              if (parts[0].length === 4) {
+                // YYYY-MM-DD
+                const [y, m, d] = parts;
+                return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+              } else {
+                // DD-MM-YYYY
+                const [d, m, y] = parts;
+                return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+              }
+            }
+            return new Date(prestamoSeleccionado.fechaProximoPago);
+          })()
+        : (() => {
+            if (typeof prestamoSeleccionado.fechaPrestamo === 'string' && prestamoSeleccionado.fechaPrestamo.includes('-')) {
+              const parts = prestamoSeleccionado.fechaPrestamo.split('-');
+              if (parts[0].length === 4) {
+                const [y, m, d] = parts;
+                return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+              } else {
+                const [d, m, y] = parts;
+                return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+              }
+            }
+            return new Date(prestamoSeleccionado.fechaPrestamo);
+          })();
       
       const diasAtraso = calcularDiasTranscurridos(fechaEsperada, fechaPagoSeleccionada);
       
@@ -676,7 +708,7 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
   };
 
   // ============================================
-  // HANDLE SUBMIT CORREGIDO (FECHA LOCAL)
+  // 🔥 HANDLE SUBMIT CORREGIDO - Enviar fecha como DD-MM-YYYY
   // ============================================
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -687,21 +719,18 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
     setError('');
 
     try {
-      // 🔧 CORREGIDO: Crear fecha local sin conversión UTC
-      let fechaPagoDate;
-      if (formData.fechaPago) {
-        const [year, month, day] = formData.fechaPago.split('-');
-        fechaPagoDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-      } else {
-        const hoy = new Date();
-        fechaPagoDate = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+      // 🔥 Convertir fecha de YYYY-MM-DD a DD-MM-YYYY para enviar
+      let fechaPagoString = formData.fechaPago;
+      if (fechaPagoString && fechaPagoString.includes('-')) {
+        const [year, month, day] = fechaPagoString.split('-');
+        fechaPagoString = `${day}-${month}-${year}`;
       }
       
-      console.log('📅 Fecha pago seleccionada (local):', fechaPagoDate.toLocaleDateString());
+      console.log('📅 Fecha pago seleccionada (DD-MM-YYYY):', fechaPagoString);
       
       const datosPago = {
         prestamoID: formData.prestamoID,
-        fechaPago: fechaPagoDate,
+        fechaPago: fechaPagoString, // Enviar como DD-MM-YYYY
         nota: formData.nota,
         tipoPago: formData.tipoPago,
         modoCalculo: formData.modoCalculo
@@ -725,7 +754,7 @@ const RegistrarPagoModal = ({ prestamos, onClose, onPagoRegistrado }) => {
           nuevoCapital: calculosAvanzados.distribucion?.nuevoCapital,
           pagoId: idPersonalizado,
           idPersonalizado: idPersonalizado,
-          fechaPago: fechaPagoDate
+          fechaPago: fechaPagoString
         });
         setShowConfirmModal(true);
       } else {

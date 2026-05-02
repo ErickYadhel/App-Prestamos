@@ -33,7 +33,7 @@ import api from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import RegistrarPagoModal from '../components/Pagos/RegistrarPagoModal';
 import DetallesPago from '../components/Pagos/DetallesPago';
-import { normalizeFirebaseData, firebaseTimestampToLocalString, firebaseTimestampToDate } from '../utils/firebaseUtils';
+import { normalizeFirebaseData, firebaseTimestampToLocalString, firebaseTimestampToDate, toLocalDateString, formatFecha } from '../utils/firebaseUtils';
 
 // ============================================
 // IMPORTACIONES PARA GRÁFICOS
@@ -409,7 +409,11 @@ const Pagos = () => {
         const comisiones = response.data || [];
         const total = comisiones.reduce((sum, com) => sum + (com.montoComision || 0), 0);
         setTotalComisiones(total);
-        const ultimas = [...comisiones].sort((a,b) => new Date(b.fechaPago) - new Date(a.fechaPago)).slice(0,5);
+        const ultimas = [...comisiones].sort((a,b) => {
+          const fechaA = firebaseTimestampToDate(a.fechaPago);
+          const fechaB = firebaseTimestampToDate(b.fechaPago);
+          return fechaB - fechaA;
+        }).slice(0,5);
         setUltimasComisiones(ultimas);
       }
     } catch (error) {

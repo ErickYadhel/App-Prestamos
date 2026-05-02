@@ -32,7 +32,7 @@ import PrestamoForm from '../components/Prestamos/PrestamoForm';
 import PrestamoDetails from '../components/Prestamos/PrestamoDetails';
 import RegistrarPago from '../components/Prestamos/RegistrarPago';
 import PrestamosTable from '../components/Prestamos/PrestamosTable';
-import { normalizeFirebaseData, firebaseTimestampToLocalString, formatFecha } from '../utils/firebaseUtils';
+import { normalizeFirebaseData, firebaseTimestampToLocalString, formatFecha, firebaseTimestampToDate, toLocalDateString } from '../utils/firebaseUtils';
 import { 
   calcularInteresPorDias, 
   getConfiguracionMora,
@@ -411,7 +411,7 @@ const Prestamos = () => {
       
       if (p.configuracionMora?.enabled && p.fechaProximoPago) {
         const hoy = new Date();
-        const fechaProximo = new Date(p.fechaProximoPago);
+        const fechaProximo = firebaseTimestampToDate(p.fechaProximoPago);
         const diasAtraso = Math.max(0, Math.ceil((hoy - fechaProximo) / (1000 * 60 * 60 * 24)));
         if (diasAtraso > p.configuracionMora.diasGracia) {
           const interesAdeudado = (p.capitalRestante * p.interesPercent) / 100;
@@ -464,10 +464,12 @@ const Prestamos = () => {
     return (interesGenerado / capitalInvertido) * 100;
   };
 
+  // 🔥 CORREGIDO: Usar firebaseTimestampToDate para convertir fecha correctamente
   const calcularDiasAtraso = (prestamo) => {
     if (!prestamo.fechaProximoPago) return 0;
     const hoy = new Date();
-    const fechaProximo = new Date(prestamo.fechaProximoPago);
+    const fechaProximo = firebaseTimestampToDate(prestamo.fechaProximoPago);
+    if (!fechaProximo) return 0;
     return Math.max(0, Math.ceil((hoy - fechaProximo) / (1000 * 60 * 60 * 24)));
   };
 
@@ -562,6 +564,7 @@ const Prestamos = () => {
     handleBackToList();
   };
 
+  // 🔥 CORREGIDO: Usar formatFecha para mostrar fecha correctamente en WhatsApp
   const handleEnviarWhatsApp = (prestamo) => {
     const cliente = clientes.find(c => c.id === prestamo.clienteID);
     if (!cliente || !cliente.celular) {
@@ -573,12 +576,15 @@ const Prestamos = () => {
     const porcentajeRecuperacion = calcularPorcentajeRecuperacion(prestamo);
     const diasAtraso = calcularDiasAtraso(prestamo);
     
+    // Usar formatFecha para mostrar la fecha correctamente
+    const fechaProximoFormateada = prestamo.fechaProximoPago ? formatFecha(prestamo.fechaProximoPago) : 'Por definir';
+    
     let mensaje = `Hola ${prestamo.clienteNombre}, le recordamos que tiene un pago pendiente de RD$ ${interesQuincenal.toLocaleString()} correspondiente a los intereses de su préstamo. 
 
 📊 Resumen de su préstamo:
 • Capital restante: RD$ ${prestamo.capitalRestante?.toLocaleString()}
 • Progreso: ${porcentajeRecuperacion.toFixed(1)}% pagado
-• Próximo pago: ${formatFecha(prestamo.fechaProximoPago)}`;
+• Próximo pago: ${fechaProximoFormateada}`;
 
     if (diasAtraso > 0) {
       mensaje += `\n⚠️ Tiene ${diasAtraso} días de atraso.`;

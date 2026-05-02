@@ -7,9 +7,58 @@ const { notificarNuevoPrestamo, notificarGaranteAsignado } = require('../service
 const db = admin.firestore();
 
 // ============================================
+// 🔥 FUNCIÓN PARA CONVERTIR FECHA A STRING LOCAL DD-MM-YYYY
+// ============================================
+function fechaToLocalString(fecha) {
+  if (!fecha) return null;
+  
+  let dateObj;
+  if (fecha instanceof Date) {
+    dateObj = fecha;
+  } else if (typeof fecha === 'string') {
+    // Si ya es DD-MM-YYYY, validar
+    if (/^\d{2}-\d{2}-\d{4}$/.test(fecha)) {
+      return fecha;
+    }
+    // Si es YYYY-MM-DD, convertir a DD-MM-YYYY
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+      const [year, month, day] = fecha.split('-');
+      return `${day}-${month}-${year}`;
+    }
+    dateObj = new Date(fecha);
+  } else if (fecha && typeof fecha === 'object') {
+    if (fecha._seconds !== undefined) {
+      dateObj = new Date(fecha._seconds * 1000);
+    } else if (fecha.seconds !== undefined) {
+      dateObj = new Date(fecha.seconds * 1000);
+    } else if (fecha.toDate) {
+      dateObj = fecha.toDate();
+    } else {
+      dateObj = new Date(fecha);
+    }
+  } else {
+    dateObj = new Date(fecha);
+  }
+  
+  if (isNaN(dateObj.getTime())) {
+    const hoy = new Date();
+    const day = String(hoy.getDate()).padStart(2, '0');
+    const month = String(hoy.getMonth() + 1).padStart(2, '0');
+    const year = hoy.getFullYear();
+    return `${day}-${month}-${year}`;
+  }
+  
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const year = dateObj.getFullYear();
+  
+  return `${day}-${month}-${year}`;
+}
+
+// ============================================
 // FUNCIÓN PARA GENERAR ID PERSONALIZADO
 // ============================================
-function generarIdPrestamo(clienteNombre, fechaPrestamo) {
+function generarIdPrestamo(clienteNombre, fechaPrestamoStr) {
   // Limpiar el nombre: eliminar espacios, convertir a minúsculas, eliminar acentos
   const nombreLimpio = clienteNombre
     .toLowerCase()
@@ -17,21 +66,11 @@ function generarIdPrestamo(clienteNombre, fechaPrestamo) {
     .replace(/\s+/g, '') // Eliminar espacios
     .replace(/[^a-z0-9]/g, ''); // Solo letras y números
   
-  // Obtener fecha formateada
-  let fecha;
-  if (fechaPrestamo instanceof Date) {
-    fecha = fechaPrestamo;
-  } else if (typeof fechaPrestamo === 'string') {
-    fecha = new Date(fechaPrestamo);
-  } else if (fechaPrestamo?.toDate) {
-    fecha = fechaPrestamo.toDate();
-  } else {
-    fecha = new Date(fechaPrestamo);
-  }
-  
-  const dia = fecha.getDate();
-  const mes = fecha.getMonth() + 1;
-  const año = fecha.getFullYear().toString().slice(-2);
+  // fechaPrestamoStr es DD-MM-YYYY
+  const [day, month, year] = fechaPrestamoStr.split('-');
+  const dia = parseInt(day);
+  const mes = parseInt(month);
+  const año = year.slice(-2);
   
   const fechaFormateada = `${dia}-${mes}-${año}`;
   
@@ -52,45 +91,33 @@ function generarIdPrestamo(clienteNombre, fechaPrestamo) {
 }
 
 // ============================================
-// FUNCIÓN PARA NORMALIZAR FECHA LOCAL (CORREGIDA)
+// FUNCIÓN PARA CONVERTIR STRING DD-MM-YYYY A DATE
 // ============================================
-function normalizarFechaLocal(fecha) {
-  if (!fecha) return new Date();
-  if (fecha instanceof Date) {
-    return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+function stringToDate(fechaStr) {
+  if (!fechaStr) return new Date();
+  if (fechaStr instanceof Date) return fechaStr;
+  
+  // Formato DD-MM-YYYY
+  if (typeof fechaStr === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(fechaStr)) {
+    const [day, month, year] = fechaStr.split('-');
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
   }
-  if (typeof fecha === 'string') {
-    const parts = fecha.split('T')[0].split('-');
-    if (parts.length === 3) {
-      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    }
+  
+  // Formato YYYY-MM-DD (compatibilidad)
+  if (typeof fechaStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) {
+    const [year, month, day] = fechaStr.split('-');
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
   }
-  if (fecha && typeof fecha === 'object') {
-    if (fecha._seconds !== undefined) {
-      const d = new Date(fecha._seconds * 1000);
-      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    }
-    if (fecha.seconds !== undefined) {
-      const d = new Date(fecha.seconds * 1000);
-      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    }
-    if (fecha.toDate) {
-      const d = fecha.toDate();
-      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    }
-  }
-  const d = new Date(fecha);
-  if (!isNaN(d.getTime())) {
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  }
-  return new Date();
+  
+  return new Date(fechaStr);
 }
 
 // ============================================
-// FUNCIÓN PARA CALCULAR LA PRIMERA FECHA DE PAGO
+// 🔥 FUNCIÓN PARA CALCULAR PRIMERA FECHA DE PAGO (retorna string DD-MM-YYYY)
 // ============================================
-function calcularPrimeraFechaPago(fechaPrestamo, frecuencia, config = {}) {
-  const fecha = normalizarFechaLocal(fechaPrestamo);
+function calcularPrimeraFechaPagoString(fechaPrestamoStr, frecuencia, config = {}) {
+  // Convertir string a Date para cálculos
+  const fecha = stringToDate(fechaPrestamoStr);
   const dia = fecha.getDate();
   const mes = fecha.getMonth();
   const año = fecha.getFullYear();
@@ -100,35 +127,33 @@ function calcularPrimeraFechaPago(fechaPrestamo, frecuencia, config = {}) {
   console.log('  Día:', dia);
   console.log('  Frecuencia:', frecuencia);
   
+  let nuevaFecha;
+  
   switch (frecuencia) {
     case 'diario':
-      const fechaDiaria = new Date(fecha);
-      fechaDiaria.setDate(dia + 1);
-      console.log('  Resultado (diario):', fechaDiaria.toLocaleDateString());
-      return fechaDiaria;
+      nuevaFecha = new Date(fecha);
+      nuevaFecha.setDate(dia + 1);
+      console.log('  Resultado (diario):', nuevaFecha.toLocaleDateString());
+      break;
       
     case 'semanal':
-      const fechaSemanal = new Date(fecha);
-      fechaSemanal.setDate(dia + 7);
-      console.log('  Resultado (semanal):', fechaSemanal.toLocaleDateString());
-      return fechaSemanal;
+      nuevaFecha = new Date(fecha);
+      nuevaFecha.setDate(dia + 7);
+      console.log('  Resultado (semanal):', nuevaFecha.toLocaleDateString());
+      break;
       
     case 'quincenal':
       if (dia < 15) {
-        const fecha15 = new Date(año, mes, 15);
-        console.log(`  → Día ${dia} < 15, primera fecha: 15 del mismo mes (${fecha15.toLocaleDateString()})`);
-        return fecha15;
-      } 
-      else if (dia >= 15 && dia < 30) {
-        const fecha30 = new Date(año, mes, 30);
-        console.log(`  → Día ${dia} >= 15 y < 30, primera fecha: 30 del mismo mes (${fecha30.toLocaleDateString()})`);
-        return fecha30;
-      } 
-      else {
-        const fecha15Prox = new Date(año, mes + 1, 15);
-        console.log(`  → Día ${dia} >= 30, primera fecha: 15 del mes siguiente (${fecha15Prox.toLocaleDateString()})`);
-        return fecha15Prox;
+        nuevaFecha = new Date(año, mes, 15);
+        console.log(`  → Día ${dia} < 15, primera fecha: 15 del mismo mes (${nuevaFecha.toLocaleDateString()})`);
+      } else if (dia >= 15 && dia < 30) {
+        nuevaFecha = new Date(año, mes, 30);
+        console.log(`  → Día ${dia} >= 15 y < 30, primera fecha: 30 del mismo mes (${nuevaFecha.toLocaleDateString()})`);
+      } else {
+        nuevaFecha = new Date(año, mes + 1, 15);
+        console.log(`  → Día ${dia} >= 30, primera fecha: 15 del mes siguiente (${nuevaFecha.toLocaleDateString()})`);
       }
+      break;
       
     case 'mensual':
       let diaPago = config.diaPagoPersonalizado || dia;
@@ -143,41 +168,49 @@ function calcularPrimeraFechaPago(fechaPrestamo, frecuencia, config = {}) {
         }
       }
       
-      let fechaMensual = new Date(añoPrimeraFecha, mesPrimeraFecha, diaPago);
+      nuevaFecha = new Date(añoPrimeraFecha, mesPrimeraFecha, diaPago);
       
-      if (fechaMensual.getMonth() !== mesPrimeraFecha % 12) {
-        fechaMensual = new Date(añoPrimeraFecha, mesPrimeraFecha + 1, 0);
-        console.log(`  → Mensual: día ${diaPago} no existe en el mes, ajustado al último día: ${fechaMensual.toLocaleDateString()}`);
+      if (nuevaFecha.getMonth() !== mesPrimeraFecha % 12) {
+        nuevaFecha = new Date(añoPrimeraFecha, mesPrimeraFecha + 1, 0);
+        console.log(`  → Mensual: día ${diaPago} no existe, ajustado al último día: ${nuevaFecha.toLocaleDateString()}`);
       } else {
-        console.log(`  → Mensual (día configurado ${diaPago}): ${fechaMensual.toLocaleDateString()}`);
+        console.log(`  → Mensual (día configurado ${diaPago}): ${nuevaFecha.toLocaleDateString()}`);
       }
-      return fechaMensual;
+      break;
       
     case 'personalizado':
       if (config.fechasPersonalizadas && config.fechasPersonalizadas.length > 0) {
-        const fechas = config.fechasPersonalizadas.map(f => normalizarFechaLocal(f));
+        const fechas = config.fechasPersonalizadas.map(f => stringToDate(f));
         fechas.sort((a, b) => a - b);
+        let fechaEncontrada = null;
         for (const fechaPago of fechas) {
           if (fechaPago > fecha) {
-            console.log('  Resultado (personalizado):', fechaPago.toLocaleDateString());
-            return fechaPago;
+            fechaEncontrada = fechaPago;
+            break;
           }
         }
-        const primeraFecha = new Date(fechas[0]);
-        primeraFecha.setFullYear(primeraFecha.getFullYear() + 1);
-        console.log('  Resultado (personalizado - próximo año):', primeraFecha.toLocaleDateString());
-        return primeraFecha;
+        if (fechaEncontrada) {
+          nuevaFecha = fechaEncontrada;
+          console.log('  Resultado (personalizado):', nuevaFecha.toLocaleDateString());
+        } else {
+          nuevaFecha = new Date(fechas[0]);
+          nuevaFecha.setFullYear(nuevaFecha.getFullYear() + 1);
+          console.log('  Resultado (personalizado - próximo año):', nuevaFecha.toLocaleDateString());
+        }
+      } else {
+        nuevaFecha = new Date(fecha);
+        nuevaFecha.setDate(dia + 30);
+        console.log('  Resultado (default):', nuevaFecha.toLocaleDateString());
       }
-      const fechaDefault = new Date(fecha);
-      fechaDefault.setDate(dia + 30);
-      console.log('  Resultado (default):', fechaDefault.toLocaleDateString());
-      return fechaDefault;
+      break;
       
     default:
-      const fechaDefault2 = new Date(fecha);
-      fechaDefault2.setDate(dia + 30);
-      return fechaDefault2;
+      nuevaFecha = new Date(fecha);
+      nuevaFecha.setDate(dia + 30);
   }
+  
+  // Devolver como string DD-MM-YYYY
+  return fechaToLocalString(nuevaFecha);
 }
 
 // ============================================
@@ -204,13 +237,18 @@ router.get('/', async (req, res) => {
       const data = doc.data();
       const prestamo = new Prestamo({ id: doc.id, ...data });
       
+      // Formatear fechas para mostrar (ya son strings DD-MM-YYYY)
+      const fechaPrestamo = data.fechaPrestamo || null;
+      const fechaProximoPago = data.fechaProximoPago || null;
+      const fechaUltimoPago = data.fechaUltimoPago || null;
+      
       prestamos.push({ 
         id: doc.id, 
         ...data,
         resumenDeuda: prestamo.obtenerResumenDeuda(),
-        fechaPrestamoFormatted: data.fechaPrestamo?.toDate?.().toLocaleDateString('es-DO') || 'N/A',
-        fechaProximoPagoFormatted: data.fechaProximoPago?.toDate?.().toLocaleDateString('es-DO') || 'N/A',
-        fechaUltimoPagoFormatted: data.fechaUltimoPago?.toDate?.().toLocaleDateString('es-DO') || 'N/A'
+        fechaPrestamoFormatted: fechaPrestamo ? fechaPrestamo : 'N/A',
+        fechaProximoPagoFormatted: fechaProximoPago ? fechaProximoPago : 'N/A',
+        fechaUltimoPagoFormatted: fechaUltimoPago ? fechaUltimoPago : 'N/A'
       });
     });
 
@@ -259,9 +297,9 @@ router.get('/:id', async (req, res) => {
         id: doc.id,
         ...data,
         resumenDeuda: prestamo.obtenerResumenDeuda(),
-        fechaPrestamoFormatted: data.fechaPrestamo?.toDate?.().toLocaleDateString('es-DO') || 'N/A',
-        fechaProximoPagoFormatted: data.fechaProximoPago?.toDate?.().toLocaleDateString('es-DO') || 'N/A',
-        fechaUltimoPagoFormatted: data.fechaUltimoPago?.toDate?.().toLocaleDateString('es-DO') || 'N/A'
+        fechaPrestamoFormatted: data.fechaPrestamo || 'N/A',
+        fechaProximoPagoFormatted: data.fechaProximoPago || 'N/A',
+        fechaUltimoPagoFormatted: data.fechaUltimoPago || 'N/A'
       }
     });
   } catch (error) {
@@ -274,7 +312,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // ============================================
-// POST /api/prestamos - Crear nuevo préstamo (CORREGIDO)
+// POST /api/prestamos - Crear nuevo préstamo (con DD-MM-YYYY)
 // ============================================
 router.post('/', async (req, res) => {
   try {
@@ -312,30 +350,24 @@ router.post('/', async (req, res) => {
     }
 
     // ============================================
-    // MANEJO CORREGIDO DE FECHA PRÉSTAMO (SIN ZONA HORARIA)
+    // 🔥 Convertir fecha a STRING DD-MM-YYYY
     // ============================================
-    let fechaPrestamo;
-    if (prestamoData.fechaPrestamo instanceof Date) {
-      fechaPrestamo = normalizarFechaLocal(prestamoData.fechaPrestamo);
-    } else if (typeof prestamoData.fechaPrestamo === 'string') {
-      const parts = prestamoData.fechaPrestamo.split('T')[0].split('-');
-      if (parts.length === 3) {
-        fechaPrestamo = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-      } else {
-        fechaPrestamo = normalizarFechaLocal(prestamoData.fechaPrestamo);
-      }
-    } else if (prestamoData.fechaPrestamo?.toDate) {
-      const d = prestamoData.fechaPrestamo.toDate();
-      fechaPrestamo = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    let fechaPrestamoString;
+    if (prestamoData.fechaPrestamo) {
+      fechaPrestamoString = fechaToLocalString(prestamoData.fechaPrestamo);
     } else {
-      fechaPrestamo = normalizarFechaLocal(new Date());
+      const hoy = new Date();
+      const day = String(hoy.getDate()).padStart(2, '0');
+      const month = String(hoy.getMonth() + 1).padStart(2, '0');
+      const year = hoy.getFullYear();
+      fechaPrestamoString = `${day}-${month}-${year}`;
     }
     
-    console.log('✅ Fecha préstamo normalizada:', fechaPrestamo.toLocaleDateString());
+    console.log('✅ Fecha préstamo como string DD-MM-YYYY:', fechaPrestamoString);
     
-    // Calcular la PRIMERA fecha de pago
-    const primeraFechaPago = calcularPrimeraFechaPago(
-      fechaPrestamo,
+    // Calcular la PRIMERA fecha de pago (retorna string DD-MM-YYYY)
+    const primeraFechaPagoString = calcularPrimeraFechaPagoString(
+      fechaPrestamoString,
       prestamoData.frecuencia,
       {
         diaPagoPersonalizado: prestamoData.diaPagoPersonalizado ? parseInt(prestamoData.diaPagoPersonalizado) : null,
@@ -343,8 +375,7 @@ router.post('/', async (req, res) => {
       }
     );
 
-    console.log('✅ Fecha préstamo:', fechaPrestamo.toLocaleDateString());
-    console.log('✅ Primera fecha de pago calculada:', primeraFechaPago.toLocaleDateString());
+    console.log('✅ Primera fecha de pago calculada:', primeraFechaPagoString);
     console.log('✅ Frecuencia:', prestamoData.frecuencia);
 
     // Obtener nombre del garante si se seleccionó uno
@@ -366,8 +397,8 @@ router.post('/', async (req, res) => {
       ...prestamoData,
       clienteNombre: cliente.nombre,
       capitalRestante: parseFloat(prestamoData.montoPrestado),
-      fechaPrestamo: fechaPrestamo,
-      fechaProximoPago: primeraFechaPago,
+      fechaPrestamo: fechaPrestamoString,
+      fechaProximoPago: primeraFechaPagoString,
       estado: 'activo',
       diaPagoPersonalizado: prestamoData.frecuencia === 'mensual' && prestamoData.diaPagoPersonalizado ? 
         parseInt(prestamoData.diaPagoPersonalizado) : null,
@@ -400,10 +431,11 @@ router.post('/', async (req, res) => {
     // ============================================
     // CREAR PRÉSTAMO CON ID PERSONALIZADO
     // ============================================
-    const idPersonalizado = generarIdPrestamo(prestamo.clienteNombre, fechaPrestamo);
+    const idPersonalizado = generarIdPrestamo(prestamo.clienteNombre, fechaPrestamoString);
     const docRef = db.collection('prestamos').doc(idPersonalizado);
     prestamo.id = docRef.id;
 
+    // 🔥 IMPORTANTE: Guardar fechas como STRINGS DD-MM-YYYY
     await docRef.set({
       id: idPersonalizado,
       clienteID: prestamo.clienteID,
@@ -422,7 +454,7 @@ router.post('/', async (req, res) => {
       configuracionMora: prestamo.configuracionMora,
       nota: prestamo.nota,
       historialPagos: prestamo.historialPagos,
-      fechaActualizacion: prestamo.fechaActualizacion,
+      fechaActualizacion: new Date(),
       generarComision: prestamo.generarComision,
       garanteID: prestamo.garanteID,
       garanteNombre: prestamo.garanteNombre,
@@ -496,37 +528,14 @@ router.put('/:id', async (req, res) => {
       }
     }
 
-    // Manejo correcto de fecha préstamo
+    // 🔥 Convertir fecha préstamo a string DD-MM-YYYY
     if (updates.fechaPrestamo !== undefined) {
-      let fechaPrestamo;
-      if (updates.fechaPrestamo instanceof Date) {
-        fechaPrestamo = normalizarFechaLocal(updates.fechaPrestamo);
-      } else if (typeof updates.fechaPrestamo === 'string') {
-        const parts = updates.fechaPrestamo.split('T')[0].split('-');
-        if (parts.length === 3) {
-          fechaPrestamo = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-        } else {
-          fechaPrestamo = normalizarFechaLocal(updates.fechaPrestamo);
-        }
-      } else if (updates.fechaPrestamo?.toDate) {
-        const d = updates.fechaPrestamo.toDate();
-        fechaPrestamo = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      } else if (updates.fechaPrestamo?._seconds !== undefined) {
-        fechaPrestamo = new Date(updates.fechaPrestamo._seconds * 1000);
-        fechaPrestamo = new Date(fechaPrestamo.getFullYear(), fechaPrestamo.getMonth(), fechaPrestamo.getDate());
-      } else if (updates.fechaPrestamo?.seconds !== undefined) {
-        fechaPrestamo = new Date(updates.fechaPrestamo.seconds * 1000);
-        fechaPrestamo = new Date(fechaPrestamo.getFullYear(), fechaPrestamo.getMonth(), fechaPrestamo.getDate());
-      } else {
-        fechaPrestamo = normalizarFechaLocal(updates.fechaPrestamo);
-      }
-      
-      if (!isNaN(fechaPrestamo.getTime())) {
-        updatesData.fechaPrestamo = fechaPrestamo;
-        console.log('✅ Fecha préstamo actualizada:', fechaPrestamo);
+      const fechaPrestamoString = fechaToLocalString(updates.fechaPrestamo);
+      if (fechaPrestamoString) {
+        updatesData.fechaPrestamo = fechaPrestamoString;
+        console.log('✅ Fecha préstamo actualizada:', fechaPrestamoString);
       } else {
         console.warn('⚠️ Fecha inválida recibida, omitiendo actualización');
-        delete updatesData.fechaPrestamo;
       }
     }
 
@@ -554,19 +563,22 @@ router.put('/:id', async (req, res) => {
       }
     }
 
+    // 🔥 Recalcular fecha próximo pago usando strings
     if (updates.frecuencia || updates.diaPagoPersonalizado || updates.diaSemana || updates.fechasPersonalizadas) {
-      const fechaBase = updates.fechaUltimoPago || prestamoActual.fechaUltimoPago || prestamoActual.fechaPrestamo;
-      let fechaBaseDate = normalizarFechaLocal(fechaBase);
-      
-      if (!isNaN(fechaBaseDate.getTime())) {
-        updatesData.fechaProximoPago = calcularPrimeraFechaPago(
-          fechaBaseDate,
+      const fechaBaseStr = prestamoActual.fechaUltimoPago || prestamoActual.fechaPrestamo;
+      if (fechaBaseStr) {
+        const nuevaFechaProximoPago = calcularPrimeraFechaPagoString(
+          fechaBaseStr,
           updates.frecuencia || prestamoActual.frecuencia,
           {
             diaPagoPersonalizado: updates.diaPagoPersonalizado || prestamoActual.diaPagoPersonalizado,
             fechasPersonalizadas: updates.fechasPersonalizadas || prestamoActual.fechasPersonalizadas
           }
         );
+        if (nuevaFechaProximoPago) {
+          updatesData.fechaProximoPago = nuevaFechaProximoPago;
+          console.log('✅ Nueva fecha próximo pago calculada:', nuevaFechaProximoPago);
+        }
       }
     }
 

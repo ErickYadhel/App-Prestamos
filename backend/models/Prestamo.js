@@ -29,6 +29,7 @@ class Prestamo {
     this.capitalRestante = parseFloat(capitalRestante) || 0;
     this.interesPercent = parseFloat(interesPercent) || 0;
     this.frecuencia = frecuencia;
+    // 🔥 CORREGIDO: Guardar como STRING en formato DD-MM-YYYY
     this.fechaPrestamo = this._normalizarFecha(fechaPrestamo);
     this.estado = estado;
     this.fechaUltimoPago = this._normalizarFecha(fechaUltimoPago);
@@ -47,59 +48,102 @@ class Prestamo {
   }
 
   // ============================================
-  // FUNCIÓN CORREGIDA PARA NORMALIZAR FECHAS
-  // Mantiene la fecha LOCAL sin conversión UTC
+  // 🔥 VERSIÓN CON FORMATO DD-MM-YYYY
   // ============================================
   _normalizarFecha(fecha) {
     if (!fecha) return null;
     
-    // Si ya es un objeto Date válido
+    // 1. Si ya es string en formato DD-MM-YYYY, devolverlo directamente
+    if (typeof fecha === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(fecha)) {
+      console.log('📅 [Prestamo] Fecha ya es string DD-MM-YYYY:', fecha);
+      return fecha;
+    }
+    
+    // 2. Convertir cualquier otra cosa a string DD-MM-YYYY en LOCAL
+    let dateObj;
+    
     if (fecha instanceof Date && !isNaN(fecha.getTime())) {
-      // Crear nueva fecha manteniendo el día local
-      return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
-    }
-    
-    // Si es timestamp de Firestore
-    if (fecha && typeof fecha === 'object') {
+      dateObj = fecha;
+    } else if (fecha && typeof fecha === 'object') {
       if (fecha._seconds !== undefined) {
-        const d = new Date(fecha._seconds * 1000);
-        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        dateObj = new Date(fecha._seconds * 1000);
+      } else if (fecha.seconds !== undefined) {
+        dateObj = new Date(fecha.seconds * 1000);
+      } else if (fecha.toDate && typeof fecha.toDate === 'function') {
+        dateObj = fecha.toDate();
+      } else {
+        dateObj = new Date(fecha);
       }
-      if (fecha.seconds !== undefined) {
-        const d = new Date(fecha.seconds * 1000);
-        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    } else if (typeof fecha === 'string') {
+      // Intentar parsear string ISO o YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+        const [year, month, day] = fecha.split('-');
+        dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      } else {
+        dateObj = new Date(fecha);
       }
-      if (fecha.toDate) {
-        const d = fecha.toDate();
-        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      }
+    } else if (typeof fecha === 'number') {
+      dateObj = new Date(fecha);
+    } else {
+      dateObj = new Date(fecha);
     }
     
-    // Si es string (YYYY-MM-DD o ISO)
-    if (typeof fecha === 'string') {
-      // Intentar parsear como fecha local primero (YYYY-MM-DD)
-      const parts = fecha.split('T')[0].split('-');
-      if (parts.length === 3) {
-        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-        if (!isNaN(d.getTime())) return d;
-      }
-      const d = new Date(fecha);
-      if (!isNaN(d.getTime())) {
-        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      }
+    // Validar que la fecha sea válida
+    if (isNaN(dateObj.getTime())) {
+      const hoy = new Date();
+      const day = String(hoy.getDate()).padStart(2, '0');
+      const month = String(hoy.getMonth() + 1).padStart(2, '0');
+      const year = hoy.getFullYear();
+      console.warn('⚠️ [Prestamo] Fecha inválida, usando hoy:', `${day}-${month}-${year}`);
+      return `${day}-${month}-${year}`;
     }
     
-    // Si es número (timestamp)
-    if (typeof fecha === 'number') {
-      const d = new Date(fecha);
-      if (!isNaN(d.getTime())) {
-        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      }
-    }
+    // Extraer componentes en LOCAL (sin conversión UTC)
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = dateObj.getFullYear();
     
-    console.warn('⚠️ Fecha inválida:', fecha);
-    return new Date();
+    const fechaString = `${day}-${month}-${year}`;
+    console.log('📅 [Prestamo] Fecha convertida a string DD-MM-YYYY:', fechaString);
+    
+    return fechaString;
   }
+
+  // ============================================
+  // 🔥 Convertir string DD-MM-YYYY a Date para cálculos
+  // ============================================
+  _stringToDate(fechaStr) {
+    if (!fechaStr) return null;
+    if (fechaStr instanceof Date) return fechaStr;
+    
+    // Formato DD-MM-YYYY
+    if (typeof fechaStr === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(fechaStr)) {
+      const [day, month, year] = fechaStr.split('-');
+      return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    }
+    
+    // Formato YYYY-MM-DD (para compatibilidad con datos antiguos)
+    if (typeof fechaStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) {
+      const [year, month, day] = fechaStr.split('-');
+      return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    }
+    
+    if (typeof fechaStr === 'string') {
+      return new Date(fechaStr);
+    }
+    
+    if (fechaStr && typeof fechaStr === 'object') {
+      if (fechaStr._seconds !== undefined) return new Date(fechaStr._seconds * 1000);
+      if (fechaStr.seconds !== undefined) return new Date(fechaStr.seconds * 1000);
+      if (fechaStr.toDate) return fechaStr.toDate();
+    }
+    
+    return new Date(fechaStr);
+  }
+
+  // ============================================
+  // MÉTODOS EXISTENTES (modificados para usar _stringToDate)
+  // ============================================
 
   calcularInteresDiario() {
     if (!this.capitalRestante || !this.interesPercent) return 0;
@@ -124,8 +168,12 @@ class Prestamo {
   calcularDiasDesdeUltimoPago(fechaReferencia = new Date()) {
     const fechaBase = this.fechaUltimoPago || this.fechaPrestamo;
     if (!fechaBase) return 0;
-    const fechaBaseDate = this._normalizarFecha(fechaBase);
-    const fechaRef = this._normalizarFecha(fechaReferencia);
+    
+    const fechaBaseDate = this._stringToDate(fechaBase);
+    const fechaRef = this._stringToDate(fechaReferencia);
+    
+    if (!fechaBaseDate || !fechaRef) return 0;
+    
     const diffTime = Math.abs(fechaRef - fechaBaseDate);
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   }
@@ -141,111 +189,111 @@ class Prestamo {
   }
 
   calcularSiguienteFechaPago(fechaBase) {
-    const fecha = this._normalizarFecha(fechaBase);
-    if (!fecha) return new Date();
+    // Convertir string a Date para cálculos
+    const fecha = this._stringToDate(fechaBase);
+    if (!fecha) return this._normalizarFecha(new Date());
     
     const dia = fecha.getDate();
     const mes = fecha.getMonth();
     const año = fecha.getFullYear();
     
-    console.log(`📅 Calculando siguiente fecha pago - Frecuencia: ${this.frecuencia}, Fecha base: ${fecha.toLocaleDateString()}, Día: ${dia}`);
+    let nuevaFecha;
     
     switch (this.frecuencia) {
       case 'diario':
-        const fechaDiaria = new Date(fecha);
-        fechaDiaria.setDate(dia + 1);
-        console.log(`  → Diario: ${fechaDiaria.toLocaleDateString()}`);
-        return fechaDiaria;
+        nuevaFecha = new Date(fecha);
+        nuevaFecha.setDate(dia + 1);
+        break;
         
       case 'semanal':
-        const fechaSemanal = new Date(fecha);
-        fechaSemanal.setDate(dia + 7);
-        console.log(`  → Semanal: ${fechaSemanal.toLocaleDateString()}`);
-        return fechaSemanal;
+        nuevaFecha = new Date(fecha);
+        nuevaFecha.setDate(dia + 7);
+        break;
         
       case 'quincenal':
-        const fechaActualQuincenal = this.fechaProximoPago ? this._normalizarFecha(this.fechaProximoPago) : fecha;
+        const fechaActualQuincenal = this.fechaProximoPago 
+          ? this._stringToDate(this.fechaProximoPago) 
+          : fecha;
         const diaActualQuincenal = fechaActualQuincenal.getDate();
         const mesActualQuincenal = fechaActualQuincenal.getMonth();
         const añoActualQuincenal = fechaActualQuincenal.getFullYear();
         
-        console.log(`  Fecha de próximo pago actual: ${fechaActualQuincenal.toLocaleDateString()}, Día: ${diaActualQuincenal}`);
-        
-        // Si el día actual es 15, siguiente es 30 del mismo mes
         if (diaActualQuincenal === 15) {
           const ultimoDia = new Date(añoActualQuincenal, mesActualQuincenal + 1, 0).getDate();
-          const nuevaFecha = new Date(añoActualQuincenal, mesActualQuincenal, ultimoDia);
-          console.log(`  → Quincenal: de 15 a ${ultimoDia} del mismo mes (${nuevaFecha.toLocaleDateString()})`);
-          return nuevaFecha;
-        } 
-        // Si el día actual es 30 (o cualquier otro día), siguiente es 15 del próximo mes
-        else {
+          nuevaFecha = new Date(añoActualQuincenal, mesActualQuincenal, ultimoDia);
+        } else {
           let mesSiguiente = mesActualQuincenal + 1;
           let añoSiguiente = añoActualQuincenal;
           if (mesSiguiente > 11) {
             mesSiguiente = 0;
             añoSiguiente++;
           }
-          const nuevaFecha = new Date(añoSiguiente, mesSiguiente, 15);
-          console.log(`  → Quincenal: de ${diaActualQuincenal} a 15 del mes siguiente (${nuevaFecha.toLocaleDateString()})`);
-          return nuevaFecha;
+          nuevaFecha = new Date(añoSiguiente, mesSiguiente, 15);
         }
+        break;
         
       case 'mensual':
-        const fechaActualMensual = this.fechaProximoPago ? this._normalizarFecha(this.fechaProximoPago) : fecha;
+        const fechaActualMensual = this.fechaProximoPago 
+          ? this._stringToDate(this.fechaProximoPago) 
+          : fecha;
         const diaActualMensual = fechaActualMensual.getDate();
         const mesActualMensual = fechaActualMensual.getMonth();
         const añoActualMensual = fechaActualMensual.getFullYear();
-        
-        console.log(`  Fecha de próximo pago actual: ${fechaActualMensual.toLocaleDateString()}, Día: ${diaActualMensual}`);
         
         let diaPagoMensual = this.diaPagoPersonalizado || diaActualMensual;
         let fechaMensual = new Date(añoActualMensual, mesActualMensual + 1, diaPagoMensual);
         
         if (fechaMensual.getMonth() !== (mesActualMensual + 1) % 12) {
           fechaMensual = new Date(añoActualMensual, mesActualMensual + 2, 0);
-          console.log(`  → Mensual: día ${diaPagoMensual} no existe, ajustado al último día: ${fechaMensual.toLocaleDateString()}`);
-        } else {
-          console.log(`  → Mensual (día configurado ${diaPagoMensual}): ${fechaMensual.toLocaleDateString()}`);
         }
-        return fechaMensual;
+        nuevaFecha = fechaMensual;
+        break;
         
       case 'personalizado':
         if (this.fechasPersonalizadas && this.fechasPersonalizadas.length > 0) {
-          const fechaReferencia = this.fechaProximoPago ? this._normalizarFecha(this.fechaProximoPago) : fecha;
-          const fechas = this.fechasPersonalizadas.map(f => this._normalizarFecha(f));
+          const fechaReferencia = this.fechaProximoPago 
+            ? this._stringToDate(this.fechaProximoPago) 
+            : fecha;
+          const fechas = this.fechasPersonalizadas.map(f => this._stringToDate(f));
           fechas.sort((a, b) => a - b);
+          
+          let fechaEncontrada = null;
           for (const fechaPago of fechas) {
             if (fechaPago > fechaReferencia) {
-              console.log(`  → Personalizado: siguiente fecha programada ${fechaPago.toLocaleDateString()}`);
-              return fechaPago;
+              fechaEncontrada = fechaPago;
+              break;
             }
           }
-          const primeraFecha = new Date(fechas[0]);
-          primeraFecha.setFullYear(primeraFecha.getFullYear() + 1);
-          console.log(`  → Personalizado: no hay más fechas, usando primera del próximo año: ${primeraFecha.toLocaleDateString()}`);
-          return primeraFecha;
+          
+          if (fechaEncontrada) {
+            nuevaFecha = fechaEncontrada;
+          } else {
+            nuevaFecha = new Date(fechas[0]);
+            nuevaFecha.setFullYear(nuevaFecha.getFullYear() + 1);
+          }
+        } else {
+          nuevaFecha = new Date(fecha);
+          nuevaFecha.setDate(dia + 30);
         }
-        const fechaDefault = new Date(fecha);
-        fechaDefault.setDate(dia + 30);
-        console.log(`  → Personalizado (default): ${fechaDefault.toLocaleDateString()}`);
-        return fechaDefault;
+        break;
         
       default:
-        const fechaDefault2 = new Date(fecha);
-        fechaDefault2.setDate(dia + 30);
-        return fechaDefault2;
+        nuevaFecha = new Date(fecha);
+        nuevaFecha.setDate(dia + 30);
     }
+    
+    // Devolver como string DD-MM-YYYY
+    return this._normalizarFecha(nuevaFecha);
   }
 
   calcularDistribucionPago(montoPago, fechaPago = new Date()) {
-    const fechaPagoDate = this._normalizarFecha(fechaPago);
+    const fechaPagoDate = this._stringToDate(fechaPago);
     
     let diasTranscurridos = 0;
     let fechaBase = this.fechaUltimoPago || this.fechaPrestamo;
     
     if (fechaBase) {
-      const fechaBaseDate = this._normalizarFecha(fechaBase);
+      const fechaBaseDate = this._stringToDate(fechaBase);
       diasTranscurridos = Math.max(1, Math.ceil((fechaPagoDate - fechaBaseDate) / (1000 * 60 * 60 * 24)));
     } else {
       diasTranscurridos = 30;
@@ -259,7 +307,7 @@ class Prestamo {
     let mora = 0;
     
     if (fechaBaseParaMora) {
-      const fechaEsperada = this._normalizarFecha(fechaBaseParaMora);
+      const fechaEsperada = this._stringToDate(fechaBaseParaMora);
       diasAtraso = Math.max(0, Math.ceil((fechaPagoDate - fechaEsperada) / (1000 * 60 * 60 * 24)));
       
       if (diasAtraso > 0 && this.configuracionMora?.enabled) {
@@ -278,40 +326,25 @@ class Prestamo {
     let capitalAplicado = 0;
     let restoInteres = 0;
     
-    console.log(`💰 Calculando distribución del pago: RD$ ${montoPago.toFixed(2)}`);
-    console.log(`   Días transcurridos: ${diasTranscurridos}`);
-    console.log(`   Interés diario: RD$ ${interesDiario.toFixed(4)}`);
-    console.log(`   Interés adeudado: RD$ ${interesAdeudado.toFixed(2)}`);
-    console.log(`   Mora calculada: RD$ ${mora.toFixed(2)}`);
-    console.log(`   Capital restante: RD$ ${this.capitalRestante.toFixed(2)}`);
-    
     if (mora > 0 && montoRestante > 0) {
       moraAplicada = Math.min(montoRestante, mora);
       montoRestante -= moraAplicada;
-      console.log(`   ✅ Mora aplicada: RD$ ${moraAplicada.toFixed(2)}, Restante: RD$ ${montoRestante.toFixed(2)}`);
     }
     
     if (montoRestante > 0) {
       interesAplicado = Math.min(montoRestante, interesAdeudado);
       montoRestante -= interesAplicado;
       
-      console.log(`   ✅ Interés aplicado: RD$ ${interesAplicado.toFixed(2)}, Restante: RD$ ${montoRestante.toFixed(2)}`);
-      
       if (interesAplicado < interesAdeudado) {
         restoInteres = interesAdeudado - interesAplicado;
-        console.log(`   ⚠️ Interés incompleto! Pendiente: RD$ ${restoInteres.toFixed(2)}`);
       }
     } else {
       restoInteres = interesAdeudado;
-      console.log(`   ⚠️ No hay dinero para interés después de mora. Pendiente: RD$ ${restoInteres.toFixed(2)}`);
     }
     
     if (montoRestante > 0 && restoInteres === 0) {
       capitalAplicado = Math.min(montoRestante, this.capitalRestante);
       montoRestante -= capitalAplicado;
-      console.log(`   ✅ Capital aplicado: RD$ ${capitalAplicado.toFixed(2)}, Restante: RD$ ${montoRestante.toFixed(2)}`);
-    } else if (montoRestante > 0 && restoInteres > 0) {
-      console.log(`   ⚠️ No se aplica a capital porque aún hay interés pendiente: RD$ ${restoInteres.toFixed(2)}`);
     }
     
     const nuevoCapital = this.capitalRestante - capitalAplicado;
@@ -326,13 +359,6 @@ class Prestamo {
         periodosPagados = 1;
       }
     }
-    
-    console.log(`   📊 Resultado final:`);
-    console.log(`      - Interés pagado: RD$ ${interesAplicado.toFixed(2)}`);
-    console.log(`      - Mora pagada: RD$ ${moraAplicada.toFixed(2)}`);
-    console.log(`      - Capital pagado: RD$ ${capitalAplicado.toFixed(2)}`);
-    console.log(`      - Nuevo capital: RD$ ${nuevoCapital.toFixed(2)}`);
-    console.log(`      - Interés pendiente: RD$ ${restoInteres.toFixed(2)}`);
     
     return {
       interes: interesAplicado,
@@ -360,28 +386,28 @@ class Prestamo {
   }
 
   aplicarPago(montoPago, fechaPago = new Date(), distribucion = null) {
-    const fechaPagoDate = this._normalizarFecha(fechaPago);
+    const fechaPagoDate = this._stringToDate(fechaPago);
     const resultado = distribucion || this.calcularDistribucionPago(montoPago, fechaPagoDate);
     
     const capitalAnterior = this.capitalRestante;
     
     this.capitalRestante = resultado.nuevoCapital;
-    this.fechaUltimoPago = fechaPagoDate;
+    this.fechaUltimoPago = this._normalizarFecha(fechaPagoDate);
     
     if (resultado.interes > 0 && resultado.restoInteres === 0) {
       this.fechaProximoPago = this.calcularSiguienteFechaPago(fechaPagoDate);
-      console.log(`✅ Nueva fecha de próximo pago calculada (se pagó interés completo): ${this.fechaProximoPago.toLocaleDateString()}`);
+      console.log(`✅ Nueva fecha de próximo pago calculada: ${this.fechaProximoPago}`);
     } else if (resultado.interes > 0 && resultado.restoInteres > 0) {
-      console.log(`⚠️ Se pagó interés parcial (RD$ ${resultado.interes.toFixed(2)}), pero no es suficiente. Fecha de próximo pago NO cambia.`);
-      console.log(`   Pendiente: RD$ ${resultado.restoInteres.toFixed(2)}`);
+      console.log(`⚠️ Se pagó interés parcial (RD$ ${resultado.interes.toFixed(2)}), fecha NO cambia.`);
     } else {
-      console.log(`⚠️ No se pagó interés, la fecha de próximo pago NO cambia: ${this.fechaProximoPago?.toLocaleDateString()}`);
+      console.log(`⚠️ No se pagó interés, fecha NO cambia.`);
     }
     
     if (this.capitalRestante <= 0) {
       this.estado = 'completado';
     } else if (this.configuracionMora?.enabled && this.fechaProximoPago) {
-      const diasAtraso = Math.max(0, Math.ceil((new Date() - this._normalizarFecha(this.fechaProximoPago)) / (1000 * 60 * 60 * 24)));
+      const fechaProximo = this._stringToDate(this.fechaProximoPago);
+      const diasAtraso = Math.max(0, Math.ceil((new Date() - fechaProximo) / (1000 * 60 * 60 * 24)));
       if (diasAtraso > (this.configuracionMora.diasGracia || 3)) {
         this.estado = 'moroso';
       } else {
@@ -414,12 +440,13 @@ class Prestamo {
   }
 
   obtenerResumenDeuda(fechaReferencia = new Date()) {
-    const fechaRef = this._normalizarFecha(fechaReferencia);
+    const fechaRef = this._stringToDate(fechaReferencia);
     const diasTranscurridos = this.calcularDiasDesdeUltimoPago(fechaRef);
     const interesAdeudado = this.calcularInteresPorDias(Math.min(diasTranscurridos, 30));
     
-    const diasAtraso = this.fechaProximoPago 
-      ? Math.max(0, Math.ceil((fechaRef - this._normalizarFecha(this.fechaProximoPago)) / (1000 * 60 * 60 * 24)))
+    const fechaProximo = this.fechaProximoPago ? this._stringToDate(this.fechaProximoPago) : null;
+    const diasAtraso = fechaProximo 
+      ? Math.max(0, Math.ceil((fechaRef - fechaProximo) / (1000 * 60 * 60 * 24)))
       : 0;
     const mora = this.calcularMora(diasAtraso, interesAdeudado);
     
@@ -444,8 +471,11 @@ class Prestamo {
     if (!this.configuracionMora?.enabled) return false;
     if (this.estado !== 'activo') return false;
     if (!this.fechaProximoPago) return false;
-    const fechaRef = this._normalizarFecha(fechaReferencia);
-    const diasAtraso = Math.max(0, Math.ceil((fechaRef - this._normalizarFecha(this.fechaProximoPago)) / (1000 * 60 * 60 * 24)));
+    
+    const fechaRef = this._stringToDate(fechaReferencia);
+    const fechaProximo = this._stringToDate(this.fechaProximoPago);
+    const diasAtraso = Math.max(0, Math.ceil((fechaRef - fechaProximo) / (1000 * 60 * 60 * 24)));
+    
     return diasAtraso > (this.configuracionMora.diasGracia || 3);
   }
 }

@@ -58,7 +58,38 @@ function fechaToLocalString(fecha) {
 }
 
 // ============================================
-// 🔥 FUNCIÓN PARA CONVERTIR STRING DD-MM-YYYY A DATE
+// 🔥 FUNCIÓN PARA PARSEAR DD-MM-YYYY CORRECTAMENTE
+// ============================================
+function parseFechaDDMMYYYY(fechaStr) {
+  if (!fechaStr) return null;
+  
+  // Si es string en formato DD-MM-YYYY
+  if (typeof fechaStr === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(fechaStr)) {
+    const [day, month, year] = fechaStr.split('-');
+    const fecha = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    console.log(`📅 Parseando DD-MM-YYYY: ${fechaStr} -> ${fecha.toLocaleDateString()}`);
+    return fecha;
+  }
+  
+  // Si es string en formato YYYY-MM-DD
+  if (typeof fechaStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) {
+    const [year, month, day] = fechaStr.split('-');
+    const fecha = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    console.log(`📅 Parseando YYYY-MM-DD: ${fechaStr} -> ${fecha.toLocaleDateString()}`);
+    return fecha;
+  }
+  
+  // Si ya es Date
+  if (fechaStr instanceof Date && !isNaN(fechaStr.getTime())) {
+    return new Date(fechaStr.getFullYear(), fechaStr.getMonth(), fechaStr.getDate());
+  }
+  
+  console.warn('⚠️ Formato no reconocido:', fechaStr);
+  return null;
+}
+
+// ============================================
+// FUNCIÓN PARA CONVERTIR STRING DD-MM-YYYY A DATE
 // ============================================
 function stringToDate(fechaStr) {
   if (!fechaStr) return new Date();
@@ -80,7 +111,7 @@ function stringToDate(fechaStr) {
 }
 
 // ============================================
-// FUNCIÓN PARA NORMALIZAR FECHA LOCAL (DEPRECADA - mantener para compatibilidad)
+// FUNCIÓN PARA NORMALIZAR FECHA LOCAL (mantener para compatibilidad)
 // ============================================
 function normalizarFechaLocal(fecha) {
   if (!fecha) return new Date();
@@ -276,7 +307,6 @@ async function crearComisionAutomatica(prestamo, pagoId, interesPagado, fechaPag
     console.log('  - Porcentaje comisión:', porcentajeComision);
     console.log('  - Monto comisión:', montoComision);
     
-    // Usar fechaPagoStr para generar ID legible
     const idPersonalizado = Comision.generarIdPersonalizado
       ? Comision.generarIdPersonalizado(prestamo.clienteNombre, garanteNombre, stringToDate(fechaPagoStr))
       : `comision-${Date.now()}`;
@@ -318,7 +348,7 @@ async function crearComisionAutomatica(prestamo, pagoId, interesPagado, fechaPag
 }
 
 // ============================================
-// POST /api/pagos - Registrar un pago (con DD-MM-YYYY)
+// POST /api/pagos - Registrar un pago (CORREGIDO)
 // ============================================
 router.post('/', async (req, res) => {
   try {
@@ -357,38 +387,32 @@ router.post('/', async (req, res) => {
 
     const prestamo = new Prestamo({ id: prestamoDoc.id, ...prestamoData });
     
-    // 🔥 Convertir fecha pago a Date y luego a string DD-MM-YYYY
+    // ============================================
+    // 🔥 VERSIÓN CORREGIDA para parsear DD-MM-YYYY
+    // ============================================
     let fechaPagoDate;
     let fechaPagoString;
     
-    if (fechaPago) {
-      // Primero convertir a Date local
-      if (fechaPago instanceof Date) {
-        fechaPagoDate = normalizarFechaLocal(fechaPago);
-      } else if (typeof fechaPago === 'string') {
-        // Si viene como YYYY-MM-DD del frontend
-        if (/^\d{4}-\d{2}-\d{2}$/.test(fechaPago)) {
-          const [year, month, day] = fechaPago.split('-');
-          fechaPagoDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-        } else {
-          fechaPagoDate = normalizarFechaLocal(fechaPago);
-        }
-      } else if (fechaPago?.toDate) {
-        const d = fechaPago.toDate();
-        fechaPagoDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      } else {
-        fechaPagoDate = normalizarFechaLocal(fechaPago);
-      }
-    } else {
+    console.log('📥 [PAGOS] fechaPago recibido:', fechaPago);
+    console.log('📥 [PAGOS] Tipo:', typeof fechaPago);
+    
+    // Usar la nueva función para parsear
+    fechaPagoDate = parseFechaDDMMYYYY(fechaPago);
+    
+    if (!fechaPagoDate) {
       const hoy = new Date();
       fechaPagoDate = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+      console.log('⚠️ Usando fecha actual como fallback:', fechaPagoDate);
     }
+    
+    console.log('✅ [PAGOS] fechaPagoDate final:', fechaPagoDate);
+    console.log('✅ [PAGOS] Día:', fechaPagoDate.getDate());
+    console.log('✅ [PAGOS] Mes:', fechaPagoDate.getMonth() + 1);
+    console.log('✅ [PAGOS] Año:', fechaPagoDate.getFullYear());
     
     // Convertir a string DD-MM-YYYY para guardar
     fechaPagoString = fechaToLocalString(fechaPagoDate);
-    
-    console.log('✅ Fecha pago normalizada (Date):', fechaPagoDate.toLocaleDateString());
-    console.log('📅 Fecha pago como string DD-MM-YYYY:', fechaPagoString);
+    console.log('📅 [PAGOS] fechaPagoString a guardar:', fechaPagoString);
     
     let distribucion;
     let pagoData;
@@ -484,12 +508,12 @@ router.post('/', async (req, res) => {
     const idPersonalizado = await generarIdPagoUnico(prestamo.clienteNombre, fechaPagoString);
     console.log(`📝 ID de pago generado: ${idPersonalizado}`);
     
-    // 🔥 Guardar fechaPago como STRING DD-MM-YYYY en Firestore
+    // Guardar fechaPago como STRING DD-MM-YYYY en Firestore
     const pagoParaFirestore = {
       prestamoID: pago.prestamoID,
       clienteID: pago.clienteID,
       clienteNombre: pago.clienteNombre,
-      fechaPago: fechaPagoString,  // ⭐ STRING DD-MM-YYYY
+      fechaPago: fechaPagoString,
       montoCapital: pago.montoCapital,
       montoInteres: pago.montoInteres,
       montoMora: pago.montoMora,
@@ -501,7 +525,7 @@ router.post('/', async (req, res) => {
       modoCalculo: pago.modoCalculo,
       periodosPagados: pago.periodosPagados,
       diasCubiertos: pago.diasCubiertos,
-      fechaRegistro: new Date(),  // Este sí puede ser Date (timestamp administrativo)
+      fechaRegistro: new Date(),
       montoTotal: pago.montoTotal
     };
     
@@ -520,7 +544,6 @@ router.post('/', async (req, res) => {
 
     await batch.commit();
 
-    // Crear comisión automática
     let comisionCreada = null;
     if (distribucion.interes > 0 && prestamo.generarComision && prestamo.garanteID) {
       comisionCreada = await crearComisionAutomatica(
@@ -535,7 +558,6 @@ router.post('/', async (req, res) => {
       await crearNotificacionResto(prestamo, distribucion.restoInteres);
     }
 
-    // Notificaciones
     const clienteData = { id: prestamo.clienteID, nombre: prestamo.clienteNombre };
     await notificarPagoRegistrado(pagoData, prestamo, clienteData);
 
@@ -617,14 +639,12 @@ router.get('/prestamo/:prestamoID', async (req, res) => {
         if (pagoData.fechaPago) {
           try {
             let fechaDate;
-            // Soporte para string DD-MM-YYYY
             if (typeof pagoData.fechaPago === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(pagoData.fechaPago)) {
               const [d, m, y] = pagoData.fechaPago.split('-');
               fechaDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
               fechaPagoFormatted = fechaDate.toLocaleDateString('es-DO');
               fechaPagoISO = `${y}-${m}-${d}T00:00:00.000Z`;
             } 
-            // Soporte para string YYYY-MM-DD (datos antiguos)
             else if (typeof pagoData.fechaPago === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(pagoData.fechaPago)) {
               const [y, m, d] = pagoData.fechaPago.split('-');
               fechaDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));

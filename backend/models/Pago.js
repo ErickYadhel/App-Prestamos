@@ -22,7 +22,7 @@ class Pago {
     this.clienteID = clienteID;
     this.clienteNombre = clienteNombre;
     
-    // 🔥 CORREGIDO: Normalizar fecha a string YYYY-MM-DD
+    // 🔥 CORREGIDO: Normalizar fecha a string DD-MM-YYYY
     this.fechaPago = this._normalizarFecha(fechaPago);
     
     this.montoCapital = parseFloat(montoCapital) || 0;
@@ -39,49 +39,69 @@ class Pago {
     this.fechaRegistro = new Date();
   }
 
-  // 🔥 NUEVO: Método para normalizar fecha a string local
+  // 🔥 CORREGIDO: Ahora acepta DD-MM-YYYY
   _normalizarFecha(fecha) {
     if (!fecha) {
       const hoy = new Date();
-      const year = hoy.getFullYear();
-      const month = String(hoy.getMonth() + 1).padStart(2, '0');
       const day = String(hoy.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
+      const month = String(hoy.getMonth() + 1).padStart(2, '0');
+      const year = hoy.getFullYear();
+      return `${day}-${month}-${year}`;
     }
     
-    // Si ya es string YYYY-MM-DD, devolverlo
-    if (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    // 🔥 Si ya es string DD-MM-YYYY, devolverlo
+    if (typeof fecha === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(fecha)) {
+      console.log('📅 [Pago] Fecha ya es DD-MM-YYYY:', fecha);
       return fecha;
     }
     
+    // 🔥 Compatibilidad: Si es string YYYY-MM-DD, convertir a DD-MM-YYYY
+    if (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+      const [year, month, day] = fecha.split('-');
+      const fechaConvertida = `${day}-${month}-${year}`;
+      console.log('📅 [Pago] Convertido de YYYY-MM-DD a DD-MM-YYYY:', fechaConvertida);
+      return fechaConvertida;
+    }
+    
+    // Convertir cualquier otra cosa a DD-MM-YYYY
     let dateObj;
     if (fecha instanceof Date) {
       dateObj = fecha;
-    } else if (fecha.toDate) {
-      dateObj = fecha.toDate();
+    } else if (fecha && typeof fecha === 'object') {
+      if (fecha._seconds !== undefined) {
+        dateObj = new Date(fecha._seconds * 1000);
+      } else if (fecha.seconds !== undefined) {
+        dateObj = new Date(fecha.seconds * 1000);
+      } else if (fecha.toDate && typeof fecha.toDate === 'function') {
+        dateObj = fecha.toDate();
+      } else {
+        dateObj = new Date(fecha);
+      }
     } else if (typeof fecha === 'string') {
       dateObj = new Date(fecha);
-    } else if (fecha._seconds !== undefined) {
-      dateObj = new Date(fecha._seconds * 1000);
-    } else if (fecha.seconds !== undefined) {
-      dateObj = new Date(fecha.seconds * 1000);
-    } else {
+    } else if (typeof fecha === 'number') {
       dateObj = new Date(fecha);
+    } else {
+      dateObj = new Date();
     }
     
     if (isNaN(dateObj.getTime())) {
       const hoy = new Date();
-      const year = hoy.getFullYear();
-      const month = String(hoy.getMonth() + 1).padStart(2, '0');
       const day = String(hoy.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
+      const month = String(hoy.getMonth() + 1).padStart(2, '0');
+      const year = hoy.getFullYear();
+      console.warn('⚠️ [Pago] Fecha inválida, usando hoy:', `${day}-${month}-${year}`);
+      return `${day}-${month}-${year}`;
     }
     
-    const year = dateObj.getFullYear();
-    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
     const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = dateObj.getFullYear();
     
-    return `${year}-${month}-${day}`;
+    const fechaString = `${day}-${month}-${year}`;
+    console.log('📅 [Pago] Fecha convertida a DD-MM-YYYY:', fechaString);
+    
+    return fechaString;
   }
 
   get montoTotal() {

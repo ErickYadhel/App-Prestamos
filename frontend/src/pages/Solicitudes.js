@@ -37,7 +37,7 @@ import api from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../services/firebase';
-import { collection, addDoc, updateDoc, doc, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, getDocs, query, where, orderBy, setDoc, getDoc } from 'firebase/firestore';
 import SolicitudForm from '../components/Solicitudes/SolicitudForm';
 import SolicitudDetails from '../components/Solicitudes/SolicitudDetails';
 import AprobarSolicitudModal from '../components/Solicitudes/AprobarSolicitudModal';
@@ -46,6 +46,160 @@ import { generarContratoPDF } from '../utils/generateContratoPDF';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+
+// ============================================
+// 🔥 FUNCIÓN PARA GENERAR ID PERSONALIZADO DE DOCUMENTO
+// Formato: "Documento - JuanPerez3-4-26"
+// ============================================
+function generarIdDocumentoPersonalizado(clienteNombre, fecha = new Date()) {
+  // Limpiar nombre del cliente
+  const nombreLimpio = clienteNombre
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[^a-z0-9]/g, '');
+  
+  // Formatear fecha: D-M-YY
+  const dia = fecha.getDate();
+  const mes = fecha.getMonth() + 1;
+  const año = fecha.getFullYear().toString().slice(-2);
+  const fechaFormateada = `${dia}-${mes}-${año}`;
+  
+  // Generar ID final
+  let idGenerado = `Documento - ${nombreLimpio}${fechaFormateada}`;
+  
+  // Limitar longitud máxima
+  if (idGenerado.length > 100) {
+    idGenerado = idGenerado.substring(0, 100);
+  }
+  
+  console.log('🔑 ID de documento generado:', idGenerado);
+  return idGenerado;
+}
+
+// ============================================
+// 🔥 FUNCIÓN PARA CREAR DOCUMENTO CON ID PERSONALIZADO
+// ============================================
+const crearDocumentoConIdPersonalizado = async (documentoData) => {
+  try {
+    const clienteNombre = documentoData.cliente || documentoData.clienteNombre;
+    const idPersonalizado = generarIdDocumentoPersonalizado(clienteNombre, new Date());
+    
+    // Verificar si ya existe un documento con ese ID
+    const docRef = doc(db, 'documentos', idPersonalizado);
+    const docSnap = await getDoc(docRef);
+    
+    let documentoId;
+    
+    if (docSnap.exists()) {
+      // Si ya existe, agregar timestamp para hacerlo único
+      const timestamp = Date.now();
+      documentoId = `${idPersonalizado}_${timestamp}`;
+      const nuevoDocRef = doc(db, 'documentos', documentoId);
+      await setDoc(nuevoDocRef, { ...documentoData, id: documentoId });
+      console.log(`✅ Documento creado con ID único: ${documentoId}`);
+    } else {
+      documentoId = idPersonalizado;
+      await setDoc(docRef, { ...documentoData, id: documentoId });
+      console.log(`✅ Documento creado con ID: ${documentoId}`);
+    }
+    
+    return { documentoId, idPersonalizado: documentoId };
+  } catch (error) {
+    console.error('❌ Error creando documento con ID personalizado:', error);
+    throw error;
+  }
+};
+
+// ============================================
+// 🔥 FUNCIÓN PARA CREAR FORMULARIO Y DOCUMENTO AUTOMÁTICAMENTE (CON ID PERSONALIZADO)
+// ============================================
+const crearFormularioYDocumentoConIdPersonalizado = async (solicitudData, solicitudId, user) => {
+  try {
+    // Crear formulario (puede mantener ID automático)
+    const formularioData = {
+      tipo: 'solicitud',
+      cliente: solicitudData.clienteNombre,
+      email: solicitudData.email,
+      telefono: solicitudData.telefono,
+      direccion: solicitudData.direccion,
+      cedula: solicitudData.cedula,
+      monto: solicitudData.montoSolicitado,
+      plazo: solicitudData.plazoMeses,
+      interes: '10',
+      garantia: solicitudData.garantia || 'personal',
+      estado: 'pendiente',
+      solicitudId: solicitudId,
+      fechaCreacion: new Date().toISOString(),
+      creadoPor: user?.email || 'sistema',
+      observaciones: solicitudData.observaciones
+    };
+
+    const formulariosRef = collection(db, 'formularios');
+    const formularioDoc = await addDoc(formulariosRef, formularioData);
+
+    // Crear documento con ID PERSONALIZADO
+    const documentoData = {
+      tipo: 'contrato',
+      nombre: `Contrato de Préstamo - ${solicitudData.clienteNombre}`,
+      categoria: 'contratos',
+      cliente: solicitudData.clienteNombre,
+      cedula: solicitudData.cedula || '',
+      telefono: solicitudData.telefono || '',
+      direccion: solicitudData.direccion || '',
+      montoSolicitado: solicitudData.montoSolicitado,
+      frecuencia: solicitudData.frecuencia || 'quincenal',
+      interes: 10,
+      fechaPrimerPago: '',
+      garanteNombre: solicitudData.garanteNombre || '',
+      garanteCedula: solicitudData.garanteCedula || '',
+      descripcion: `Contrato de préstamo por RD$ ${Number(solicitudData.montoSolicitado).toLocaleString()} a ${solicitudData.plazoMeses || 'sin plazo fijo'} meses con interés del 10%`,
+      estado: 'pendiente',
+      solicitudId: solicitudId,
+      formularioId: formularioDoc.id,
+      fechaCreacion: new Date().toISOString(),
+      creadoPor: user?.email || 'sistema',
+      etiquetas: ['préstamo', 'contrato', solicitudData.frecuencia],
+      formato: 'PDF',
+      tamano: '0 KB',
+      archivo: ''
+    };
+
+    const { documentoId } = await crearDocumentoConIdPersonalizado(documentoData);
+
+    return { formularioId: formularioDoc.id, documentoId: documentoId };
+  } catch (error) {
+    console.error('❌ Error creando formulario y documento:', error);
+    return null;
+  }
+};
+
+// ============================================
+// FUNCIÓN PARA GENERAR CONTRATO PDF
+// ============================================
+const generarContratoPDFManual = (solicitudData) => {
+  console.log('📄 Generando contrato PDF para:', solicitudData.clienteNombre);
+  
+  const datosContrato = {
+    clienteNombre: solicitudData.clienteNombre,
+    cedula: solicitudData.cedula || 'No especificada',
+    telefono: solicitudData.telefono,
+    direccion: solicitudData.direccion || 'No especificada',
+    monto: solicitudData.montoSolicitado,
+    interes: 10,
+    frecuencia: solicitudData.frecuencia || 'quincenal',
+    fechaInicio: new Date().toLocaleDateString(),
+    fechaPrimerPago: new Date().toLocaleDateString(),
+    garanteNombre: solicitudData.garanteNombre || 'No especificado',
+    garanteCedula: solicitudData.garanteCedula || 'No especificada'
+  };
+  
+  const doc = generarContratoPDF(datosContrato);
+  doc.save(`Documento De Prestamo - ${solicitudData.clienteNombre}.pdf`);
+  
+  console.log('✅ Contrato PDF generado y descargado');
+  return true;
+};
 
 // ============================================
 // COMPONENTE DE BORDE LUMINOSO
@@ -512,6 +666,11 @@ const NotificacionModal = ({ isOpen, onClose, solicitud, onNotificarCliente, onN
               <p className={`text-center ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                 La solicitud de <strong>{solicitud?.clienteNombre}</strong> ha sido creada exitosamente.
               </p>
+              {solicitud?.documentoId && (
+                <p className={`text-xs text-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                  📄 Documento ID: {solicitud.documentoId}
+                </p>
+              )}
               <p className={`text-sm text-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
                 ¿Deseas notificar a alguien?
               </p>
@@ -645,86 +804,6 @@ const calcularScoreRiesgo = (solicitud) => {
   score = Math.min(100, Math.max(0, score));
   
   return { score, factores };
-};
-
-// ============================================
-// FUNCIÓN PARA CREAR FORMULARIO Y DOCUMENTO AUTOMÁTICAMENTE
-// ============================================
-const crearFormularioYDocumento = async (solicitudData, solicitudId, user) => {
-  try {
-    const formularioData = {
-      tipo: 'solicitud',
-      cliente: solicitudData.clienteNombre,
-      email: solicitudData.email,
-      telefono: solicitudData.telefono,
-      direccion: solicitudData.direccion,
-      cedula: solicitudData.cedula,
-      monto: solicitudData.montoSolicitado,
-      plazo: solicitudData.plazoMeses,
-      interes: '10',
-      garantia: solicitudData.garantia || 'personal',
-      estado: 'pendiente',
-      solicitudId: solicitudId,
-      fechaCreacion: new Date().toISOString(),
-      creadoPor: user?.email || 'sistema',
-      observaciones: solicitudData.observaciones
-    };
-
-    const formulariosRef = collection(db, 'formularios');
-    const formularioDoc = await addDoc(formulariosRef, formularioData);
-
-    const documentoData = {
-      tipo: 'contrato',
-      nombre: `Contrato de Préstamo - ${solicitudData.clienteNombre}`,
-      categoria: 'contratos',
-      cliente: solicitudData.clienteNombre,
-      descripcion: `Contrato de préstamo por RD$ ${Number(solicitudData.montoSolicitado).toLocaleString()} a ${solicitudData.plazoMeses || 'sin plazo fijo'} meses con interés del 10%`,
-      estado: 'pendiente',
-      solicitudId: solicitudId,
-      formularioId: formularioDoc.id,
-      fechaCreacion: new Date().toISOString(),
-      creadoPor: user?.email || 'sistema',
-      etiquetas: ['préstamo', 'contrato', solicitudData.frecuencia],
-      formato: 'PDF',
-      tamano: '0 KB',
-      archivo: ''
-    };
-
-    const documentosRef = collection(db, 'documentos');
-    const documentoDoc = await addDoc(documentosRef, documentoData);
-
-    return { formularioId: formularioDoc.id, documentoId: documentoDoc.id };
-  } catch (error) {
-    console.error('Error creando formulario y documento:', error);
-    return null;
-  }
-};
-
-// ============================================
-// 🔥 FUNCIÓN PARA GENERAR CONTRATO PDF
-// ============================================
-const generarContratoPDFManual = (solicitudData) => {
-  console.log('📄 Generando contrato PDF para:', solicitudData.clienteNombre);
-  
-  const datosContrato = {
-    clienteNombre: solicitudData.clienteNombre,
-    cedula: solicitudData.cedula || 'No especificada',
-    telefono: solicitudData.telefono,
-    direccion: solicitudData.direccion || 'No especificada',
-    monto: solicitudData.montoSolicitado,
-    interes: 10,
-    frecuencia: solicitudData.frecuencia || 'quincenal',
-    fechaInicio: new Date().toLocaleDateString(),
-    fechaPrimerPago: new Date().toLocaleDateString(),
-    garanteNombre: solicitudData.garanteNombre || 'No especificado',
-    garanteCedula: solicitudData.garanteCedula || 'No especificada'
-  };
-  
-  const doc = generarContratoPDF(datosContrato);
-  doc.save(`Documento De Prestamo - ${solicitudData.clienteNombre}.pdf`);
-  
-  console.log('✅ Contrato PDF generado y descargado');
-  return true;
 };
 
 // ============================================
@@ -995,7 +1074,7 @@ const Solicitudes = () => {
   };
 
   // ============================================
-  // 🔥 HANDLE SAVE SOLICITUD - CREAR SOLICITUD Y GENERAR PDF AUTOMÁTICAMENTE
+  // 🔥 HANDLE SAVE SOLICITUD - CREAR SOLICITUD Y GENERAR DOCUMENTO CON ID PERSONALIZADO
   // ============================================
   const handleSaveSolicitud = async (solicitudData) => {
     try {
@@ -1018,11 +1097,11 @@ const Solicitudes = () => {
         setSuccess(message);
         
         if (!editingSolicitud && solicitudId) {
-          // Crear formulario y documento en Firestore
-          const resultado = await crearFormularioYDocumento(solicitudData, solicitudId, user);
+          // 🔥 Crear documento con ID PERSONALIZADO en Firestore
+          const resultado = await crearFormularioYDocumentoConIdPersonalizado(solicitudData, solicitudId, user);
           
           if (resultado) {
-            setSuccess(`${message} - Se ha creado el formulario y documento automáticamente`);
+            setSuccess(`${message} - Se ha creado el formulario y documento con ID personalizado: ${resultado.documentoId}`);
             setSolicitudReciente({
               ...solicitudData,
               id: solicitudId,
@@ -1076,6 +1155,7 @@ Para cualquier consulta, contáctenos al 829-447-0640.
 💰 Monto: RD$ ${Number(solicitudReciente.montoSolicitado).toLocaleString()}
 🏢 Trabajo: ${solicitudReciente.lugarTrabajo}
 📅 Fecha: ${new Date().toLocaleDateString()}
+📄 Documento ID: ${solicitudReciente.documentoId}
 
 Puede revisar la solicitud en el sistema.
 
@@ -1679,7 +1759,7 @@ Puede revisar la solicitud en el sistema.
                       {header}
                     </th>
                   ))}
-                 </tr>
+                </tr>
               </thead>
               <tbody className={`divide-y divide-gray-200 dark:divide-gray-700 ${
                 theme === 'dark' ? 'bg-gray-800/50' : 'bg-white'
@@ -1729,7 +1809,7 @@ Puede revisar la solicitud en el sistema.
                               Ingreso: {new Date(solicitud.fechaIngreso).toLocaleDateString()}
                             </div>
                           )}
-                         </td>
+                        </td>
                         <td className="px-6 py-4">
                           <div className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                             RD$ {safeToLocaleString(solicitud.montoSolicitado)}
@@ -1748,7 +1828,7 @@ Puede revisar la solicitud en el sistema.
                               🏦 {solicitud.bancoCliente}
                             </div>
                           )}
-                         </td>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center space-x-2 mb-2">
                             <span className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -1771,7 +1851,7 @@ Puede revisar la solicitud en el sistema.
                               ))}
                             </div>
                           )}
-                         </td>
+                        </td>
                         <td className="px-6 py-4">
                           <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
                             {solicitud.empleadoNombre || 'N/A'}
@@ -1780,7 +1860,7 @@ Puede revisar la solicitud en el sistema.
                             <CalendarIcon className="h-3 w-3 mr-1" />
                             {safeFirebaseTimestamp(solicitud.fechaSolicitud)}
                           </div>
-                         </td>
+                        </td>
                         <td className="px-6 py-4">
                           {getEstadoBadge(solicitud)}
                           {solicitud.fechaDecision && (
@@ -1788,7 +1868,7 @@ Puede revisar la solicitud en el sistema.
                               {safeFirebaseTimestamp(solicitud.fechaDecision)}
                             </div>
                           )}
-                         </td>
+                        </td>
                         <td className="px-6 py-4 text-right text-sm font-medium">
                           <div className="flex justify-end space-x-1">
                             <button
@@ -1853,7 +1933,7 @@ Puede revisar la solicitud en el sistema.
                               </>
                             )}
                           </div>
-                         </td>
+                        </td>
                       </motion.tr>
                     );
                   })}

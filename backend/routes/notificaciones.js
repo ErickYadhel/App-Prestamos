@@ -170,15 +170,23 @@ router.get('/:id/link', async (req, res) => {
 });
 
 /**
- * Función para generar notificaciones automáticas de recordatorio o mora.
- * Puede ser llamada desde cron, scheduler o manualmente.
+ * 🔥 FUNCIÓN PARA GENERAR NOTIFICACIONES AUTOMÁTICAS DE RECORDATORIO O MORA
+ * Esta función es la que se exporta para ser usada en server.js
  */
-async function generarRecordatoriosAutomaticos() {
+async function generarRecordatoriosAutomaticos(diasAntesVencimiento = 1) {
   try {
+    console.log(`📱 Generando recordatorios automáticos (${diasAntesVencimiento} días antes de vencimiento)...`);
+    
     const hoy = new Date();
+    const fechaLimite = new Date();
+    fechaLimite.setDate(hoy.getDate() + diasAntesVencimiento);
+    
     const prestamosSnap = await db.collection('prestamos')
       .where('estado', '==', 'activo')
       .get();
+
+    let recordatoriosCreados = 0;
+    let morasCreadas = 0;
 
     for (const prestamoDoc of prestamosSnap.docs) {
       const prestamo = prestamoDoc.data();
@@ -186,87 +194,154 @@ async function generarRecordatoriosAutomaticos() {
       if (!clienteDoc.exists) continue;
 
       const cliente = clienteDoc.data();
-
-      const fechaProximoPago = prestamo.fechaProximoPago?.toDate
-        ? prestamo.fechaProximoPago.toDate()
-        : new Date(prestamo.fechaProximoPago);
-
-      // Si el pago vence hoy, creamos recordatorio
-      const hoyStr = hoy.toISOString().slice(0, 10);
-      const pagoStr = fechaProximoPago.toISOString().slice(0, 10);
-      if (pagoStr === hoyStr) {
-        const mensaje = `Recordatorio EYS Inversiones: Sr(a) ${cliente.nombre}, tiene un pago pendiente de su préstamo. Capital restante: ${prestamo.capitalRestante} ${prestamo.moneda || 'DOP'}.`;
-        const noti = new Notificacion({
-          tipo: 'pago_recordatorio',
-          destinatario: cliente.nombre,
-          telefono: cliente.celular,
-          mensaje,
-          fechaProgramada: hoy,
-          metadata: { clienteID: prestamo.clienteID, prestamoID: prestamoDoc.id }
-        });
-
-        const docRef = db.collection('notificaciones').doc();
-        noti.id = docRef.id;
-        await docRef.set({ ...noti });
-        console.log(`📱 Recordatorio creado para ${cliente.nombre}`);
+      
+      // Convertir fecha próximo pago
+      let fechaProximoPago;
+      if (prestamo.fechaProximoPago?.toDate) {
+        fechaProximoPago = prestamo.fechaProximoPago.toDate();
+      } else if (prestamo.fechaProximoPago) {
+        fechaProximoPago = new Date(prestamo.fechaProximoPago);
+      } else {
+        continue;
       }
 
-      // Si ya venció, creamos notificación de mora (una sola por día)
-      if (pagoStr < hoyStr) {
-        const mensaje = `Aviso de mora: Sr(a) ${cliente.nombre}, su pago del préstamo con EYS Inversiones venció el ${pagoStr}. Capital restante: ${prestamo.capitalRestante} ${prestamo.moneda || 'DOP'}.`;
-        const noti = new Notificacion({
-          tipo: 'mora',
-          destinatario: cliente.nombre,
-          telefono: cliente.celular,
-          mensaje,
-          fechaProgramada: hoy,
-          metadata: { clienteID: prestamo.clienteID, prestamoID: prestamoDoc.id }
-        });
+      // Normalizar fechas (solo comparar día/mes/año)
+      const hoyStr = hoy.toISOString().slice(0, 10);
+      const pagoStr = fechaProximoPago.toISOString().slice(0, 10);
+      const fechaLimiteStr = fechaLimite.toISOString().slice(0, 10);
 
-        // Evita duplicados en el mismo día
-        const existe = await db.collection('notificaciones')
+      // ============================================
+      // 1. RECORDATORIO: si el pago vence hoy o en los próximos días
+      // ============================================
+      if (pagoStr === hoyStr || pagoStr === fechaLimiteStr || (fechaProximoPago <= fechaLimite && fechaProximoPago >= hoy)) {
+        // Verificar si ya se envió recordatorio hoy
+        const existeRecordatorio = await db.collection('notificaciones')
+          .where('tipo', '==', 'pago_recordatorio')
+          .where('metadata.prestamoID', '==', prestamoDoc.id)
+          .where('fechaProgramada', '>=', new Date(Date.now() - 1000 * 60 * 60 * 24))
+          .get();
+
+        if (existeRecordatorio.empty) {
+          const mensaje = `📢 RECORDATORIO - EYS Inversiones
+
+Estimado(a) ${cliente.nombre || prestamo.clienteNombre},
+
+Le recordamos que tiene un pago pendiente de su préstamo:
+
+💰 Capital restante: RD$ ${prestamo.capitalRestante?.toLocaleString()}
+📅 Fecha de vencimiento: ${fechaProximoPago.toLocaleDateString('es-DO')}
+🔄 Frecuencia: ${prestamo.frecuencia || 'quincenal'}
+
+Para cualquier consulta, contáctenos al 829-447-0640.
+
+¡Gracias por confiar en EYS Inversiones!`;
+
+          const noti = new Notificacion({
+            tipo: 'pago_recordatorio',
+            destinatario: cliente.nombre || prestamo.clienteNombre,
+            telefono: cliente.celular || prestamo.telefonoCliente,
+            mensaje,
+            fechaProgramada: new Date(),
+            metadata: { 
+              clienteID: prestamo.clienteID, 
+              prestamoID: prestamoDoc.id,
+              fechaVencimiento: fechaProximoPago.toISOString()
+            }
+          });
+
+          const docRef = db.collection('notificaciones').doc();
+          noti.id = docRef.id;
+          await docRef.set({ ...noti });
+          recordatoriosCreados++;
+          console.log(`📱 Recordatorio creado para ${cliente.nombre || prestamo.clienteNombre}`);
+        }
+      }
+
+      // ============================================
+      // 2. MORA: si el pago ya venció
+      // ============================================
+      if (pagoStr < hoyStr) {
+        // Verificar si ya se envió notificación de mora hoy
+        const existeMora = await db.collection('notificaciones')
           .where('tipo', '==', 'mora')
           .where('metadata.prestamoID', '==', prestamoDoc.id)
           .where('fechaProgramada', '>=', new Date(Date.now() - 1000 * 60 * 60 * 24))
           .get();
 
-        if (existe.empty) {
+        if (existeMora.empty) {
+          const mensaje = `⚠️ AVISO DE MORA - EYS Inversiones
+
+Estimado(a) ${cliente.nombre || prestamo.clienteNombre},
+
+Su pago del préstamo ha vencido:
+
+💰 Capital pendiente: RD$ ${prestamo.capitalRestante?.toLocaleString()}
+📅 Fecha de vencimiento: ${fechaProximoPago.toLocaleDateString('es-DO')}
+⚠️ Días de atraso: ${Math.ceil((hoy - fechaProximoPago) / (1000 * 60 * 60 * 24))}
+
+Le recomendamos regularizar su situación lo antes posible para evitar recargos.
+
+Para cualquier consulta, contáctenos al 829-447-0640.
+
+- EYS Inversiones`;
+
+          const noti = new Notificacion({
+            tipo: 'mora',
+            destinatario: cliente.nombre || prestamo.clienteNombre,
+            telefono: cliente.celular || prestamo.telefonoCliente,
+            mensaje,
+            fechaProgramada: new Date(),
+            metadata: { 
+              clienteID: prestamo.clienteID, 
+              prestamoID: prestamoDoc.id,
+              fechaVencimiento: fechaProximoPago.toISOString(),
+              diasAtraso: Math.ceil((hoy - fechaProximoPago) / (1000 * 60 * 60 * 24))
+            }
+          });
+
           const docRef = db.collection('notificaciones').doc();
           noti.id = docRef.id;
           await docRef.set({ ...noti });
-          console.log(`⚠️ Mora creada para ${cliente.nombre}`);
+          morasCreadas++;
+          console.log(`⚠️ Notificación de mora creada para ${cliente.nombre || prestamo.clienteNombre}`);
         }
       }
     }
+
+    console.log(`✅ Recordatorios generados: ${recordatoriosCreados}, Moras: ${morasCreadas}`);
+    return { recordatoriosCreados, morasCreadas };
+    
   } catch (error) {
     console.error('Error generando recordatorios automáticos:', error);
+    return { recordatoriosCreados: 0, morasCreadas: 0, error: error.message };
   }
 }
 
 /**
  * POST /api/notificaciones/generar-manual
- * Ejecuta GENERAR recordatorios/moras ahora mismo (manualmente).
- * Útil para probar sin esperar al cron.
- * (Protege este endpoint más tarde con autenticación si es necesario)
+ * Ejecuta GENERAR recordatorios/moras ahora mismo (manualmente)
  */
 router.post('/generar-manual', async (req, res) => {
   try {
-    // Si quieres forzar diasAntesVencimiento desde body: req.body.diasAntes
-    const diasAntes = typeof req.body?.diasAntes === 'number' ? req.body.diasAntes : undefined;
-    // llamar a la función exportada (si tu archivo exporta generarRecordatoriosAutomaticos)
-    if (typeof generarRecordatoriosAutomaticos === 'function') {
-      // si la función acepta parámetro opcional, la pasamos; si no, la función lo ignorará
-      await generarRecordatoriosAutomaticos(diasAntes);
-      return res.json({ success: true, message: 'Generación manual ejecutada' });
-    } else {
-      return res.status(500).json({ success: false, error: 'Función generadora no disponible' });
-    }
+    const diasAntes = typeof req.body?.diasAntes === 'number' ? req.body.diasAntes : 1;
+    const resultado = await generarRecordatoriosAutomaticos(diasAntes);
+    
+    res.json({ 
+      success: true, 
+      message: 'Generación manual ejecutada',
+      resultado
+    });
   } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ 
+      success: false, 
+      error: err.message 
+    });
   }
 });
 
-
+// ============================================
+// 📤 EXPORTAR router Y FUNCIÓN
+// ============================================
 module.exports = {
   router,
   generarRecordatoriosAutomaticos

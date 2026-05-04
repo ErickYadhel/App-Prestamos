@@ -29,88 +29,255 @@ const BANCOS_DOMINICANOS = [
 ];
 
 // ============================================
-// FUNCIONES AUXILIARES
+// 🔥 FUNCIÓN PARA GENERAR ID PERSONALIZADO DE CLIENTE
+// Formato: "JuanPerez" (sin espacios, sin acentos)
 // ============================================
+function generarIdCliente(clienteNombre) {
+  const nombreLimpio = clienteNombre
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[^a-z]/g, '');
+  
+  // Capitalizar primera letra
+  const idGenerado = nombreLimpio.charAt(0).toUpperCase() + nombreLimpio.slice(1);
+  
+  console.log('🔑 ID de cliente generado:', idGenerado);
+  return idGenerado;
+}
 
-// Calcular la primera fecha de pago para un préstamo
-function calcularPrimeraFechaPago(fechaPrestamo, frecuencia, config = {}) {
-  const fecha = new Date(fechaPrestamo);
+// ============================================
+// 🔥 FUNCIÓN PARA GENERAR ID PERSONALIZADO DE SOLICITUD
+// ============================================
+function generarIdSolicitud(clienteNombre, fechaSolicitud) {
+  const nombreLimpio = clienteNombre
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[^a-z0-9]/g, '');
+  
+  let fecha;
+  if (fechaSolicitud instanceof Date) {
+    fecha = fechaSolicitud;
+  } else if (typeof fechaSolicitud === 'string') {
+    fecha = new Date(fechaSolicitud);
+  } else {
+    fecha = new Date();
+  }
+  
+  const dia = fecha.getDate();
+  const mes = fecha.getMonth() + 1;
+  const año = fecha.getFullYear().toString().slice(-2);
+  
+  const fechaFormateada = `${dia}-${mes}-${año}`;
+  
+  let idGenerado = `${nombreLimpio}${fechaFormateada}`;
+  
+  if (idGenerado.length > 100) {
+    idGenerado = idGenerado.substring(0, 100);
+  }
+  
+  console.log('🔑 ID de solicitud generado:', idGenerado);
+  return idGenerado;
+}
+
+// ============================================
+// 🔥 FUNCIÓN PARA GENERAR ID PERSONALIZADO DE PRÉSTAMO
+// ============================================
+function generarIdPrestamo(clienteNombre, fechaPrestamo) {
+  const nombreLimpio = clienteNombre
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[^a-z0-9]/g, '');
+  
+  let fecha;
+  if (fechaPrestamo instanceof Date) {
+    fecha = fechaPrestamo;
+  } else if (typeof fechaPrestamo === 'string') {
+    fecha = new Date(fechaPrestamo);
+  } else {
+    fecha = new Date();
+  }
+  
+  const dia = fecha.getDate();
+  const mes = fecha.getMonth() + 1;
+  const año = fecha.getFullYear().toString().slice(-2);
+  
+  const fechaFormateada = `${dia}-${mes}-${año}`;
+  
+  let idGenerado = `${nombreLimpio}${fechaFormateada}`;
+  
+  if (idGenerado.length > 100) {
+    idGenerado = idGenerado.substring(0, 100);
+  }
+  
+  console.log('🔑 ID de préstamo generado:', idGenerado);
+  return idGenerado;
+}
+
+// ============================================
+// 🔥 FUNCIÓN PARA CONVERTIR FECHA A STRING DD-MM-YYYY
+// ============================================
+function fechaToLocalString(fecha) {
+  if (!fecha) return null;
+  
+  let dateObj;
+  if (fecha instanceof Date) {
+    dateObj = fecha;
+  } else if (typeof fecha === 'string') {
+    if (/^\d{2}-\d{2}-\d{4}$/.test(fecha)) {
+      return fecha;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+      const [year, month, day] = fecha.split('-');
+      return `${day}-${month}-${year}`;
+    }
+    dateObj = new Date(fecha);
+  } else if (fecha && typeof fecha === 'object') {
+    if (fecha._seconds !== undefined) {
+      dateObj = new Date(fecha._seconds * 1000);
+    } else if (fecha.seconds !== undefined) {
+      dateObj = new Date(fecha.seconds * 1000);
+    } else if (fecha.toDate) {
+      dateObj = fecha.toDate();
+    } else {
+      dateObj = new Date(fecha);
+    }
+  } else {
+    dateObj = new Date(fecha);
+  }
+  
+  if (isNaN(dateObj.getTime())) {
+    const hoy = new Date();
+    const day = String(hoy.getDate()).padStart(2, '0');
+    const month = String(hoy.getMonth() + 1).padStart(2, '0');
+    const year = hoy.getFullYear();
+    return `${day}-${month}-${year}`;
+  }
+  
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const year = dateObj.getFullYear();
+  
+  return `${day}-${month}-${year}`;
+}
+
+// ============================================
+// 🔥 FUNCIÓN PARA CALCULAR PRIMERA FECHA DE PAGO (retorna string DD-MM-YYYY)
+// ============================================
+function calcularPrimeraFechaPagoString(fechaPrestamoStr, frecuencia, config = {}) {
+  let fecha;
+  if (typeof fechaPrestamoStr === 'string' && fechaPrestamoStr.includes('-')) {
+    const parts = fechaPrestamoStr.split('-');
+    if (parts[0].length === 4) {
+      fecha = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    } else {
+      fecha = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+    }
+  } else {
+    fecha = new Date(fechaPrestamoStr);
+  }
+  
   const dia = fecha.getDate();
   const mes = fecha.getMonth();
   const año = fecha.getFullYear();
   
-  console.log('📅 Calculando primera fecha de pago:');
-  console.log('  Fecha préstamo:', fecha.toLocaleDateString());
-  console.log('  Día:', dia);
-  console.log('  Frecuencia:', frecuencia);
+  let nuevaFecha;
   
   switch (frecuencia) {
     case 'diario':
-      const fechaDiaria = new Date(fecha);
-      fechaDiaria.setDate(dia + 1);
-      console.log('  Resultado (diario):', fechaDiaria.toLocaleDateString());
-      return fechaDiaria;
-      
+      nuevaFecha = new Date(fecha);
+      nuevaFecha.setDate(dia + 1);
+      break;
     case 'semanal':
-      const fechaSemanal = new Date(fecha);
-      fechaSemanal.setDate(dia + 7);
-      console.log('  Resultado (semanal):', fechaSemanal.toLocaleDateString());
-      return fechaSemanal;
-      
+      nuevaFecha = new Date(fecha);
+      nuevaFecha.setDate(dia + 7);
+      break;
     case 'quincenal':
       if (dia < 15) {
-        const fecha15 = new Date(año, mes, 15);
-        console.log(`  → Día ${dia} < 15, primera fecha: 15 del mismo mes (${fecha15.toLocaleDateString()})`);
-        return fecha15;
-      } 
-      else if (dia >= 15 && dia < 30) {
-        const fecha30 = new Date(año, mes, 30);
-        console.log(`  → Día ${dia} >= 15 y < 30, primera fecha: 30 del mismo mes (${fecha30.toLocaleDateString()})`);
-        return fecha30;
-      } 
-      else {
-        const fecha15Prox = new Date(año, mes + 1, 15);
-        console.log(`  → Día ${dia} >= 30, primera fecha: 15 del mes siguiente (${fecha15Prox.toLocaleDateString()})`);
-        return fecha15Prox;
+        nuevaFecha = new Date(año, mes, 15);
+      } else if (dia >= 15 && dia < 30) {
+        nuevaFecha = new Date(año, mes, 30);
+      } else {
+        nuevaFecha = new Date(año, mes + 1, 15);
       }
-      
+      break;
     case 'mensual':
       let diaPago = config.diaPagoPersonalizado || dia;
-      let fechaMensual = new Date(año, mes + 1, diaPago);
-      if (fechaMensual.getMonth() !== (mes + 1) % 12) {
-        fechaMensual = new Date(año, mes + 2, 0);
+      let mesNuevo = mes + 1;
+      let añoNuevo = año;
+      if (mesNuevo > 11) {
+        mesNuevo = 0;
+        añoNuevo++;
       }
-      console.log('  Resultado (mensual):', fechaMensual.toLocaleDateString());
-      return fechaMensual;
-      
-    case 'personalizado':
-      if (config.fechasPersonalizadas && config.fechasPersonalizadas.length > 0) {
-        const fechas = config.fechasPersonalizadas.map(f => new Date(f));
-        fechas.sort((a, b) => a - b);
-        for (const fechaPago of fechas) {
-          if (fechaPago > fecha) {
-            console.log('  Resultado (personalizado):', fechaPago.toLocaleDateString());
-            return fechaPago;
-          }
-        }
-        const primeraFecha = new Date(fechas[0]);
-        primeraFecha.setFullYear(primeraFecha.getFullYear() + 1);
-        console.log('  Resultado (personalizado - próximo año):', primeraFecha.toLocaleDateString());
-        return primeraFecha;
+      nuevaFecha = new Date(añoNuevo, mesNuevo, diaPago);
+      if (nuevaFecha.getMonth() !== mesNuevo % 12) {
+        nuevaFecha = new Date(añoNuevo, mesNuevo + 1, 0);
       }
-      const fechaDefault = new Date(fecha);
-      fechaDefault.setDate(dia + 30);
-      console.log('  Resultado (default):', fechaDefault.toLocaleDateString());
-      return fechaDefault;
-      
+      break;
     default:
-      const fechaDefault2 = new Date(fecha);
-      fechaDefault2.setDate(dia + 30);
-      return fechaDefault2;
+      nuevaFecha = new Date(fecha);
+      nuevaFecha.setDate(dia + 30);
   }
+  
+  const day = String(nuevaFecha.getDate()).padStart(2, '0');
+  const month = String(nuevaFecha.getMonth() + 1).padStart(2, '0');
+  const year = nuevaFecha.getFullYear();
+  
+  return `${day}-${month}-${year}`;
 }
 
+// ============================================
+// FUNCIÓN PARA CALCULAR SCORE
+// ============================================
+async function calcularScoreSolicitud(solicitud) {
+  let score = 0;
+  
+  const monto = Number(solicitud.montoSolicitado) || 0;
+  const sueldo = Number(solicitud.sueldoCliente) || 0;
+  const ratio = sueldo > 0 ? monto / sueldo : Infinity;
+  
+  if (ratio <= 0.3) score += 40;
+  else if (ratio <= 0.5) score += 30;
+  else if (ratio <= 0.7) score += 20;
+  else if (ratio <= 1) score += 10;
+
+  if (solicitud.lugarTrabajo && solicitud.puestoCliente) score += 15;
+  else if (solicitud.lugarTrabajo) score += 10;
+
+  if (solicitud.bancoCliente && solicitud.cuentaCliente && solicitud.tipoCuenta) score += 15;
+  else if (solicitud.bancoCliente) score += 10;
+
+  const garantias = { 'hipotecaria': 15, 'prendaria': 12, 'fiduciaria': 10, 'personal': 8, 'ninguna': 5 };
+  score += garantias[solicitud.garantia?.toLowerCase()] || 5;
+
+  const plazo = Number(solicitud.plazoMeses) || 0;
+  if (plazo === 0 || plazo <= 12) score += 15;
+  else if (plazo <= 24) score += 10;
+  else score += 5;
+
+  if (solicitud.fechaIngreso) {
+    const fechaIngreso = new Date(solicitud.fechaIngreso);
+    const hoy = new Date();
+    const diffTime = Math.abs(hoy - fechaIngreso);
+    const anosAntiguedad = diffTime / (1000 * 60 * 60 * 24 * 365.25);
+    
+    if (anosAntiguedad >= 3) score += 5;
+    else if (anosAntiguedad >= 1) score += 3;
+    else if (anosAntiguedad > 0) score += 1;
+  }
+
+  if (solicitud.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(solicitud.email)) score += 2;
+  if (solicitud.direccion && solicitud.direccion.length > 5) score += 2;
+  if (solicitud.provincia) score += 1;
+
+  return Math.min(100, Math.max(0, score));
+}
+
+// ============================================
 // GET /api/solicitudes/bancos - Obtener lista de bancos
+// ============================================
 router.get('/bancos', (req, res) => {
   res.json({
     success: true,
@@ -118,7 +285,9 @@ router.get('/bancos', (req, res) => {
   });
 });
 
+// ============================================
 // GET /api/solicitudes - Listar solicitudes
+// ============================================
 router.get('/', async (req, res) => {
   try {
     const { estado, empleadoID, fechaDesde, fechaHasta, montoMin, montoMax } = req.query;
@@ -174,7 +343,9 @@ router.get('/', async (req, res) => {
   }
 });
 
+// ============================================
 // GET /api/solicitudes/:id - Obtener solicitud específica
+// ============================================
 router.get('/:id', async (req, res) => {
   try {
     const doc = await db.collection('solicitudes').doc(req.params.id).get();
@@ -199,7 +370,9 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// ============================================
 // PUT /api/solicitudes/:id - Actualizar solicitud
+// ============================================
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -249,7 +422,9 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// POST /api/solicitudes - Crear nueva solicitud (MODIFICADO - CON NOTIFICACIÓN)
+// ============================================
+// POST /api/solicitudes - Crear nueva solicitud (CON ID PERSONALIZADO)
+// ============================================
 router.post('/', async (req, res) => {
   try {
     const solicitudData = req.body;
@@ -269,7 +444,9 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const docRef = db.collection('solicitudes').doc();
+    // Generar ID personalizado para la solicitud
+    const idPersonalizado = generarIdSolicitud(solicitud.clienteNombre, new Date());
+    const docRef = db.collection('solicitudes').doc(idPersonalizado);
     solicitud.id = docRef.id;
     solicitud.fechaSolicitud = new Date();
     solicitud.estado = 'pendiente';
@@ -304,7 +481,6 @@ router.post('/', async (req, res) => {
     console.log(`📱 WhatsApp Admin: ${whatsappLink}`);
     console.log(`✅ Solicitud creada con ID: ${solicitud.id}`);
 
-    // 🔥 NOTIFICACIÓN: Nueva solicitud (GUARDAR EN FIRESTORE)
     const clienteParaNotificacion = { id: null, nombre: solicitud.clienteNombre };
     await notificarNuevaSolicitud(solicitud, clienteParaNotificacion);
 
@@ -326,7 +502,9 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/solicitudes/:id/aprobar - Aprobar solicitud y crear préstamo (MODIFICADO CON COMISIONES Y NOTIFICACIÓN)
+// ============================================
+// PUT /api/solicitudes/:id/aprobar - Aprobar solicitud y crear préstamo (CON ID CLIENTE PERSONALIZADO)
+// ============================================
 router.put('/:id/aprobar', async (req, res) => {
   try {
     const { id } = req.params;
@@ -344,21 +522,11 @@ router.put('/:id/aprobar', async (req, res) => {
 
     console.log('🚀 [BACKEND] /aprobar llamado');
     console.log('📋 ID Solicitud:', id);
-    console.log('📝 Datos recibidos:', { 
-      montoAprobado, 
-      interesPercent, 
-      frecuencia, 
-      aprobadoPor,
-      generarComision,
-      garanteID,
-      porcentajeComision 
-    });
 
     const solicitudRef = db.collection('solicitudes').doc(id);
     const solicitudDoc = await solicitudRef.get();
 
     if (!solicitudDoc.exists) {
-      console.log('❌ Solicitud no encontrada');
       return res.status(404).json({
         success: false,
         error: 'Solicitud no encontrada'
@@ -366,90 +534,146 @@ router.put('/:id/aprobar', async (req, res) => {
     }
 
     const solicitudData = solicitudDoc.data();
-    console.log('📄 Datos de la solicitud:', {
-      id: solicitudData.id,
-      cliente: solicitudData.clienteNombre,
-      estado: solicitudData.estado,
-      montoSolicitado: solicitudData.montoSolicitado
-    });
 
     if (solicitudData.estado !== 'pendiente' && solicitudData.estado !== 'aprobado_cliente') {
-      console.log('❌ Estado incorrecto para aprobar:', solicitudData.estado);
       return res.status(400).json({
         success: false,
         error: 'La solicitud no puede ser aprobada en su estado actual'
       });
     }
 
-    // Crear el cliente si no existe
+    // ============================================
+    // 🔥 CREAR O ACTUALIZAR CLIENTE CON ID PERSONALIZADO (BASADO EN NOMBRE)
+    // ============================================
     let clienteID = solicitudData.clienteID;
+    
     if (!clienteID) {
-      console.log('🏢 Creando nuevo cliente...');
-      const clienteRef = db.collection('clientes').doc();
-      clienteID = clienteRef.id;
+      // Generar ID personalizado para el cliente (ej: "JuanPerez")
+      const idClientePersonalizado = generarIdCliente(solicitudData.clienteNombre);
+      const clienteRef = db.collection('clientes').doc(idClientePersonalizado);
+      clienteID = idClientePersonalizado;
       
       const clienteData = {
         id: clienteID,
         nombre: solicitudData.clienteNombre,
         cedula: solicitudData.cedula || '',
-        telefono: solicitudData.telefono,
+        telefono: solicitudData.telefono || '',
+        celular: solicitudData.telefono || '',
+        telefono2: solicitudData.telefono2 || '',
         email: solicitudData.email || '',
-        trabajo: solicitudData.lugarTrabajo,
-        puesto: solicitudData.puestoCliente || '',
-        sueldo: solicitudData.sueldoCliente || 0,
         direccion: solicitudData.direccion || '',
         provincia: solicitudData.provincia || '',
+        trabajo: solicitudData.lugarTrabajo || '',
+        puesto: solicitudData.puestoCliente || '',
+        sueldo: solicitudData.sueldoCliente || 0,
         fechaIngreso: solicitudData.fechaIngreso || null,
+        referenciaNombre: solicitudData.referenciaNombre || '',
+        referenciaTelefono: solicitudData.referenciaTelefono || '',
         activo: true,
-        fechaCreacion: new Date()
+        fechaCreacion: new Date(),
+        lugarTrabajo: solicitudData.lugarTrabajo || '',
+        puestoCliente: solicitudData.puestoCliente || '',
+        sueldoCliente: solicitudData.sueldoCliente || 0,
+        bancoCliente: solicitudData.bancoCliente || '',
+        cuentaCliente: solicitudData.cuentaCliente || '',
+        tipoCuenta: solicitudData.tipoCuenta || 'ahorro'
       };
 
       await clienteRef.set(clienteData);
-      console.log(`✅ Cliente creado con ID: ${clienteID}`);
+      console.log(`✅ Cliente creado con ID personalizado: ${clienteID}`);
+      console.log(`   - Nombre: ${clienteData.nombre}`);
+      console.log(`   - Teléfono: ${clienteData.telefono}`);
+      console.log(`   - Cédula: ${clienteData.cedula}`);
+      console.log(`   - Email: ${clienteData.email}`);
+      console.log(`   - Dirección: ${clienteData.direccion}`);
     } else {
-      console.log(`✅ Cliente existente con ID: ${clienteID}`);
+      // Verificar si el cliente existente tiene un ID automático, si es así, migrar a ID personalizado
+      const clienteExistenteRef = db.collection('clientes').doc(clienteID);
+      const clienteExistenteDoc = await clienteExistenteRef.get();
+      
+      if (clienteExistenteDoc.exists) {
+        // Si el ID es automático (ej: contiene caracteres aleatorios), migrar a ID personalizado
+        const idPersonalizadoCliente = generarIdCliente(solicitudData.clienteNombre);
+        
+        // Verificar si ya existe un cliente con el ID personalizado
+        const clientePersonalizadoRef = db.collection('clientes').doc(idPersonalizadoCliente);
+        const clientePersonalizadoDoc = await clientePersonalizadoRef.get();
+        
+        if (!clientePersonalizadoDoc.exists) {
+          // Migrar datos al nuevo ID personalizado
+          const clienteData = clienteExistenteDoc.data();
+          await clientePersonalizadoRef.set({ ...clienteData, id: idPersonalizadoCliente });
+          
+          // Actualizar solicitud con el nuevo clienteID
+          await solicitudRef.update({ clienteID: idPersonalizadoCliente });
+          clienteID = idPersonalizadoCliente;
+          
+          // Opcional: eliminar el documento antiguo
+          // await clienteExistenteRef.delete();
+          
+          console.log(`✅ Cliente migrado a ID personalizado: ${clienteID}`);
+        } else {
+          // Ya existe un cliente con ID personalizado, usar ese
+          clienteID = idPersonalizadoCliente;
+          await solicitudRef.update({ clienteID: clienteID });
+          console.log(`✅ Usando cliente existente con ID personalizado: ${clienteID}`);
+        }
+      } else {
+        console.log(`✅ Cliente existente con ID: ${clienteID}`);
+      }
     }
 
-    // Crear el préstamo con la fecha correcta
-    console.log('💰 Creando préstamo...');
-    const prestamoRef = db.collection('prestamos').doc();
+    // ============================================
+    // CREAR PRÉSTAMO CON ID PERSONALIZADO, CÉDULA Y TELÉFONO
+    // ============================================
+    const hoy = new Date();
+    const hoyDay = String(hoy.getDate()).padStart(2, '0');
+    const hoyMonth = String(hoy.getMonth() + 1).padStart(2, '0');
+    const hoyYear = hoy.getFullYear();
+    const fechaPrestamoStr = `${hoyDay}-${hoyMonth}-${hoyYear}`;
+    
     const montoFinal = parseFloat(montoAprobado) || parseFloat(solicitudData.montoSolicitado);
     const interesFinal = parseFloat(interesPercent) || 10;
     const frecuenciaFinal = frecuencia || solicitudData.frecuencia || 'quincenal';
-    const fechaPrestamo = new Date();
     
-    const primeraFechaPago = calcularPrimeraFechaPago(fechaPrestamo, frecuenciaFinal, {});
+    const primeraFechaPagoStr = calcularPrimeraFechaPagoString(fechaPrestamoStr, frecuenciaFinal, {});
+    const idPrestamoPersonalizado = generarIdPrestamo(solicitudData.clienteNombre, hoy);
+    
+    const prestamoRef = db.collection('prestamos').doc(idPrestamoPersonalizado);
     
     console.log('📊 Datos del préstamo a crear:');
+    console.log('  - ID Personalizado:', idPrestamoPersonalizado);
     console.log('  - Monto:', montoFinal);
     console.log('  - Interés:', interesFinal);
     console.log('  - Frecuencia:', frecuenciaFinal);
-    console.log('  - Fecha préstamo:', fechaPrestamo.toLocaleDateString());
-    console.log('  - Primera fecha pago:', primeraFechaPago.toLocaleDateString());
+    console.log('  - Fecha préstamo:', fechaPrestamoStr);
+    console.log('  - Primera fecha pago:', primeraFechaPagoStr);
+    console.log('  - Cédula cliente:', solicitudData.cedula);
+    console.log('  - Teléfono cliente:', solicitudData.telefono);
+    console.log('  - ID Cliente personalizado:', clienteID);
     console.log('  - Generar comisión:', generarComision);
-    console.log('  - Garante ID:', garanteID);
-    console.log('  - Porcentaje comisión:', porcentajeComision);
     
     const prestamoData = {
-      id: prestamoRef.id,
+      id: idPrestamoPersonalizado,
       clienteID: clienteID,
       clienteNombre: solicitudData.clienteNombre,
+      cedula: solicitudData.cedula || '',
+      telefonoCliente: solicitudData.telefono || '',
       montoPrestado: montoFinal,
       capitalRestante: montoFinal,
       interesPercent: interesFinal,
       frecuencia: frecuenciaFinal,
-      fechaPrestamo: fechaPrestamo,
+      fechaPrestamo: fechaPrestamoStr,
       estado: 'activo',
-      fechaProximoPago: primeraFechaPago,
+      fechaProximoPago: primeraFechaPagoStr,
       fechaUltimoPago: null,
       solicitudID: id,
-      telefonoCliente: solicitudData.telefono,
-      direccionCliente: solicitudData.direccion,
-      lugarTrabajo: solicitudData.lugarTrabajo,
-      puestoCliente: solicitudData.puestoCliente,
-      bancoCliente: solicitudData.bancoCliente,
-      cuentaCliente: solicitudData.cuentaCliente,
-      tipoCuenta: solicitudData.tipoCuenta,
+      direccionCliente: solicitudData.direccion || '',
+      lugarTrabajo: solicitudData.lugarTrabajo || '',
+      puestoCliente: solicitudData.puestoCliente || '',
+      bancoCliente: solicitudData.bancoCliente || '',
+      cuentaCliente: solicitudData.cuentaCliente || '',
+      tipoCuenta: solicitudData.tipoCuenta || 'ahorro',
       historialPagos: [],
       fechaActualizacion: new Date(),
       generarComision: generarComision || false,
@@ -459,10 +683,9 @@ router.put('/:id/aprobar', async (req, res) => {
     };
 
     await prestamoRef.set(prestamoData);
-    console.log(`✅ Préstamo creado con ID: ${prestamoRef.id}`);
+    console.log(`✅ Préstamo creado con ID: ${idPrestamoPersonalizado}`);
 
     // Actualizar la solicitud
-    console.log('🔄 Actualizando solicitud...');
     const actualizaciones = {
       estado: 'aprobada',
       aprobadoPor: aprobadoPor || 'admin',
@@ -472,13 +695,12 @@ router.put('/:id/aprobar', async (req, res) => {
       interesAprobado: interesFinal,
       frecuenciaAprobada: frecuenciaFinal,
       clienteID: clienteID,
-      prestamoId: prestamoRef.id
+      prestamoId: idPrestamoPersonalizado
     };
 
     await solicitudRef.update(actualizaciones);
-    console.log('✅ Solicitud actualizada');
 
-    // Generar notificación de aprobación para informar al cliente
+    // Generar notificación de aprobación
     const pagoEstimado = (montoFinal * interesFinal) / 100;
     const mensajeCliente = `✅ SOLICITUD APROBADA - EYS INVERSIONES
 
@@ -493,21 +715,17 @@ Su solicitud de préstamo ha sido APROBADA:
 📋 Detalles del préstamo:
 • Capital Inicial: RD$ ${montoFinal?.toLocaleString()}
 • Interés por periodo: RD$ ${pagoEstimado?.toLocaleString()}
-• Próximo pago: ${primeraFechaPago.toLocaleDateString()}
-
-💡 Recuerde: Cada pago cubre primero los intereses y luego reduce el capital.
-
-📞 Para más información, contáctenos.
+• ID Préstamo: ${idPrestamoPersonalizado}
 
 - EYS Inversiones - Confianza y Servicio`;
 
-    const whatsappCliente = `https://wa.me/1${solicitudData.telefono.replace(/\D/g, '')}?text=${encodeURIComponent(mensajeCliente)}`;
+    const whatsappCliente = `https://wa.me/1${solicitudData.telefono?.replace(/\D/g, '')}?text=${encodeURIComponent(mensajeCliente)}`;
 
     console.log(`✅ Solicitud aprobada: ${solicitudData.clienteNombre}`);
     console.log(`📱 WhatsApp Cliente: ${whatsappCliente}`);
-    console.log(`💰 Préstamo creado: ${prestamoRef.id}`);
+    console.log(`💰 Préstamo creado: ${idPrestamoPersonalizado}`);
+    console.log(`👤 Cliente ID personalizado: ${clienteID}`);
 
-    // 🔥 NOTIFICACIÓN: Solicitud aprobada (GUARDAR EN FIRESTORE)
     const clienteParaNotificacion = { id: clienteID, nombre: solicitudData.clienteNombre };
     await notificarSolicitudAprobada(solicitudData, clienteParaNotificacion);
 
@@ -516,7 +734,7 @@ Su solicitud de préstamo ha sido APROBADA:
       data: { 
         id, 
         ...actualizaciones,
-        prestamoId: prestamoRef.id,
+        prestamoId: idPrestamoPersonalizado,
         clienteID: clienteID
       },
       notificaciones: {
@@ -537,7 +755,9 @@ Su solicitud de préstamo ha sido APROBADA:
   }
 });
 
-// PUT /api/solicitudes/:id/rechazar - Rechazar solicitud (MODIFICADO - CON NOTIFICACIÓN)
+// ============================================
+// PUT /api/solicitudes/:id/rechazar - Rechazar solicitud
+// ============================================
 router.put('/:id/rechazar', async (req, res) => {
   try {
     const { id } = req.params;
@@ -590,7 +810,6 @@ Agradecemos su interés en nuestros servicios. Puede volver a solicitar en el fu
     console.log(`❌ Solicitud rechazada: ${solicitudData.clienteNombre}`);
     console.log(`📱 WhatsApp Cliente: ${whatsappCliente}`);
 
-    // 🔥 NOTIFICACIÓN: Solicitud rechazada (GUARDAR EN FIRESTORE)
     const clienteParaNotificacion = { id: solicitudData.clienteID, nombre: solicitudData.clienteNombre };
     await notificarSolicitudRechazada(solicitudData, clienteParaNotificacion, observaciones);
 
@@ -613,7 +832,9 @@ Agradecemos su interés en nuestros servicios. Puede volver a solicitar en el fu
   }
 });
 
+// ============================================
 // DELETE /api/solicitudes/:id - Eliminar solicitud
+// ============================================
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -652,7 +873,9 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// ============================================
 // GET /api/solicitudes/estadisticas/avanzadas - Estadísticas avanzadas
+// ============================================
 router.get('/estadisticas/avanzadas', async (req, res) => {
   try {
     const solicitudesSnapshot = await db.collection('solicitudes').get();
@@ -704,50 +927,5 @@ router.get('/estadisticas/avanzadas', async (req, res) => {
     });
   }
 });
-
-// Función para calcular score de la solicitud
-async function calcularScoreSolicitud(solicitud) {
-  let score = 0;
-  
-  const monto = Number(solicitud.montoSolicitado) || 0;
-  const sueldo = Number(solicitud.sueldoCliente) || 0;
-  const ratio = sueldo > 0 ? monto / sueldo : Infinity;
-  
-  if (ratio <= 0.3) score += 40;
-  else if (ratio <= 0.5) score += 30;
-  else if (ratio <= 0.7) score += 20;
-  else if (ratio <= 1) score += 10;
-
-  if (solicitud.lugarTrabajo && solicitud.puestoCliente) score += 15;
-  else if (solicitud.lugarTrabajo) score += 10;
-
-  if (solicitud.bancoCliente && solicitud.cuentaCliente && solicitud.tipoCuenta) score += 15;
-  else if (solicitud.bancoCliente) score += 10;
-
-  const garantias = { 'hipotecaria': 15, 'prendaria': 12, 'fiduciaria': 10, 'personal': 8, 'ninguna': 5 };
-  score += garantias[solicitud.garantia?.toLowerCase()] || 5;
-
-  const plazo = Number(solicitud.plazoMeses) || 0;
-  if (plazo === 0 || plazo <= 12) score += 15;
-  else if (plazo <= 24) score += 10;
-  else score += 5;
-
-  if (solicitud.fechaIngreso) {
-    const fechaIngreso = new Date(solicitud.fechaIngreso);
-    const hoy = new Date();
-    const diffTime = Math.abs(hoy - fechaIngreso);
-    const anosAntiguedad = diffTime / (1000 * 60 * 60 * 24 * 365.25);
-    
-    if (anosAntiguedad >= 3) score += 5;
-    else if (anosAntiguedad >= 1) score += 3;
-    else if (anosAntiguedad > 0) score += 1;
-  }
-
-  if (solicitud.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(solicitud.email)) score += 2;
-  if (solicitud.direccion && solicitud.direccion.length > 5) score += 2;
-  if (solicitud.provincia) score += 1;
-
-  return Math.min(100, Math.max(0, score));
-}
 
 module.exports = router;

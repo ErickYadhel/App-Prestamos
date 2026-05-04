@@ -31,12 +31,23 @@ import {
   LinkIcon,
   ClockIcon,
   UserIcon,
-  EnvelopeIcon
+  EnvelopeIcon,
+  CurrencyDollarIcon,
+  CalendarIcon,
+  BuildingOfficeIcon,
+  IdentificationIcon,
+  PhoneIcon,
+  BriefcaseIcon,
+  GiftIcon,
+  UserGroupIcon,
+  ChartBarIcon,
+  CalculatorIcon,
+  BanknotesIcon,
+  HomeIcon
 } from '@heroicons/react/24/outline';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy, where, getDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
-import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import { generarContratoPDF } from '../../utils/generateContratoPDF';
 
 // ============================================
 // MODAL PRINCIPAL PARA DOCUMENTOS
@@ -108,6 +119,15 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
     categoria: 'contratos',
     descripcion: '',
     cliente: '',
+    cedula: '',
+    telefono: '',
+    direccion: '',
+    montoSolicitado: '',
+    frecuencia: 'quincenal',
+    garanteNombre: '',
+    garanteCedula: '',
+    interes: 10,
+    fechaPrimerPago: '',
     archivo: '',
     tamano: '',
     formato: '',
@@ -160,7 +180,7 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
       newErrors.cliente = 'El cliente es requerido';
     }
     if (!formData.descripcion?.trim()) {
-      newErrors.descripcion = 'La descripción es requerida';
+      newErrors.descripcion = 'La descripcion es requerida';
     }
 
     setErrors(newErrors);
@@ -250,10 +270,10 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
 
             <div className="p-6 max-h-[70vh] overflow-y-auto">
               <div className="space-y-4">
-                {/* Información básica */}
+                {/* Informacion basica */}
                 <div className="space-y-4">
                   <h4 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                    Información del Documento
+                    Informacion del Documento
                   </h4>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -268,14 +288,14 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
                         className={`w-full px-3 py-2 rounded-lg border ${
                           errors.nombre ? 'border-red-500' : theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300'
                         } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all`}
-                        placeholder="Ej: Contrato de préstamo"
+                        placeholder="Ej: Contrato de prestamo"
                       />
                       {errors.nombre && <p className="text-red-500 text-xs mt-1">{errors.nombre}</p>}
                     </div>
 
                     <div>
                       <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                        Categoría
+                        Categoria
                       </label>
                       <select
                         value={formData.categoria}
@@ -287,7 +307,7 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
                         <option value="contratos">Contratos</option>
                         <option value="documentos_cliente">Documentos de Clientes</option>
                         <option value="expedientes">Expedientes</option>
-                        <option value="garantias">Garantías</option>
+                        <option value="garantias">Garantias</option>
                         <option value="otros">Otros</option>
                       </select>
                     </div>
@@ -306,6 +326,51 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
                         placeholder="Nombre del cliente"
                       />
                       {errors.cliente && <p className="text-red-500 text-xs mt-1">{errors.cliente}</p>}
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Cedula
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.cedula}
+                        onChange={(e) => setFormData({ ...formData, cedula: e.target.value })}
+                        className={`w-full px-3 py-2 rounded-lg border ${
+                          theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300'
+                        } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all`}
+                        placeholder="Cedula del cliente"
+                      />
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Telefono
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.telefono}
+                        onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                        className={`w-full px-3 py-2 rounded-lg border ${
+                          theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300'
+                        } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all`}
+                        placeholder="Telefono del cliente"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Direccion
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.direccion}
+                        onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+                        className={`w-full px-3 py-2 rounded-lg border ${
+                          theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300'
+                        } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all`}
+                        placeholder="Direccion del cliente"
+                      />
                     </div>
 
                     <div className="md:col-span-2">
@@ -330,7 +395,7 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
 
                     <div className="md:col-span-2">
                       <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                        Descripción *
+                        Descripcion *
                       </label>
                       <textarea
                         value={formData.descripcion}
@@ -339,9 +404,124 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
                         className={`w-full px-3 py-2 rounded-lg border ${
                           errors.descripcion ? 'border-red-500' : theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300'
                         } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all resize-none`}
-                        placeholder="Descripción del documento"
+                        placeholder="Descripcion del documento"
                       />
                       {errors.descripcion && <p className="text-red-500 text-xs mt-1">{errors.descripcion}</p>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detalles del Prestamo */}
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <h4 className={`text-lg font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    Detalles del Prestamo
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Monto Solicitado (RD$)
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.montoSolicitado}
+                        onChange={(e) => setFormData({ ...formData, montoSolicitado: e.target.value })}
+                        className={`w-full px-3 py-2 rounded-lg border ${
+                          theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300'
+                        } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all`}
+                        placeholder="0"
+                        min="0"
+                      />
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Frecuencia
+                      </label>
+                      <select
+                        value={formData.frecuencia}
+                        onChange={(e) => setFormData({ ...formData, frecuencia: e.target.value })}
+                        className={`w-full px-3 py-2 rounded-lg border ${
+                          theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300'
+                        } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all`}
+                      >
+                        <option value="diario">Diario</option>
+                        <option value="semanal">Semanal</option>
+                        <option value="quincenal">Quincenal</option>
+                        <option value="mensual">Mensual</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Tasa de Interes (%)
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.interes}
+                        onChange={(e) => setFormData({ ...formData, interes: e.target.value })}
+                        className={`w-full px-3 py-2 rounded-lg border ${
+                          theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300'
+                        } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all`}
+                        placeholder="10"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                      />
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Primera Fecha de Pago
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.fechaPrimerPago}
+                        onChange={(e) => setFormData({ ...formData, fechaPrimerPago: e.target.value })}
+                        className={`w-full px-3 py-2 rounded-lg border ${
+                          theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300'
+                        } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all`}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Garante */}
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <h4 className={`text-lg font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    <GiftIcon className="h-5 w-5 mr-2 text-purple-600" />
+                    Informacion del Garante
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Nombre del Garante
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.garanteNombre}
+                        onChange={(e) => setFormData({ ...formData, garanteNombre: e.target.value })}
+                        className={`w-full px-3 py-2 rounded-lg border ${
+                          theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300'
+                        } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all`}
+                        placeholder="Nombre del garante"
+                      />
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Cedula del Garante
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.garanteCedula}
+                        onChange={(e) => setFormData({ ...formData, garanteCedula: e.target.value })}
+                        className={`w-full px-3 py-2 rounded-lg border ${
+                          theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300'
+                        } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all`}
+                        placeholder="Cedula del garante"
+                      />
                     </div>
                   </div>
                 </div>
@@ -370,7 +550,7 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
 
                     <div>
                       <label className={`block text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                        Tamaño
+                        Tamano
                       </label>
                       <input
                         type="text"
@@ -508,7 +688,7 @@ const DocumentoEditorModal = ({ isOpen, onClose, documento, onSave, tipo }) => {
 // ============================================
 // MODAL PARA VER DETALLE DE DOCUMENTO
 // ============================================
-const DetalleDocumentoModal = ({ isOpen, onClose, documento, onAprobarCliente }) => {
+const DetalleDocumentoModal = ({ isOpen, onClose, documento, onAprobarCliente, onGenerarPDF }) => {
   const { theme } = useTheme();
   const { user } = useAuth();
   const [evidenciaFirma, setEvidenciaFirma] = useState(null);
@@ -554,7 +734,6 @@ const DetalleDocumentoModal = ({ isOpen, onClose, documento, onAprobarCliente })
     }
 
     try {
-      // Actualizar documento
       const documentoRef = doc(db, 'documentos', documento.id);
       await updateDoc(documentoRef, {
         estado: 'aprobado_cliente',
@@ -563,7 +742,6 @@ const DetalleDocumentoModal = ({ isOpen, onClose, documento, onAprobarCliente })
         aprobadoPor: user?.email
       });
 
-      // Actualizar solicitud asociada si existe
       if (documento.solicitudId) {
         const solicitudRef = doc(db, 'solicitudes', documento.solicitudId);
         await updateDoc(solicitudRef, {
@@ -573,7 +751,6 @@ const DetalleDocumentoModal = ({ isOpen, onClose, documento, onAprobarCliente })
         });
       }
 
-      // Enviar WhatsApp al administrador
       const mensaje = `✅ DOCUMENTO APROBADO POR EL CLIENTE - EYS Inversiones
 
 El cliente ${documento.cliente} ha firmado y aprobado el documento:
@@ -647,7 +824,6 @@ Puede revisar el documento en el sistema.
 
             <div className="p-6 max-h-[70vh] overflow-y-auto">
               <div className="space-y-6">
-                {/* Icono y tipo */}
                 <div className="flex items-center space-x-4">
                   <div className={`p-4 rounded-xl ${
                     theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
@@ -660,12 +836,11 @@ Puede revisar el documento en el sistema.
                       {documento?.categoria === 'contratos' ? 'Contrato' :
                        documento?.categoria === 'documentos_cliente' ? 'Documento de Cliente' :
                        documento?.categoria === 'expedientes' ? 'Expediente' :
-                       documento?.categoria === 'garantias' ? 'Garantía' : 'Documento'}
+                       documento?.categoria === 'garantias' ? 'Garantia' : 'Documento'}
                     </p>
                   </div>
                 </div>
 
-                {/* Estado */}
                 <div className={`p-4 rounded-lg ${
                   documento?.estado === 'aprobado_cliente' 
                     ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700'
@@ -686,10 +861,9 @@ Puede revisar el documento en el sistema.
                   </div>
                 </div>
 
-                {/* Información del documento */}
                 <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'} border border-purple-600/20`}>
                   <h4 className={`text-lg font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                    Información del Documento
+                    Informacion del Documento
                   </h4>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -698,60 +872,40 @@ Puede revisar el documento en el sistema.
                       <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento?.cliente}</p>
                     </div>
                     <div>
-                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Fecha de creación</p>
-                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{formatearFecha(documento?.fechaCreacion)}</p>
+                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Cedula</p>
+                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento?.cedula || 'No especificada'}</p>
                     </div>
-                    {documento?.solicitudId && (
-                      <div className="md:col-span-2">
-                        <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Solicitud Asociada</p>
-                        <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento.solicitudId}</p>
-                      </div>
-                    )}
+                    <div>
+                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Telefono</p>
+                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento?.telefono || 'No especificado'}</p>
+                    </div>
+                    <div>
+                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Direccion</p>
+                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento?.direccion || 'No especificada'}</p>
+                    </div>
+                    <div>
+                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Monto</p>
+                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>RD$ {documento?.montoSolicitado?.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Frecuencia</p>
+                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento?.frecuencia || 'quincenal'}</p>
+                    </div>
+                    <div>
+                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Interes</p>
+                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento?.interes || 10}%</p>
+                    </div>
+                    <div>
+                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Garante</p>
+                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento?.garanteNombre || 'No especificado'}</p>
+                    </div>
                     <div className="md:col-span-2">
-                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Descripción</p>
+                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Descripcion</p>
                       <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento?.descripcion}</p>
                     </div>
                   </div>
                 </div>
 
-                {/* Detalles del archivo */}
-                <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'} border border-purple-600/20`}>
-                  <h4 className={`text-lg font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                    Detalles del Archivo
-                  </h4>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Formato</p>
-                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento?.formato || 'No especificado'}</p>
-                    </div>
-                    <div>
-                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Tamaño</p>
-                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento?.tamano || 'No especificado'}</p>
-                    </div>
-                    <div>
-                      <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Creado por</p>
-                      <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{documento?.creadoPor || 'Sistema'}</p>
-                    </div>
-                  </div>
-
-                  {documento?.archivo && (
-                    <div className="mt-4">
-                      <p className={`text-sm mb-2 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>URL del archivo</p>
-                      <a
-                        href={documento.archivo}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-purple-600 hover:text-purple-700 dark:text-purple-400 break-all flex items-center space-x-1"
-                      >
-                        <LinkIcon className="h-4 w-4" />
-                        <span>{documento.archivo}</span>
-                      </a>
-                    </div>
-                  )}
-                </div>
-
-                {/* Etiquetas */}
                 {documento?.etiquetas?.length > 0 && (
                   <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'} border border-purple-600/20`}>
                     <h4 className={`text-lg font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
@@ -771,7 +925,6 @@ Puede revisar el documento en el sistema.
                   </div>
                 )}
 
-                {/* Sección de firma para clientes */}
                 {documento?.estado === 'pendiente' && !mostrarFirma && (
                   <div className={`p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800`}>
                     <div className="flex items-start">
@@ -781,7 +934,7 @@ Puede revisar el documento en el sistema.
                           Este documento requiere su firma
                         </h4>
                         <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                          Por favor, revise el documento y confirme su aprobación subiendo la evidencia de firma.
+                          Por favor, revise el documento y confirme su aprobacion subiendo la evidencia de firma.
                         </p>
                         <button
                           onClick={() => setMostrarFirma(true)}
@@ -794,11 +947,10 @@ Puede revisar el documento en el sistema.
                   </div>
                 )}
 
-                {/* Formulario de firma */}
                 {mostrarFirma && (
                   <div className={`p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800`}>
                     <h4 className={`text-sm font-medium mb-3 ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-800'}`}>
-                      Aprobación del Documento
+                      Aprobacion del Documento
                     </h4>
                     <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
                       Por favor, suba la evidencia de la firma (PDF, imagen del contrato firmado, o captura de pantalla)
@@ -856,8 +1008,15 @@ Puede revisar el documento en el sistema.
                 </a>
               )}
               <button
+                onClick={() => onGenerarPDF(documento)}
+                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg font-medium hover:shadow-lg transition-all flex items-center space-x-2"
+              >
+                <DocumentTextIcon className="h-4 w-4" />
+                <span>Generar Contrato de Prestamo</span>
+              </button>
+              <button
                 onClick={onClose}
-                className="px-6 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg font-medium hover:shadow-lg transition-all"
+                className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-medium hover:shadow-lg transition-all"
               >
                 Cerrar
               </button>
@@ -872,7 +1031,7 @@ Puede revisar el documento en el sistema.
 // ============================================
 // TARJETA DE DOCUMENTO
 // ============================================
-const DocumentoCard = ({ documento, onVer, onEditar, onEliminar, onFirmar }) => {
+const DocumentoCard = ({ documento, onVer, onEditar, onEliminar, onFirmar, onGenerarPDF }) => {
   const { theme } = useTheme();
 
   const getIconoPorCategoria = (categoria) => {
@@ -894,7 +1053,8 @@ const DocumentoCard = ({ documento, onVer, onEditar, onEliminar, onFirmar }) => 
       whileHover={{ scale: 1.02 }}
       className={`relative overflow-hidden rounded-xl border ${
         theme === 'dark' ? 'bg-gray-800/90 border-gray-700' : 'bg-white border-gray-200'
-      } shadow-lg`}
+      } shadow-lg cursor-pointer`}
+      onClick={() => onVer(documento)}
     >
       <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-purple-500 to-purple-700" />
       
@@ -921,40 +1081,53 @@ const DocumentoCard = ({ documento, onVer, onEditar, onEliminar, onFirmar }) => 
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           {documento.cliente}
         </p>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-          {formatearFecha(documento.fechaCreacion)}
-        </p>
+        <div className="flex items-center text-xs text-gray-400 dark:text-gray-500 mt-2 space-x-3">
+          <span className="flex items-center">
+            <CurrencyDollarIcon className="h-3 w-3 mr-1" />
+            RD$ {documento.montoSolicitado?.toLocaleString()}
+          </span>
+          <span className="flex items-center">
+            <CalendarIcon className="h-3 w-3 mr-1" />
+            {formatearFecha(documento.fechaCreacion)}
+          </span>
+        </div>
 
         {necesitaFirma && (
-          <button
-            onClick={() => onFirmar(documento)}
-            className="mt-3 w-full py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            Firmar Documento
-          </button>
+          <div className="mt-3 text-xs text-yellow-600 dark:text-yellow-400 flex items-center">
+            <ExclamationTriangleIcon className="h-3 w-3 mr-1" />
+            Pendiente de firma
+          </div>
         )}
 
         <div className="flex justify-end space-x-2 mt-3">
           <button
-            onClick={() => onVer(documento)}
-            className="p-1 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
+            onClick={(e) => { e.stopPropagation(); onVer(documento); }}
+            className="p-1.5 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
             title="Ver detalles"
           >
             <EyeIcon className="h-4 w-4" />
           </button>
           <button
-            onClick={() => onEditar(documento)}
-            className="p-1 text-yellow-600 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 rounded transition-colors"
+            onClick={(e) => { e.stopPropagation(); onEditar(documento); }}
+            className="p-1.5 text-yellow-600 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 rounded transition-colors"
             title="Editar"
           >
             <PencilIcon className="h-4 w-4" />
           </button>
           <button
-            onClick={() => onEliminar(documento.id)}
-            className="p-1 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
+            onClick={(e) => { e.stopPropagation(); onEliminar(documento.id); }}
+            className="p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
             title="Eliminar"
           >
             <TrashIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onGenerarPDF(documento); }}
+            className="p-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors flex items-center space-x-1"
+            title="Generar Contrato de Prestamo"
+          >
+            <DocumentTextIcon className="h-4 w-4" />
+            <span className="text-xs hidden sm:inline">Contrato</span>
           </button>
         </div>
       </div>
@@ -1029,7 +1202,7 @@ const Documentos = () => {
 
   // Eliminar documento
   const eliminarDocumento = async (id) => {
-    if (!window.confirm('¿Estás seguro de eliminar este documento?')) return;
+    if (!window.confirm('¿Estas seguro de eliminar este documento?')) return;
 
     try {
       await deleteDoc(doc(db, 'documentos', id));
@@ -1046,6 +1219,69 @@ const Documentos = () => {
   const handleAprobarCliente = async (documento) => {
     setDocumentoSeleccionado(documento);
     setDetalleAbierto(true);
+  };
+
+  // ============================================
+  // GENERAR CONTRATO DE PRESTAMO PDF
+  // ============================================
+  const generarPDFContrato = async (documento) => {
+    console.log('📄 Generando CONTRATO DE PRESTAMO para:', documento.cliente);
+    console.log('📋 Datos del documento:', documento);
+    
+    if (!documento.cliente) {
+      alert('Error: No se encontro el nombre del cliente');
+      return;
+    }
+    
+    try {
+      let datosContrato = {
+        clienteNombre: documento.cliente,
+        cedula: documento.cedula || 'No especificada',
+        telefono: documento.telefono || 'No especificado',
+        direccion: documento.direccion || 'No especificada',
+        monto: documento.montoSolicitado || 0,
+        interes: documento.interes || 10,
+        frecuencia: documento.frecuencia || 'quincenal',
+        fechaInicio: new Date().toLocaleDateString(),
+        fechaPrimerPago: documento.fechaPrimerPago || new Date().toLocaleDateString(),
+        garanteNombre: documento.garanteNombre || 'No especificado',
+        garanteCedula: documento.garanteCedula || 'No especificada'
+      };
+      
+      // Si tiene solicitudId, buscar mas datos
+      if (documento.solicitudId) {
+        const solicitudRef = doc(db, 'solicitudes', documento.solicitudId);
+        const solicitudSnap = await getDoc(solicitudRef);
+        if (solicitudSnap.exists()) {
+          const solicitudData = solicitudSnap.data();
+          console.log('📋 Datos complementarios de la solicitud:', solicitudData);
+          
+          datosContrato = {
+            ...datosContrato,
+            cedula: solicitudData.cedula || datosContrato.cedula,
+            telefono: solicitudData.telefono || datosContrato.telefono,
+            direccion: solicitudData.direccion || datosContrato.direccion,
+            monto: solicitudData.montoSolicitado || datosContrato.monto,
+            interes: solicitudData.interesAprobado || datosContrato.interes,
+            frecuencia: solicitudData.frecuenciaAprobada || solicitudData.frecuencia || datosContrato.frecuencia,
+            garanteNombre: solicitudData.garanteNombre || datosContrato.garanteNombre
+          };
+        }
+      }
+      
+      console.log('📊 Datos para el contrato:', datosContrato);
+      
+      const pdf = await generarContratoPDF(datosContrato);
+      pdf.save(`Documento De Prestamo - ${documento.cliente}.pdf`);
+      
+      setExito(`✅ Contrato generado para ${documento.cliente}`);
+      setTimeout(() => setExito(''), 3000);
+      
+    } catch (error) {
+      console.error('Error generando contrato:', error);
+      setError('Error al generar el contrato: ' + error.message);
+      setTimeout(() => setError(''), 3000);
+    }
   };
 
   // Filtrar documentos
@@ -1068,7 +1304,7 @@ const Documentos = () => {
     { id: 'contratos', nombre: 'Contratos', icon: DocumentTextIcon, count: documentos.filter(d => d.categoria === 'contratos').length },
     { id: 'documentos_cliente', nombre: 'Documentos de Clientes', icon: FolderIcon, count: documentos.filter(d => d.categoria === 'documentos_cliente').length },
     { id: 'expedientes', nombre: 'Expedientes', icon: FolderOpenIcon, count: documentos.filter(d => d.categoria === 'expedientes').length },
-    { id: 'garantias', nombre: 'Garantías', icon: ShieldCheckIcon, count: documentos.filter(d => d.categoria === 'garantias').length }
+    { id: 'garantias', nombre: 'Garantias', icon: ShieldCheckIcon, count: documentos.filter(d => d.categoria === 'garantias').length }
   ];
 
   return (
@@ -1081,7 +1317,7 @@ const Documentos = () => {
           </div>
           <div>
             <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-              Gestión Documental
+              Gestion Documental
             </h3>
             <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
               Administra todos los documentos del sistema
@@ -1128,7 +1364,7 @@ const Documentos = () => {
         )}
       </AnimatePresence>
 
-      {/* Categorías */}
+      {/* Categorias */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {categorias.map((categoria) => {
           const Icon = categoria.icon;
@@ -1161,7 +1397,7 @@ const Documentos = () => {
         })}
       </div>
 
-      {/* Filtros y búsqueda */}
+      {/* Filtros y busqueda */}
       <div className="flex flex-wrap gap-4">
         <div className="flex-1 min-w-[200px]">
           <div className="relative">
@@ -1185,11 +1421,11 @@ const Documentos = () => {
             theme === 'dark' ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'
           } focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all`}
         >
-          <option value="todos">Todas las categorías</option>
+          <option value="todos">Todas las categorias</option>
           <option value="contratos">Contratos</option>
           <option value="documentos_cliente">Documentos de Clientes</option>
           <option value="expedientes">Expedientes</option>
-          <option value="garantias">Garantías</option>
+          <option value="garantias">Garantias</option>
         </select>
 
         <select
@@ -1255,6 +1491,7 @@ const Documentos = () => {
               }}
               onEliminar={eliminarDocumento}
               onFirmar={handleAprobarCliente}
+              onGenerarPDF={generarPDFContrato}
             />
           ))}
         </div>
@@ -1282,6 +1519,7 @@ const Documentos = () => {
           cargarDocumentos();
           setDetalleAbierto(false);
         }}
+        onGenerarPDF={generarPDFContrato}
       />
     </div>
   );

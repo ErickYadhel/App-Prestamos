@@ -42,6 +42,7 @@ import SolicitudForm from '../components/Solicitudes/SolicitudForm';
 import SolicitudDetails from '../components/Solicitudes/SolicitudDetails';
 import AprobarSolicitudModal from '../components/Solicitudes/AprobarSolicitudModal';
 import { normalizeFirebaseData, firebaseTimestampToLocalString } from '../utils/firebaseUtils';
+import { generarContratoPDF } from '../utils/generateContratoPDF';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -700,6 +701,33 @@ const crearFormularioYDocumento = async (solicitudData, solicitudId, user) => {
 };
 
 // ============================================
+// 🔥 FUNCIÓN PARA GENERAR CONTRATO PDF
+// ============================================
+const generarContratoPDFManual = (solicitudData) => {
+  console.log('📄 Generando contrato PDF para:', solicitudData.clienteNombre);
+  
+  const datosContrato = {
+    clienteNombre: solicitudData.clienteNombre,
+    cedula: solicitudData.cedula || 'No especificada',
+    telefono: solicitudData.telefono,
+    direccion: solicitudData.direccion || 'No especificada',
+    monto: solicitudData.montoSolicitado,
+    interes: 10,
+    frecuencia: solicitudData.frecuencia || 'quincenal',
+    fechaInicio: new Date().toLocaleDateString(),
+    fechaPrimerPago: new Date().toLocaleDateString(),
+    garanteNombre: solicitudData.garanteNombre || 'No especificado',
+    garanteCedula: solicitudData.garanteCedula || 'No especificada'
+  };
+  
+  const doc = generarContratoPDF(datosContrato);
+  doc.save(`Documento De Prestamo - ${solicitudData.clienteNombre}.pdf`);
+  
+  console.log('✅ Contrato PDF generado y descargado');
+  return true;
+};
+
+// ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
 const Solicitudes = () => {
@@ -966,6 +994,9 @@ const Solicitudes = () => {
     fetchEstadisticasAvanzadas();
   };
 
+  // ============================================
+  // 🔥 HANDLE SAVE SOLICITUD - CREAR SOLICITUD Y GENERAR PDF AUTOMÁTICAMENTE
+  // ============================================
   const handleSaveSolicitud = async (solicitudData) => {
     try {
       setError('');
@@ -987,6 +1018,7 @@ const Solicitudes = () => {
         setSuccess(message);
         
         if (!editingSolicitud && solicitudId) {
+          // Crear formulario y documento en Firestore
           const resultado = await crearFormularioYDocumento(solicitudData, solicitudId, user);
           
           if (resultado) {
@@ -996,8 +1028,12 @@ const Solicitudes = () => {
               id: solicitudId,
               documentoId: resultado.documentoId
             });
-            setShowNotificacionModal(true);
+            
+            // 🔥 GENERAR Y DESCARGAR CONTRATO PDF AUTOMÁTICAMENTE
+            generarContratoPDFManual(solicitudData);
           }
+          
+          setShowNotificacionModal(true);
         }
 
         setTimeout(() => setSuccess(''), 5000);

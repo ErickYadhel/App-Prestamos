@@ -45,9 +45,39 @@ import {
   BanknotesIcon,
   HomeIcon
 } from '@heroicons/react/24/outline';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy, where, getDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy, where, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { generarContratoPDF } from '../../utils/generateContratoPDF';
+
+// ============================================
+// 🔥 FUNCIÓN PARA GENERAR ID PERSONALIZADO DE DOCUMENTO
+// Formato: "Documento - JuanPerez3-4-26"
+// ============================================
+function generarIdDocumentoPersonalizado(clienteNombre, fecha = new Date()) {
+  // Limpiar nombre del cliente
+  const nombreLimpio = clienteNombre
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[^a-z0-9]/g, '');
+  
+  // Formatear fecha: D-M-YY
+  const dia = fecha.getDate();
+  const mes = fecha.getMonth() + 1;
+  const año = fecha.getFullYear().toString().slice(-2);
+  const fechaFormateada = `${dia}-${mes}-${año}`;
+  
+  // Generar ID final
+  let idGenerado = `Documento - ${nombreLimpio}${fechaFormateada}`;
+  
+  // Limitar longitud máxima
+  if (idGenerado.length > 100) {
+    idGenerado = idGenerado.substring(0, 100);
+  }
+  
+  console.log('🔑 ID de documento generado:', idGenerado);
+  return idGenerado;
+}
 
 // ============================================
 // MODAL PRINCIPAL PARA DOCUMENTOS
@@ -1081,6 +1111,12 @@ const DocumentoCard = ({ documento, onVer, onEditar, onEliminar, onFirmar, onGen
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           {documento.cliente}
         </p>
+        
+        {/* Mostrar ID personalizado */}
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 truncate">
+          ID: {documento.id}
+        </p>
+        
         <div className="flex items-center text-xs text-gray-400 dark:text-gray-500 mt-2 space-x-3">
           <span className="flex items-center">
             <CurrencyDollarIcon className="h-3 w-3 mr-1" />
@@ -1178,24 +1214,46 @@ const Documentos = () => {
     cargarDocumentos();
   }, []);
 
-  // Guardar documento
+  // ============================================
+  // 🔥 GUARDAR DOCUMENTO CON ID PERSONALIZADO
+  // ============================================
   const guardarDocumento = async (formData) => {
     try {
       if (formData.id) {
+        // Actualizar documento existente
         const documentoRef = doc(db, 'documentos', formData.id);
         await updateDoc(documentoRef, formData);
         setExito('Documento actualizado exitosamente');
       } else {
-        const documentosRef = collection(db, 'documentos');
-        await addDoc(documentosRef, formData);
-        setExito('Documento creado exitosamente');
+        // Crear nuevo documento con ID PERSONALIZADO
+        const clienteNombre = formData.cliente || formData.clienteNombre || 'Cliente';
+        const idPersonalizado = generarIdDocumentoPersonalizado(clienteNombre, new Date());
+        
+        // Verificar si ya existe un documento con ese ID
+        const docRef = doc(db, 'documentos', idPersonalizado);
+        const docSnap = await getDoc(docRef);
+        
+        let documentoId;
+        
+        if (docSnap.exists()) {
+          // Si ya existe, agregar timestamp para hacerlo único
+          const timestamp = Date.now();
+          documentoId = `${idPersonalizado}_${timestamp}`;
+          const nuevoDocRef = doc(db, 'documentos', documentoId);
+          await setDoc(nuevoDocRef, { ...formData, id: documentoId });
+          setExito(`Documento creado con ID: ${documentoId}`);
+        } else {
+          documentoId = idPersonalizado;
+          await setDoc(docRef, { ...formData, id: documentoId });
+          setExito(`Documento creado con ID: ${documentoId}`);
+        }
       }
       
       setTimeout(() => setExito(''), 3000);
       await cargarDocumentos();
     } catch (error) {
       console.error('Error guardando documento:', error);
-      setError('Error al guardar el documento');
+      setError('Error al guardar el documento: ' + error.message);
       throw error;
     }
   };

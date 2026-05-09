@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 // ─────────────────────────────────────────────────────────────
 
 const determinarGenero = (nombre) => {
-  if (!nombre) return { deudor: 'DEUDOR', elLa: 'EL', le: 'LE', cliente: 'Senor' };
+  if (!nombre) return { deudor: 'DEUDOR', elLa: 'EL', le: 'LE', cliente: 'Señor' };
   const n = nombre.toLowerCase();
   const femeninos = [
     'maria','josefina','ana','rosa','marta','lucia','carmen','isabel',
@@ -18,7 +18,7 @@ const determinarGenero = (nombre) => {
     deudor  : esFemenino ? 'DEUDORA'  : 'DEUDOR',
     elLa    : esFemenino ? 'LA'       : 'EL',
     le      : 'LE',
-    cliente : esFemenino ? 'Senora'   : 'Senor'
+    cliente : esFemenino ? 'Senora'   : 'Señor'
   };
 };
 
@@ -244,16 +244,16 @@ export const generarContratoPDF = (datos) => {
   y = writeRichParagraph(doc, [
     { text: 'Este documento de prestamo (en adelante, el "Acuerdo") se celebra en la fecha ' },
     { text: fechaHoy, bold: true },
-    { text: ', por y entre S&E Inversiones (' },
+    { text: ', por y entre EYS Inversiones (' },
     { text: 'Erick Perez', bold: true },
     { text: '), con domicilio en Santo Domingo, D.N, y la ' + genero.cliente + ' ' },
     { text: nombreCliente, bold: true },
     { text: ', Dominicana, mayor de edad portador de la cedula de identidad y electoral No. ' },
     { text: cedula, bold: true },
-    { text: ' (en adelante, la "Deudora"), con domicilio en ' },
+    { text: ' (en adelante, El "Deudor"), con domicilio en ' },
     { text: direccion, bold: true },
     { text: ' persona en lo adelante del presente contrato se denomina como ' },
-    { text: 'LA ' + genero.deudor, bold: true },
+    { text: 'EL ' + genero.deudor, bold: true },
     { text: ' o por su nombre completo;' },
   ], ML, CW, y, 9.5);
   y += 3;
@@ -264,10 +264,11 @@ export const generarContratoPDF = (datos) => {
   if (tieneGarante) {
     y = cb(y, 16);
     y = writeRichParagraph(doc, [
-      { text: 'Y el senor ' },
+      { text: 'Y el señor ' },
       { text: datos.garanteNombre, bold: true },
       { text: ', de nacionalidad Dominicana, Mayor de edad portador de la cedula No. ' },
-      { text: datos.garanteCedula || 'No especificada', bold: true },
+      { text: '402-3911953-7', bold: true },
+//*      { text: datos.garanteCedula || '402-3911953-7', bold: true }, *//
       { text: ', quien en lo adelante se denominara ' },
       { text: 'El Fiador Solidario', bold: true },
       { text: '.' },
@@ -291,7 +292,7 @@ export const generarContratoPDF = (datos) => {
   y = cb(y, 22);
   y = writeRichParagraph(doc, [
     { text: 'Por cuanto: ' },
-    { text: 'Erick Perez (S&E Inversiones)', bold: true },
+    { text: 'Erick Perez (EYS Inversiones)', bold: true },
     { text: ' Ha manifestado su intencion de otorgarle a ' },
     { text: genero.elLa + ' ' + genero.deudor, bold: true },
     { text: ' el prestamo solicitado, sujeto a los terminos y condiciones que se establece en el presente contrato. Por tanto, y en el entendido de que el anterior preambulo forma parte integrante del presente Acto, las partes; Han convenido y pactado las siguientes condiciones:' },
@@ -344,9 +345,9 @@ export const generarContratoPDF = (datos) => {
       cuerpo: [
         { text: 'Fiador Solidario. - ' },
         { text: genero.deudor, bold: true },
-        { text: ' presenta como fiador solidario al senor ' },
+        { text: ' presenta como fiador solidario al señor ' },
         { text: datos.garanteNombre, bold: true },
-        { text: ', de generales que consta en el presente documento, quien acepta y asume todas las obligaciones contraidas por la deudora, en caso de que este dejara de cumplirlas.' },
+        { text: ', de generales que consta en el presente documento, quien acepta y asume todas las obligaciones contraidas por el deudor, en caso de que este dejara de cumplirlas.' },
       ]
     });
   }
@@ -361,12 +362,12 @@ export const generarContratoPDF = (datos) => {
     {
       num: tieneGarante ? '7.' : '6.', titulo: 'Causas de caducidad',
       cuerpo: [
-        { text: 'en caso de que La ' },
-        { text: 'DEUDORA', bold: true },
+        { text: 'en caso de que El ' },
+        { text: 'DEUDOR', bold: true },
         { text: ' dejare de cumplir cualesquiera de las obligaciones asumidas frente a ' },
-        { text: 'Erick Perez (S&E Inversiones)', bold: true },
+        { text: 'Erick Perez (EYS Inversiones)', bold: true },
         { text: ', el presente contrato quedara resuelto de pleno derecho, sin necesidad de ninguna formalidad judicial o extrajudicial y, en consecuencia, ' },
-        { text: 'LA DEUDORA', bold: true },
+        { text: 'EL DEUDOR', bold: true },
         { text: ' perdera Beneficio del termino y de las condiciones de pago acordadas, pudiendo ' },
         { text: 'Erick Perez', bold: true },
         { text: ' Exigir el pago inmediato de la suma adeudada en principal, intereses y comisiones, haciendose ejecutables las garantia consentidas en el presente contrato.' },
@@ -429,7 +430,7 @@ export const generarContratoPDF = (datos) => {
   doc.setFont('helvetica', 'normal');
   doc.text('Nombre: ', C_R, y);
   doc.setFont('helvetica', 'bold');
-  doc.text('Erick Perez (S&E Inversiones)', C_R + 20, y);
+  doc.text('Erick Perez (EYS Inversiones)', C_R + 20, y);
   y += LH;
 
   // Cedula
@@ -438,11 +439,6 @@ export const generarContratoPDF = (datos) => {
   doc.text('Cedula: ', C_L, y);
   doc.setFont('helvetica', 'bold');
   doc.text(cedula, C_L + 16, y);
-
-  doc.setFont('helvetica', 'normal');
-  doc.text('Cedula: ', C_R, y);
-  doc.setFont('helvetica', 'bold');
-  doc.text('001-1234567-8', C_R + 16, y);
   y += LH;
 
   // Fecha
@@ -485,7 +481,7 @@ export const generarContratoPDF = (datos) => {
     },
     {
       label: '3.',
-      texto: 'Guarda el PDF firmado y reenvíalo por WhatsApp a S&E Inversiones.'
+      texto: 'Guarda el PDF firmado y reenvíalo por WhatsApp a EYS Inversiones.'
     },
     {
       label: 'NOTA:',

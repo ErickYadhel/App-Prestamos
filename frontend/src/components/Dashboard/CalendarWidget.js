@@ -23,8 +23,9 @@ import {
   GiftIcon,
   MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
-import { collection, getDocs, query, orderBy, where, limit } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
+import { convertTimestampToDate, formatCurrency as formatCurrencyUtil } from './DateFormatter';
 
 // ============================================
 // CONSTANTES Y CONFIGURACIÓN
@@ -95,6 +96,44 @@ const COLORES_EVENTOS = {
 
 const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+// ============================================
+// FUNCIÓN PARA CONVERTIR FECHA DE FORMATO DD-MM-YYYY A DATE
+// ============================================
+const parseFechaDDMMYYYY = (fechaStr) => {
+  if (!fechaStr) return null;
+  
+  // Si ya es Date
+  if (fechaStr instanceof Date && !isNaN(fechaStr)) return fechaStr;
+  
+  // Si es string
+  if (typeof fechaStr === 'string') {
+    // Patrón DD-MM-YYYY
+    const patron = /^(\d{1,2})-(\d{1,2})-(\d{4})$/;
+    const match = fechaStr.match(patron);
+    if (match) {
+      const dia = parseInt(match[1], 10);
+      const mes = parseInt(match[2], 10) - 1;
+      const año = parseInt(match[3], 10);
+      const fecha = new Date(año, mes, dia);
+      if (!isNaN(fecha.getTime())) return fecha;
+    }
+    
+    // Patrón YYYY-MM-DD
+    const patronISO = /^(\d{4})-(\d{1,2})-(\d{1,2})$/;
+    const matchISO = fechaStr.match(patronISO);
+    if (matchISO) {
+      const año = parseInt(matchISO[1], 10);
+      const mes = parseInt(matchISO[2], 10) - 1;
+      const dia = parseInt(matchISO[3], 10);
+      const fecha = new Date(año, mes, dia);
+      if (!isNaN(fecha.getTime())) return fecha;
+    }
+  }
+  
+  // Usar convertTimestampToDate como fallback
+  return convertTimestampToDate(fechaStr);
+};
 
 // ============================================
 // COMPONENTES DE UI
@@ -225,18 +264,16 @@ const EventosDelDiaModal = ({ isOpen, onClose, fecha, eventos }) => {
   if (!isOpen) return null;
 
   const formatearMonto = (valor) => {
-    return new Intl.NumberFormat('es-DO', {
-      style: 'currency',
-      currency: 'DOP'
-    }).format(valor || 0);
+    return formatCurrencyUtil(valor);
   };
 
-  const fechaFormateada = fecha ? new Date(fecha).toLocaleDateString('es-DO', {
+  const fechaObj = parseFechaDDMMYYYY(fecha);
+  const fechaFormateada = fechaObj ? fechaObj.toLocaleDateString('es-DO', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric'
-  }) : '';
+  }) : 'Fecha no disponible';
 
   const totalRecaudado = eventos
     .filter(e => e.tipo === 'pago')
@@ -458,14 +495,25 @@ const EventoDetalleModal = ({ isOpen, onClose, evento }) => {
   if (!isOpen || !evento) return null;
 
   const formatearMonto = (valor) => {
-    return new Intl.NumberFormat('es-DO', {
-      style: 'currency',
-      currency: 'DOP'
-    }).format(valor || 0);
+    return formatCurrencyUtil(valor);
   };
 
   const estilo = COLORES_EVENTOS[evento?.tipo] || COLORES_EVENTOS.pago;
   const Icon = estilo.icono;
+
+  // Convertir fecha para mostrar correctamente
+  const fechaObj = evento?.fecha ? parseFechaDDMMYYYY(evento.fecha) : null;
+  const fechaFormateada = fechaObj ? fechaObj.toLocaleDateString('es-DO', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }) : 'Fecha no disponible';
+  
+  const horaFormateada = fechaObj ? fechaObj.toLocaleTimeString('es-DO', {
+    hour: '2-digit',
+    minute: '2-digit'
+  }) : '';
 
   return (
     <AnimatePresence>
@@ -518,19 +566,13 @@ const EventoDetalleModal = ({ isOpen, onClose, evento }) => {
                   <div className={`p-3 rounded-xl ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
                     <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Fecha</p>
                     <p className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      {new Date(evento.fecha).toLocaleDateString('es-DO', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
+                      {fechaFormateada}
                     </p>
-                    <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
-                      {new Date(evento.fecha).toLocaleTimeString('es-DO', {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </p>
+                    {horaFormateada && (
+                      <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                        {horaFormateada}
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -733,6 +775,36 @@ const CalendarWidget = () => {
     return capital + interes + mora;
   };
 
+  // Función para parsear fecha correctamente (soporta DD-MM-YYYY)
+  const parseFechaEvento = (fecha) => {
+    if (!fecha) return new Date();
+    
+    // Si ya es Date
+    if (fecha instanceof Date && !isNaN(fecha)) return fecha;
+    
+    // Si tiene método toDate (Firebase Timestamp)
+    if (fecha.toDate) return fecha.toDate();
+    
+    // Si es string en formato DD-MM-YYYY
+    if (typeof fecha === 'string') {
+      const patron = /^(\d{1,2})-(\d{1,2})-(\d{4})$/;
+      const match = fecha.match(patron);
+      if (match) {
+        const dia = parseInt(match[1], 10);
+        const mes = parseInt(match[2], 10) - 1;
+        const año = parseInt(match[3], 10);
+        const fechaObj = new Date(año, mes, dia);
+        if (!isNaN(fechaObj)) return fechaObj;
+      }
+      
+      // Intentar conversión estándar
+      const fechaObj = new Date(fecha);
+      if (!isNaN(fechaObj)) return fechaObj;
+    }
+    
+    return new Date(fecha);
+  };
+
   // Función para ir al día de hoy con lupa palpitante y marcado mejorado
   const irAlDiaDeHoy = async () => {
     setAnimandoHoy(true);
@@ -792,15 +864,21 @@ const CalendarWidget = () => {
     try {
       setLoading(true);
       
+      // Cargar pagos
       const pagosRef = collection(db, 'pagos');
       const pagosSnap = await getDocs(pagosRef);
       
-      const pagosEventos = pagosSnap.docs.map(doc => {
+      const pagosEventos = [];
+      pagosSnap.docs.forEach(doc => {
         const data = doc.data();
-        let fechaEvento = data.fechaPago;
-        if (fechaEvento?.toDate) fechaEvento = fechaEvento.toDate();
-        else if (fechaEvento) fechaEvento = new Date(fechaEvento);
-        else fechaEvento = new Date();
+        // Parsear fecha correctamente (soporta DD-MM-YYYY)
+        let fechaEvento = parseFechaEvento(data.fechaPago);
+        
+        // Verificar que la fecha sea válida
+        if (isNaN(fechaEvento.getTime())) {
+          console.warn('Fecha inválida en pago:', data.fechaPago);
+          fechaEvento = new Date();
+        }
         
         const montoTotal = calcularMontoTotalPago(data);
         const montoCapital = parseFloat(data.montoCapital) || 0;
@@ -818,7 +896,7 @@ const CalendarWidget = () => {
         if (montoInteres > 0) descripcion += ` Interés: ${formatearMonto(montoInteres)}.`;
         if (montoMora > 0) descripcion += ` Mora: ${formatearMonto(montoMora)}.`;
         
-        return {
+        pagosEventos.push({
           id: doc.id,
           tipo: 'pago',
           titulo: titulo,
@@ -829,9 +907,10 @@ const CalendarWidget = () => {
           montoInteres: montoInteres,
           montoMora: montoMora,
           descripcion: descripcion
-        };
+        });
       });
       
+      // Cargar préstamos
       const prestamosRef = collection(db, 'prestamos');
       const prestamosSnap = await getDocs(prestamosRef);
       
@@ -843,11 +922,12 @@ const CalendarWidget = () => {
       
       prestamosSnap.docs.forEach(doc => {
         const data = doc.data();
-        let fechaPrestamo = data.fechaPrestamo;
-        if (fechaPrestamo?.toDate) fechaPrestamo = fechaPrestamo.toDate();
-        else if (fechaPrestamo) fechaPrestamo = new Date(fechaPrestamo);
-        else fechaPrestamo = new Date();
         
+        // Parsear fecha de préstamo
+        let fechaPrestamo = parseFechaEvento(data.fechaPrestamo);
+        if (isNaN(fechaPrestamo.getTime())) fechaPrestamo = new Date();
+        
+        // Evento de desembolso (solo si está activo)
         if (data.estado === 'activo') {
           desembolsosEventos.push({
             id: `desembolso-${doc.id}`,
@@ -860,10 +940,10 @@ const CalendarWidget = () => {
           });
         }
         
+        // Calcular fecha de vencimiento
         let fechaVencimiento = null;
         if (data.fechaProximoPago) {
-          if (data.fechaProximoPago.toDate) fechaVencimiento = data.fechaProximoPago.toDate();
-          else fechaVencimiento = new Date(data.fechaProximoPago);
+          fechaVencimiento = parseFechaEvento(data.fechaProximoPago);
         } else if (fechaPrestamo) {
           fechaVencimiento = new Date(fechaPrestamo);
           if (data.frecuencia === 'quincenal') fechaVencimiento.setDate(fechaVencimiento.getDate() + 15);
@@ -871,7 +951,7 @@ const CalendarWidget = () => {
           else fechaVencimiento.setDate(fechaVencimiento.getDate() + 30);
         }
         
-        if (fechaVencimiento && data.estado === 'activo') {
+        if (fechaVencimiento && data.estado === 'activo' && !isNaN(fechaVencimiento.getTime())) {
           const diasRestantes = Math.ceil((fechaVencimiento - hoy) / (1000 * 60 * 60 * 24));
           const capitalRestante = parseFloat(data.capitalRestante) || parseFloat(data.montoPrestado) || 0;
           
@@ -892,24 +972,32 @@ const CalendarWidget = () => {
       
       const todosEventos = [...pagosEventos, ...prestamosEventos, ...desembolsosEventos];
       
+      // Eliminar duplicados y fechas inválidas
       const eventosUnicos = [];
       const claves = new Set();
       todosEventos.forEach(evento => {
-        const clave = `${evento.tipo}-${evento.cliente}-${evento.fecha?.toDateString()}`;
+        // Verificar que la fecha sea válida
+        if (!evento.fecha || isNaN(evento.fecha.getTime())) {
+          console.warn('Evento con fecha inválida:', evento);
+          return;
+        }
+        
+        const clave = `${evento.tipo}-${evento.cliente}-${evento.fecha.toDateString()}`;
         if (!claves.has(clave)) {
           claves.add(clave);
           eventosUnicos.push(evento);
         }
       });
       
-      const eventosOrdenados = eventosUnicos.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+      // Ordenar por fecha
+      const eventosOrdenados = eventosUnicos.sort((a, b) => a.fecha - b.fecha);
+      console.log(`📅 Eventos cargados: ${eventosOrdenados.length}`);
       setEventos(eventosOrdenados);
       
       const year = fechaActual.getFullYear();
       const month = fechaActual.getMonth();
       const eventosDelMes = eventosOrdenados.filter(e => {
-        const fecha = new Date(e.fecha);
-        return fecha.getFullYear() === year && fecha.getMonth() === month;
+        return e.fecha.getFullYear() === year && e.fecha.getMonth() === month;
       });
       
       setEstadisticas({
@@ -947,9 +1035,7 @@ const CalendarWidget = () => {
     const month = fechaActual.getMonth();
     
     const primerDia = new Date(year, month, 1);
-    const ultimoDia = new Date(year, month + 1, 0);
-    
-    const diasEnMes = ultimoDia.getDate();
+    const diasEnMes = new Date(year, month + 1, 0).getDate();
     const diaSemanaInicio = primerDia.getDay();
     
     const dias = [];
@@ -957,31 +1043,52 @@ const CalendarWidget = () => {
     const mesAnterior = new Date(year, month, 0);
     const diasEnMesAnterior = mesAnterior.getDate();
     
+    // Días del mes anterior
     for (let i = diasMesAnterior - 1; i >= 0; i--) {
       const dia = diasEnMesAnterior - i;
       const fecha = new Date(year, month - 1, dia);
+      const fechaEventos = eventos.filter(e => {
+        if (!e.fecha || isNaN(e.fecha.getTime())) return false;
+        return e.fecha.getDate() === fecha.getDate() && 
+               e.fecha.getMonth() === fecha.getMonth() &&
+               e.fecha.getFullYear() === fecha.getFullYear();
+      });
       dias.push({
         dia, fecha, esMesActual: false,
-        eventos: eventos.filter(e => new Date(e.fecha).toDateString() === fecha.toDateString())
+        eventos: fechaEventos
       });
     }
     
+    // Días del mes actual
     for (let i = 1; i <= diasEnMes; i++) {
       const fecha = new Date(year, month, i);
       const esHoy = fecha.toDateString() === new Date().toDateString();
+      const fechaEventos = eventos.filter(e => {
+        if (!e.fecha || isNaN(e.fecha.getTime())) return false;
+        return e.fecha.getDate() === fecha.getDate() && 
+               e.fecha.getMonth() === fecha.getMonth() &&
+               e.fecha.getFullYear() === fecha.getFullYear();
+      });
       dias.push({
         dia: i, fecha, esMesActual: true, esHoy,
-        eventos: eventos.filter(e => new Date(e.fecha).toDateString() === fecha.toDateString())
+        eventos: fechaEventos
       });
     }
     
+    // Días del mes siguiente (para completar 42 días)
     const totalDiasMostrados = 42;
     const diasRestantes = totalDiasMostrados - dias.length;
     for (let i = 1; i <= diasRestantes; i++) {
       const fecha = new Date(year, month + 1, i);
+      const fechaEventos = eventos.filter(e => {
+        if (!e.fecha || isNaN(e.fecha.getTime())) return false;
+        return e.fecha.getDate() === fecha.getDate() && 
+               e.fecha.getMonth() === fecha.getMonth() &&
+               e.fecha.getFullYear() === fecha.getFullYear();
+      });
       dias.push({
         dia: i, fecha, esMesActual: false,
-        eventos: eventos.filter(e => new Date(e.fecha).toDateString() === fecha.toDateString())
+        eventos: fechaEventos
       });
     }
     
@@ -992,8 +1099,8 @@ const CalendarWidget = () => {
     const year = fechaActual.getFullYear();
     const month = fechaActual.getMonth();
     const eventosDelMes = eventos.filter(e => {
-      const fecha = new Date(e.fecha);
-      return fecha.getFullYear() === year && fecha.getMonth() === month;
+      if (!e.fecha || isNaN(e.fecha.getTime())) return false;
+      return e.fecha.getFullYear() === year && e.fecha.getMonth() === month;
     });
     
     setEstadisticas({

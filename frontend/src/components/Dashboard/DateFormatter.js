@@ -1,46 +1,83 @@
-// Utilidad para formatear fechas de Firebase Timestamp
+// Utilidad para formatear fechas de Firebase Timestamp y formato DD-MM-YYYY
 
 /**
- * Convierte cualquier formato de timestamp de Firebase a objeto Date
- * @param {any} timestamp - Timestamp de Firebase, string ISO, o Date
+ * Convierte cualquier formato de fecha a objeto Date
+ * Soporta:
+ * - Timestamp de Firebase (seconds/nanoseconds)
+ * - String ISO (YYYY-MM-DD)
+ * - String DD-MM-YYYY (formato dominicano)
+ * - Date object
+ * - Número (timestamp en ms)
+ * 
+ * @param {any} fecha - Fecha en cualquier formato soportado
  * @returns {Date|null} - Objeto Date o null si es inválido
  */
-export const convertTimestampToDate = (timestamp) => {
-  if (!timestamp) return null;
+export const convertTimestampToDate = (fecha) => {
+  if (!fecha) return null;
   
   try {
     // Si es timestamp de Firebase (con seconds y nanoseconds)
-    if (timestamp && typeof timestamp === 'object' && timestamp.seconds !== undefined) {
-      return new Date(timestamp.seconds * 1000);
+    if (fecha && typeof fecha === 'object' && fecha.seconds !== undefined) {
+      return new Date(fecha.seconds * 1000);
     }
     
-    // Si es timestamp en milisegundos (número)
-    if (typeof timestamp === 'number') {
-      const date = new Date(timestamp);
+    // Si es timestamp con _seconds (Firestore)
+    if (fecha && typeof fecha === 'object' && fecha._seconds !== undefined) {
+      return new Date(fecha._seconds * 1000);
+    }
+    
+    // Si es número (timestamp en milisegundos)
+    if (typeof fecha === 'number') {
+      const date = new Date(fecha);
       return isNaN(date.getTime()) ? null : date;
     }
     
-    // Si es string ISO
-    if (typeof timestamp === 'string') {
-      const date = new Date(timestamp);
-      return isNaN(date.getTime()) ? null : date;
+    // Si ya es Date object
+    if (fecha instanceof Date) {
+      return isNaN(fecha.getTime()) ? null : fecha;
     }
     
-    // Si ya es Date
-    if (timestamp instanceof Date) {
-      return isNaN(timestamp.getTime()) ? null : timestamp;
+    // Si es string
+    if (typeof fecha === 'string') {
+      // 🔥 FORMATO DD-MM-YYYY (ej: 09-05-2026)
+      const patronDDMMYYYY = /^(\d{1,2})-(\d{1,2})-(\d{4})$/;
+      const matchDDMMYYYY = fecha.match(patronDDMMYYYY);
+      
+      if (matchDDMMYYYY) {
+        const dia = parseInt(matchDDMMYYYY[1], 10);
+        const mes = parseInt(matchDDMMYYYY[2], 10) - 1;
+        const año = parseInt(matchDDMMYYYY[3], 10);
+        const date = new Date(año, mes, dia);
+        if (!isNaN(date.getTime())) {
+          return date;
+        }
+      }
+      
+      // Formato YYYY-MM-DD (ISO)
+      if (fecha.includes('-') && fecha[4] === '-') {
+        const date = new Date(fecha);
+        if (!isNaN(date.getTime())) {
+          return date;
+        }
+      }
+      
+      // Intento genérico
+      const date = new Date(fecha);
+      if (!isNaN(date.getTime())) {
+        return date;
+      }
     }
     
     return null;
   } catch (error) {
-    console.error('Error convirtiendo timestamp:', error);
+    console.error('Error convirtiendo fecha:', error, fecha);
     return null;
   }
 };
 
 /**
  * Formatea una fecha para mostrar en el dashboard
- * @param {any} timestamp - Timestamp de Firebase, string ISO, o Date
+ * @param {any} timestamp - Timestamp de Firebase, string DD-MM-YYYY, o Date
  * @returns {Object} - Objeto con fecha, hora y objeto Date
  */
 export const formatFirebaseDate = (timestamp) => {
@@ -79,7 +116,7 @@ export const formatFirebaseDate = (timestamp) => {
 
 /**
  * Formato corto de fecha (dd/mm/yyyy)
- * @param {any} timestamp - Timestamp de Firebase, string ISO, o Date
+ * @param {any} timestamp - Timestamp de Firebase, string DD-MM-YYYY, o Date
  * @returns {string} - Fecha en formato dd/mm/yyyy
  */
 export const formatShortDate = (timestamp) => {
@@ -95,7 +132,7 @@ export const formatShortDate = (timestamp) => {
 
 /**
  * Formato de fecha con hora (dd/mm/yyyy HH:MM)
- * @param {any} timestamp - Timestamp de Firebase, string ISO, o Date
+ * @param {any} timestamp - Timestamp de Firebase, string DD-MM-YYYY, o Date
  * @returns {string} - Fecha y hora formateada
  */
 export const formatDateTime = (timestamp) => {
@@ -114,7 +151,7 @@ export const formatDateTime = (timestamp) => {
 
 /**
  * Obtiene tiempo relativo (hace X días, hoy, mañana, en X días)
- * @param {any} timestamp - Timestamp de Firebase, string ISO, o Date
+ * @param {any} timestamp - Timestamp de Firebase, string DD-MM-YYYY, o Date
  * @returns {string} - Texto descriptivo del tiempo relativo
  */
 export const getRelativeTime = (timestamp) => {
@@ -123,9 +160,10 @@ export const getRelativeTime = (timestamp) => {
   
   const now = new Date();
   now.setHours(0, 0, 0, 0);
-  date.setHours(0, 0, 0, 0);
+  const fechaComparar = new Date(date);
+  fechaComparar.setHours(0, 0, 0, 0);
   
-  const diffTime = date - now;
+  const diffTime = fechaComparar - now;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
   if (diffDays < 0) {
@@ -261,6 +299,70 @@ export const getEndOfYear = (date) => {
   return new Date(date.getFullYear(), 11, 31, 23, 59, 59, 999);
 };
 
+/**
+ * Convierte fecha a string en formato DD-MM-YYYY
+ * @param {any} fecha - Fecha a convertir
+ * @returns {string} - Fecha en formato DD-MM-YYYY
+ */
+export const toDDMMYYYY = (fecha) => {
+  const date = convertTimestampToDate(fecha);
+  if (!date) return '';
+  
+  const dia = String(date.getDate()).padStart(2, '0');
+  const mes = String(date.getMonth() + 1).padStart(2, '0');
+  const año = date.getFullYear();
+  
+  return `${dia}-${mes}-${año}`;
+};
+
+/**
+ * Convierte string DD-MM-YYYY a formato YYYY-MM-DD para inputs date
+ * @param {string} fechaDDMMYYYY - Fecha en formato DD-MM-YYYY
+ * @returns {string} - Fecha en formato YYYY-MM-DD
+ */
+export const toYYYYMMDD = (fechaDDMMYYYY) => {
+  if (!fechaDDMMYYYY || typeof fechaDDMMYYYY !== 'string') return '';
+  
+  const patron = /^(\d{1,2})-(\d{1,2})-(\d{4})$/;
+  const match = fechaDDMMYYYY.match(patron);
+  
+  if (match) {
+    const dia = match[1].padStart(2, '0');
+    const mes = match[2].padStart(2, '0');
+    const año = match[3];
+    return `${año}-${mes}-${dia}`;
+  }
+  
+  return fechaDDMMYYYY;
+};
+
+/**
+ * Formatea un monto en moneda dominicana
+ * @param {number} monto - Monto a formatear
+ * @returns {string} - Monto formateado (ej: RD$ 1,234.56)
+ */
+export const formatCurrency = (monto) => {
+  if (monto === undefined || monto === null || isNaN(monto)) return 'RD$ 0';
+  return new Intl.NumberFormat('es-DO', {
+    style: 'currency',
+    currency: 'DOP',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(monto);
+};
+
+/**
+ * Formatea un número en formato abreviado (K, M)
+ * @param {number} numero - Número a formatear
+ * @returns {string} - Número formateado (ej: 1.5K, 2.3M)
+ */
+export const formatCompactNumber = (numero) => {
+  if (numero === undefined || numero === null || isNaN(numero)) return '0';
+  if (numero >= 1000000) return `${(numero / 1000000).toFixed(1)}M`;
+  if (numero >= 1000) return `${(numero / 1000).toFixed(1)}K`;
+  return numero.toString();
+};
+
 // Exportar un objeto con todas las funciones para facilitar imports
 const DateFormatter = {
   convertTimestampToDate,
@@ -277,7 +379,11 @@ const DateFormatter = {
   getStartOfMonth,
   getEndOfMonth,
   getStartOfYear,
-  getEndOfYear
+  getEndOfYear,
+  toDDMMYYYY,
+  toYYYYMMDD,
+  formatCurrency,
+  formatCompactNumber
 };
 
 export default DateFormatter;

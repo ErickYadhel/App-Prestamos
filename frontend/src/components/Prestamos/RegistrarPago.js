@@ -25,7 +25,7 @@ import {
 import { formatFecha, toLocalDateString, toInputDateString } from '../../utils/firebaseUtils';
 
 // ============================================
-// FUNCIÓN PARA FORMATEAR MONTO (mejorada)
+// FUNCIÓN PARA FORMATEAR MONTO
 // ============================================
 const formatMonto = (valor) => {
   if (valor === null || valor === undefined || valor === '') return '';
@@ -38,45 +38,70 @@ const formatMonto = (valor) => {
 };
 
 // ============================================
-// COMPONENTE DE INPUT CON FORMATO DE MONTO
+// COMPONENTE DE INPUT CON FORMATO DE MONTO (CORREGIDO)
 // ============================================
 const MontoInput = ({ value, onChange, label, error, disabled, placeholder, className = '' }) => {
   const { theme } = useTheme();
   const [displayValue, setDisplayValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
 
+  // Actualizar display cuando value cambia desde fuera
   useEffect(() => {
     if (!isFocused) {
-      setDisplayValue(value ? formatMonto(value) : '');
+      if (value === undefined || value === null || value === 0) {
+        setDisplayValue('');
+      } else {
+        const numero = typeof value === 'number' ? value : parseFloat(value);
+        if (!isNaN(numero) && numero !== 0) {
+          setDisplayValue(formatMonto(numero));
+        } else {
+          setDisplayValue('');
+        }
+      }
     }
   }, [value, isFocused]);
 
   const handleChange = (e) => {
     const rawValue = e.target.value;
-    const numeros = rawValue.replace(/[^0-9]/g, '');
-    const numero = parseFloat(numeros) / 100;
     
-    if (!isNaN(numero)) {
-      const formateado = formatMonto(numero);
-      setDisplayValue(formateado);
-      onChange(numero);
-    } else if (rawValue === '') {
-      setDisplayValue('');
-      onChange(0);
+    // Limpiar: solo números y punto decimal
+    let cleanValue = rawValue.replace(/[^0-9.]/g, '');
+    
+    // Manejar múltiples puntos decimales
+    const parts = cleanValue.split('.');
+    if (parts.length > 2) {
+      cleanValue = parts[0] + '.' + parts.slice(1).join('');
     }
+    
+    // Convertir a número
+    let numero = parseFloat(cleanValue);
+    
+    if (isNaN(numero)) {
+      numero = 0;
+    }
+    
+    // Actualizar el valor en el estado padre
+    onChange(numero);
+    
+    // Actualizar display (sin formato durante edición)
+    setDisplayValue(rawValue);
   };
 
   const handleFocus = () => {
     setIsFocused(true);
-    if (value) {
+    // Al hacer focus, mostrar el número sin formato para editar
+    if (value && value !== 0) {
       setDisplayValue(value.toString());
     }
   };
 
   const handleBlur = () => {
     setIsFocused(false);
-    if (value) {
+    // Al perder focus, formatear el número
+    if (value && value !== 0) {
       setDisplayValue(formatMonto(value));
+    } else {
+      setDisplayValue('');
     }
   };
 
@@ -113,7 +138,7 @@ const MontoInput = ({ value, onChange, label, error, disabled, placeholder, clas
 };
 
 // ============================================
-// COMPONENTE DE DISTRIBUCIÓN DEL PAGO (MEJORADO)
+// COMPONENTE DE DISTRIBUCIÓN DEL PAGO
 // ============================================
 const DistribucionPago = ({ distribucion, configMora, prestamo }) => {
   const { theme } = useTheme();
@@ -261,7 +286,7 @@ const DistribucionPago = ({ distribucion, configMora, prestamo }) => {
 };
 
 // ============================================
-// COMPONENTE MODAL DE CONFIRMACIÓN (MEJORADO)
+// COMPONENTE MODAL DE CONFIRMACIÓN
 // ============================================
 const ConfirmacionPagoModal = ({ isOpen, onClose, pagoData, prestamo }) => {
   const { theme } = useTheme();
@@ -388,29 +413,24 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
       let restoInteres = 0;
       let montoRestante = formData.montoTotal;
       
-      // Primero cubrir mora si hay días de atraso
       if (calculosAvanzados.diasAtraso > 0 && configMora.enabled && calculosAvanzados.moraCalculada > 0) {
         moraAplicada = Math.min(montoRestante, calculosAvanzados.moraCalculada);
         montoRestante -= moraAplicada;
       }
       
-      // Luego cubrir interés del período
       if (montoRestante > 0) {
         interesAplicado = Math.min(montoRestante, interesPeriodo);
         montoRestante -= interesAplicado;
         
-        // Si sobra después de cubrir interés, va a capital
         if (montoRestante > 0) {
           capitalAplicado = Math.min(montoRestante, prestamo.capitalRestante);
           montoRestante -= capitalAplicado;
         }
         
-        // Si no se cubrió completamente el interés, guardar resto
         if (interesAplicado < interesPeriodo) {
           restoInteres = interesPeriodo - interesAplicado;
         }
       } else {
-        // Si el pago no cubre ni la mora, no hay interés aplicado
         restoInteres = interesPeriodo;
       }
       
@@ -435,23 +455,19 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
   // Calcular atraso y mora
   useEffect(() => {
     if (prestamo && formData.fechaPago) {
-      // 🔥 Convertir fecha de input (YYYY-MM-DD) a Date local
       const fechaPagoSeleccionada = (() => {
         const [year, month, day] = formData.fechaPago.split('-');
         return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
       })();
       
-      // 🔥 Convertir fecha esperada (puede ser DD-MM-YYYY o Date)
       const fechaEsperada = (() => {
         if (prestamo.fechaProximoPago) {
           if (typeof prestamo.fechaProximoPago === 'string' && prestamo.fechaProximoPago.includes('-')) {
             const parts = prestamo.fechaProximoPago.split('-');
             if (parts[0].length === 4) {
-              // YYYY-MM-DD
               const [y, m, d] = parts;
               return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
             } else {
-              // DD-MM-YYYY
               const [d, m, y] = parts;
               return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
             }
@@ -612,9 +628,6 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
     return Object.keys(newErrors).length === 0;
   };
 
-  // ============================================
-  // 🔥 HANDLE SUBMIT CORREGIDO - Enviar fecha como DD-MM-YYYY
-  // ============================================
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -624,7 +637,6 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
     setErrors({});
 
     try {
-      // 🔥 Convertir fecha de YYYY-MM-DD a DD-MM-YYYY
       let fechaPagoStr = formData.fechaPago;
       if (fechaPagoStr && fechaPagoStr.includes('-')) {
         const [year, month, day] = fechaPagoStr.split('-');
@@ -641,7 +653,7 @@ const RegistrarPago = ({ prestamo, onSave, onCancel, onClose, onPagoRegistrado }
       
       let datosPago = {
         prestamoID: prestamo.id,
-        fechaPago: fechaPagoStr, // Enviar como DD-MM-YYYY
+        fechaPago: fechaPagoStr,
         nota: formData.nota,
         tipoPago: formData.tipoPago,
         modoCalculo: formData.modoCalculo,

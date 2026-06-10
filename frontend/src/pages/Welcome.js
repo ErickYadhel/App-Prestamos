@@ -22,13 +22,7 @@ import {
   EnvelopeIcon,
   CalendarIcon
 } from '@heroicons/react/24/outline';
-
-// Versión del sistema
-const SISTEMA_VERSION = {
-  version: '2.0.0',
-  fecha: '2024-03-20',
-  nombre: 'EYS Inversiones - Sistema de Gestión de Préstamos'
-};
+import { getVersionFormatted, getFechaFormateada } from '../config/version';
 
 const Welcome = () => {
   const { user, updateUser } = useAuth();
@@ -483,7 +477,7 @@ const Welcome = () => {
                   </p>
                 </motion.div>
 
-                {/* Versión estable */}
+                {/* Versión estable - CON VERSIÓN Y FECHA */}
                 <motion.div
                   whileHover={{ y: -5 }}
                   initial={{ opacity: 0, y: 20 }}
@@ -506,12 +500,12 @@ const Welcome = () => {
                   <p className={`text-sm ${
                     theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
                   }`}>
-                    v{SISTEMA_VERSION.version}
+                    {getVersionFormatted()}
                   </p>
                   <p className={`text-xs mt-1 ${
                     theme === 'dark' ? 'text-gray-500' : 'text-gray-400'
                   }`}>
-                    {new Date(SISTEMA_VERSION.fecha).toLocaleDateString('es-DO')}
+                    📅 {getFechaFormateada()}
                   </p>
                 </motion.div>
               </div>
@@ -610,7 +604,7 @@ const Welcome = () => {
               </div>
 
               {/* Información adicional del usuario */}
-              <div className="grid grid-cols-1 md:grid-cols-100 gap-4 mb-8">
+              <div className="grid grid-cols-1 gap-4 mb-8">
                 <div className={`flex items-center space-x-3 p-3 rounded-xl ${
                   theme === 'dark' ? 'bg-gray-800/30' : 'bg-gray-100/30'
                 }`}>

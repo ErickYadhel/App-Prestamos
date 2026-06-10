@@ -27,6 +27,7 @@ import {
   ShowChart as ShowChartIcon
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
+import { getVersionFormatted } from '../config/version';
 
 // Logo fijo de la empresa
 const CompanyLogo = () => {
@@ -504,7 +505,7 @@ const Login = () => {
                     color: '#999999',
                   }}
                 >
-                  v2.0.0
+                  {getVersionFormatted()}
                 </Typography>
               </Box>
             </Box>

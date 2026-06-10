@@ -21,40 +21,10 @@ import {
   ClockIcon,
   TagIcon
 } from '@heroicons/react/24/outline';
+import { getVersionFormatted, getFechaFormateada } from '../config/version';
 
-// Versión del sistema
-const SISTEMA_VERSION = {
-  version: '2.0.0',
-  fecha: '2024-03-20',
-  nombre: 'EYS Inversiones - Sistema de Gestión de Préstamos',
-  descripcion: 'Plataforma integral para la gestión de préstamos personales, seguimiento de pagos y análisis financiero. Diseñada para optimizar los procesos de préstamos y mejorar la experiencia del usuario.',
-  tecnologias: [
-    { nombre: 'React 18', descripcion: 'Biblioteca para interfaces de usuario' },
-    { nombre: 'Tailwind CSS', descripcion: 'Framework de CSS utilitario' },
-    { nombre: 'Firebase', descripcion: 'Autenticación y base de datos en tiempo real' },
-    { nombre: 'Chart.js', descripcion: 'Gráficos interactivos' },
-    { nombre: 'Framer Motion', descripcion: 'Animaciones fluidas' },
-    { nombre: 'Heroicons', descripcion: 'Iconos profesionales' }
-  ],
-  modulos: [
-    { nombre: 'Dashboard', descripcion: 'Panel de control con métricas y gráficos en tiempo real', icono: ChartBarIcon },
-    { nombre: 'Clientes', descripcion: 'Gestión completa de clientes y sus datos personales', icono: UserGroupIcon },
-    { nombre: 'Préstamos', descripcion: 'Administración de préstamos, pagos y vencimientos', icono: CurrencyDollarIcon },
-    { nombre: 'Pagos', descripcion: 'Registro y seguimiento de pagos de capital e intereses', icono: DocumentTextIcon },
-    { nombre: 'Solicitudes', descripcion: 'Gestión de solicitudes de préstamos', icono: RocketLaunchIcon },
-    { nombre: 'Garantes', descripcion: 'Administración de garantes y avales', icono: ShieldCheckIcon }
-  ],
-  caracteristicas: [
-    'Registro de inicio de sesión con IP y navegador',
-    'Dashboard interactivo con filtros avanzados',
-    'Gráficos personalizables en tiempo real',
-    'Gestión completa de clientes y préstamos',
-    'Seguimiento de pagos y vencimientos',
-    'Reportes y análisis financieros',
-    'Tema oscuro/claro',
-    'Diseño responsive para móviles y tablets'
-  ]
-};
+// Versión del sistema (ahora importada desde config)
+// const SISTEMA_VERSION = { ... } ya no es necesario
 
 const Informacion = () => {
   const { theme } = useTheme();
@@ -146,7 +116,7 @@ const Informacion = () => {
                 <p className={`text-lg ${
                   theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
                 }`}>
-                  {SISTEMA_VERSION.nombre}
+                  EYS Inversiones - Sistema de Gestión de Préstamos
                 </p>
               </div>
 
@@ -167,12 +137,12 @@ const Informacion = () => {
                     <p className={`text-sm ${
                       theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
                     }`}>
-                      <span className="font-semibold">Versión:</span> v{SISTEMA_VERSION.version}
+                      <span className="font-semibold">Versión:</span> {getVersionFormatted()}
                     </p>
                     <p className={`text-sm ${
                       theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
                     }`}>
-                      <span className="font-semibold">Fecha de lanzamiento:</span> {new Date(SISTEMA_VERSION.fecha).toLocaleDateString('es-DO')}
+                      <span className="font-semibold">Fecha de lanzamiento:</span> {getFechaFormateada()}
                     </p>
                     <p className={`text-sm ${
                       theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
@@ -229,7 +199,8 @@ const Informacion = () => {
                 <p className={`text-sm leading-relaxed ${
                   theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
                 }`}>
-                  {SISTEMA_VERSION.descripcion}
+                  Plataforma integral para la gestión de préstamos personales, seguimiento de pagos y análisis financiero. 
+                  Diseñada para optimizar los procesos de préstamos y mejorar la experiencia del usuario.
                 </p>
               </div>
 
@@ -246,7 +217,14 @@ const Informacion = () => {
                   </h2>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {SISTEMA_VERSION.tecnologias.map((tech, index) => (
+                  {[
+                    { nombre: 'React 18', descripcion: 'Biblioteca para interfaces de usuario' },
+                    { nombre: 'Tailwind CSS', descripcion: 'Framework de CSS utilitario' },
+                    { nombre: 'Firebase', descripcion: 'Autenticación y base de datos en tiempo real' },
+                    { nombre: 'Chart.js', descripcion: 'Gráficos interactivos' },
+                    { nombre: 'Framer Motion', descripcion: 'Animaciones fluidas' },
+                    { nombre: 'Heroicons', descripcion: 'Iconos profesionales' }
+                  ].map((tech, index) => (
                     <div
                       key={index}
                       className={`flex items-center space-x-2 p-2 rounded-lg ${
@@ -284,7 +262,16 @@ const Informacion = () => {
                   </h2>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {SISTEMA_VERSION.caracteristicas.map((caracteristica, index) => (
+                  {[
+                    'Registro de inicio de sesión con IP y navegador',
+                    'Dashboard interactivo con filtros avanzados',
+                    'Gráficos personalizables en tiempo real',
+                    'Gestión completa de clientes y préstamos',
+                    'Seguimiento de pagos y vencimientos',
+                    'Reportes y análisis financieros',
+                    'Tema oscuro/claro',
+                    'Diseño responsive para móviles y tablets'
+                  ].map((caracteristica, index) => (
                     <div
                       key={index}
                       className={`flex items-center space-x-2 p-2 rounded-lg ${
@@ -315,7 +302,14 @@ const Informacion = () => {
                   </h2>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {SISTEMA_VERSION.modulos.map((modulo, index) => {
+                  {[
+                    { nombre: 'Dashboard', descripcion: 'Panel de control con métricas y gráficos en tiempo real', icono: ChartBarIcon },
+                    { nombre: 'Clientes', descripcion: 'Gestión completa de clientes y sus datos personales', icono: UserGroupIcon },
+                    { nombre: 'Préstamos', descripcion: 'Administración de préstamos, pagos y vencimientos', icono: CurrencyDollarIcon },
+                    { nombre: 'Pagos', descripcion: 'Registro y seguimiento de pagos de capital e intereses', icono: DocumentTextIcon },
+                    { nombre: 'Solicitudes', descripcion: 'Gestión de solicitudes de préstamos', icono: RocketLaunchIcon },
+                    { nombre: 'Garantes', descripcion: 'Administración de garantes y avales', icono: ShieldCheckIcon }
+                  ].map((modulo, index) => {
                     const IconComponent = modulo.icono;
                     return (
                       <div
@@ -375,7 +369,7 @@ const Informacion = () => {
                 <p className={`text-xs mt-1 ${
                   theme === 'dark' ? 'text-gray-500' : 'text-gray-400'
                 }`}>
-                  Versión v{SISTEMA_VERSION.version} | Última actualización: {new Date(SISTEMA_VERSION.fecha).toLocaleDateString('es-DO')}
+                  {getVersionFormatted()} | {getFechaFormateada()} | Sistema de Gestión de Préstamos
                 </p>
               </div>
             </div>

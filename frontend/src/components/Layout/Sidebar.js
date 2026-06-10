@@ -35,6 +35,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import PerfilModal from './PerfilModal';
 import NotificacionesPanel from './NotificacionesPanel';
+import { getVersionFormatted } from '../../config/version';
 
 const Sidebar = ({ children }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -800,6 +801,7 @@ const Sidebar = ({ children }) => {
                           </motion.button>
                         </div>
 
+                        {/* Versión actual - Usando configuración global */}
                         <div className="mt-4 text-center relative">
                           <div className="absolute inset-0 flex items-center justify-center">
                             <div className="w-full border-t border-red-500/30"></div>
@@ -807,7 +809,7 @@ const Sidebar = ({ children }) => {
                           <div className="relative flex justify-center">
                             <span className="px-3 bg-gradient-to-r from-red-600 to-red-800 text-red-200 text-xs rounded-full py-1 shadow-lg flex items-center">
                               <RocketLaunchIcon className="h-3 w-3 mr-1" />
-                              v2.0.0
+                              {getVersionFormatted()}
                             </span>
                           </div>
                         </div>

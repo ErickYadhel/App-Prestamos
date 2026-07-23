@@ -1841,6 +1841,16 @@ const Prestamos = () => {
             >
               🎁 Con Comisión ({stats.prestamosConComision})
             </button>
+            <button 
+              onClick={() => setFilters({ ...filters, tieneComision: 'no' })}
+              className={`px-2 sm:px-3 py-1 rounded-full text-xs transition-colors ${
+                theme === 'dark'
+                  ? 'bg-gray-600 text-gray-300 hover:bg-gray-500'
+                  : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+              }`}
+            >
+              🚫 Sin Comisión ({stats.totalPrestamos - stats.prestamosConComision})
+            </button>
           </div>
         </div>
       </div>

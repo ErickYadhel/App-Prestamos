@@ -34,12 +34,148 @@ import {
   FunnelIcon,
   CheckBadgeIcon,
   AcademicCapIcon,
-  BriefcaseIcon
+  BriefcaseIcon,
+  FireIcon,
+  CalculatorIcon
 } from '@heroicons/react/24/outline';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { collection, getDocs, query, orderBy, limit, updateDoc, doc, getDoc, deleteDoc, addDoc, Timestamp, where } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, updateDoc, doc, getDoc, deleteDoc, addDoc, Timestamp, where, setDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
+
+// ============================================
+// 🔥 FUNCIÓN PARA GENERAR ID PERSONALIZADO DE NOTIFICACIÓN
+// ============================================
+const generarIdNotificacion = (tipo, destinatario, fecha = new Date()) => {
+  const tipoLimpio = tipo
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[^a-z0-9]/g, '');
+  
+  const nombreLimpio = destinatario
+    ? destinatario
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, '')
+        .replace(/[^a-z0-9]/g, '')
+    : 'usuario';
+  
+  const dia = fecha.getDate();
+  const mes = fecha.getMonth() + 1;
+  const año = fecha.getFullYear().toString().slice(-2);
+  const fechaFormateada = `${dia}-${mes}-${año}`;
+  
+  let idGenerado = `${tipoLimpio}-${nombreLimpio}-${fechaFormateada}`;
+  
+  if (idGenerado.length > 100) {
+    idGenerado = idGenerado.substring(0, 100);
+  }
+  
+  return idGenerado;
+};
+
+// ============================================
+// 🔥 FUNCIÓN PARA CREAR NOTIFICACIÓN CON ID PERSONALIZADO
+// ============================================
+const crearNotificacionConIdPersonalizado = async (datosNotificacion) => {
+  try {
+    const { tipo, destinatario, fechaCreacion } = datosNotificacion;
+    const fecha = fechaCreacion ? new Date(fechaCreacion) : new Date();
+    const idPersonalizado = generarIdNotificacion(tipo, destinatario, fecha);
+    
+    const docRef = doc(db, 'notificaciones', idPersonalizado);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      return { id: idPersonalizado, yaExiste: true };
+    }
+    
+    await setDoc(docRef, {
+      ...datosNotificacion,
+      id: idPersonalizado,
+      fechaCreacion: fechaCreacion || new Date().toISOString(),
+      leida: false,
+      enviada: false,
+      intentos: 0,
+      whatsappEnviado: false
+    });
+    
+    return { id: idPersonalizado, yaExiste: false };
+  } catch (error) {
+    console.error('❌ Error creando notificación:', error);
+    throw error;
+  }
+};
+
+// ============================================
+// 🔥 FUNCIÓN PARA PARSEAR FECHA DD-MM-YYYY
+// ============================================
+const parseFechaDDMMYYYY = (fechaStr) => {
+  if (!fechaStr) return null;
+  
+  if (fechaStr instanceof Date && !isNaN(fechaStr)) return fechaStr;
+  if (fechaStr.toDate) return fechaStr.toDate();
+  
+  if (typeof fechaStr === 'string') {
+    const patron = /^(\d{1,2})-(\d{1,2})-(\d{4})$/;
+    const match = fechaStr.match(patron);
+    if (match) {
+      const dia = parseInt(match[1], 10);
+      const mes = parseInt(match[2], 10) - 1;
+      const año = parseInt(match[3], 10);
+      const fecha = new Date(año, mes, dia);
+      if (!isNaN(fecha.getTime())) return fecha;
+    }
+    
+    const patronISO = /^(\d{4})-(\d{1,2})-(\d{1,2})$/;
+    const matchISO = fechaStr.match(patronISO);
+    if (matchISO) {
+      const año = parseInt(matchISO[1], 10);
+      const mes = parseInt(matchISO[2], 10) - 1;
+      const dia = parseInt(matchISO[3], 10);
+      const fecha = new Date(año, mes, dia);
+      if (!isNaN(fecha.getTime())) return fecha;
+    }
+  }
+  
+  const fecha = new Date(fechaStr);
+  if (!isNaN(fecha.getTime())) return fecha;
+  
+  return null;
+};
+
+// ============================================
+// 🔥 FUNCIÓN PARA CALCULAR PERÍODOS DE MORA
+// ============================================
+const calcularPeriodosMora = (diasAtraso, frecuencia) => {
+  let periodos = 0;
+  let tipoPeriodo = 'días';
+  
+  switch(frecuencia) {
+    case 'diario':
+      periodos = diasAtraso;
+      tipoPeriodo = 'días';
+      break;
+    case 'semanal':
+      periodos = Math.floor(diasAtraso / 7);
+      tipoPeriodo = 'semanas';
+      break;
+    case 'quincenal':
+      periodos = Math.floor(diasAtraso / 15);
+      tipoPeriodo = 'quincenas';
+      break;
+    case 'mensual':
+      periodos = Math.floor(diasAtraso / 30);
+      tipoPeriodo = 'meses';
+      break;
+    default:
+      periodos = Math.floor(diasAtraso / 15);
+      tipoPeriodo = 'quincenas';
+  }
+  
+  return { periodos, tipoPeriodo, diasAtraso };
+};
 
 // ============================================
 // FUNCIÓN PARA FORMATEAR MONTO
@@ -79,6 +215,32 @@ const formatFechaRelativa = (fecha) => {
 };
 
 // ============================================
+// FUNCIÓN PARA OBTENER EL SIGUIENTE PERÍODO DE PAGO
+// ============================================
+const obtenerSiguienteFechaPago = (fechaPrestamo, frecuencia, fechasPersonalizadas = null) => {
+  const fecha = new Date(fechaPrestamo);
+  
+  switch(frecuencia) {
+    case 'diario':
+      fecha.setDate(fecha.getDate() + 1);
+      break;
+    case 'semanal':
+      fecha.setDate(fecha.getDate() + 7);
+      break;
+    case 'quincenal':
+      fecha.setDate(fecha.getDate() + 15);
+      break;
+    case 'mensual':
+      fecha.setMonth(fecha.getMonth() + 1);
+      break;
+    default:
+      fecha.setDate(fecha.getDate() + 15);
+  }
+  
+  return fecha;
+};
+
+// ============================================
 // COMPONENTE DE BORDE LUMINOSO
 // ============================================
 const BorderGlow = ({ children, isHovered, color = 'from-green-600 via-green-500 to-green-600' }) => (
@@ -96,7 +258,7 @@ const BorderGlow = ({ children, isHovered, color = 'from-green-600 via-green-500
 );
 
 // ============================================
-// COMPONENTE DE NOTIFICACIÓN INDIVIDUAL (RESPONSIVE)
+// COMPONENTE DE NOTIFICACIÓN INDIVIDUAL
 // ============================================
 const NotificacionItem = ({ notificacion, onClick, onEliminar, isSelected }) => {
   const { theme } = useTheme();
@@ -105,17 +267,23 @@ const NotificacionItem = ({ notificacion, onClick, onEliminar, isSelected }) => 
   const getIcono = () => {
     switch(notificacion.tipo) {
       case 'prestamo_vencido':
+      case 'mora':
         return <ExclamationTriangleIcon className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />;
       case 'pago_proximo':
+      case 'recordatorio_pago':
         return <ClockIcon className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500" />;
       case 'pago_registrado':
         return <CheckCircleIcon className="h-4 w-4 sm:h-5 sm:w-5 text-green-500" />;
       case 'comision_generada':
         return <GiftIcon className="h-4 w-4 sm:h-5 sm:w-5 text-purple-500" />;
+      case 'nueva_solicitud':
+        return <DocumentTextIcon className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />;
+      case 'nueva_version':
+        return <RocketLaunchIcon className="h-4 w-4 sm:h-5 sm:w-5 text-purple-500" />;
       case 'pago_recordatorio':
         return <BellIcon className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />;
       default:
-        return <BellIcon className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />;
+        return <BellIcon className="h-4 w-4 sm:h-5 sm:w-5 text-gray-500" />;
     }
   };
   
@@ -146,7 +314,7 @@ const NotificacionItem = ({ notificacion, onClick, onEliminar, isSelected }) => 
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-start justify-between gap-1 mb-1">
             <p className={`text-xs sm:text-sm font-semibold ${!notificacion.leida ? 'text-white' : 'text-gray-300'}`}>
-              {notificacion.tipo?.replace(/_/g, ' ').toUpperCase() || 'Notificación'}
+              {notificacion.titulo || notificacion.tipo?.replace(/_/g, ' ').toUpperCase() || 'Notificación'}
               {!notificacion.leida && (
                 <span className="ml-2 inline-block w-1.5 h-1.5 sm:w-2 sm:h-2 bg-red-500 rounded-full animate-pulse" />
               )}
@@ -198,6 +366,15 @@ const NotificacionItem = ({ notificacion, onClick, onEliminar, isSelected }) => 
                 </span>
               </div>
             )}
+            
+            {notificacion.id && (
+              <div className="flex items-center space-x-1">
+                <DocumentTextIcon className="h-2.5 w-2.5 text-gray-500" />
+                <span className="text-[8px] text-gray-500 truncate max-w-[80px]">
+                  {notificacion.id}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -206,7 +383,7 @@ const NotificacionItem = ({ notificacion, onClick, onEliminar, isSelected }) => 
 };
 
 // ============================================
-// MODAL PARA ENVIAR WHATSAPP (CORREGIDO - BUSCA POR NOMBRE)
+// 🔥 MODAL PARA ENVIAR WHATSAPP (CON CÁLCULO DE MORA MEJORADO)
 // ============================================
 const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
   const { theme } = useTheme();
@@ -217,13 +394,113 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
   const [cargando, setCargando] = useState(false);
   const [clienteInfo, setClienteInfo] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
+  const [prestamoInfo, setPrestamoInfo] = useState(null);
+  const [calculosMora, setCalculosMora] = useState(null);
 
   useEffect(() => {
     if (notificacion && isOpen) {
       setMensaje(notificacion.mensaje || '');
       buscarCliente();
+      if (notificacion.metadata?.prestamoID) {
+        cargarPrestamoInfo(notificacion.metadata.prestamoID);
+      }
     }
   }, [notificacion, isOpen]);
+
+  const cargarPrestamoInfo = async (prestamoID) => {
+    try {
+      const prestamoRef = doc(db, 'prestamos', prestamoID);
+      const prestamoSnap = await getDoc(prestamoRef);
+      
+      if (prestamoSnap.exists()) {
+        const data = prestamoSnap.data();
+        setPrestamoInfo({ id: prestamoID, ...data });
+        
+        // 🔥 Calcular períodos de mora si hay metadata
+        if (notificacion.metadata?.diasMora) {
+          const { periodos, tipoPeriodo, diasAtraso } = calcularPeriodosMora(
+            notificacion.metadata.diasMora,
+            data.frecuencia || 'quincenal'
+          );
+          
+          // Calcular el interés por período
+          const interesPorPeriodo = (data.capitalRestante || 0) * (data.interesPercent || 10) / 100;
+          const totalMora = periodos * interesPorPeriodo;
+          
+          setCalculosMora({
+            periodos,
+            tipoPeriodo,
+            diasAtraso,
+            interesPorPeriodo,
+            totalMora,
+            capitalRestante: data.capitalRestante || 0,
+            frecuencia: data.frecuencia || 'quincenal',
+            interesPercent: data.interesPercent || 10
+          });
+          
+          // 🔥 Generar mensaje mejorado con cálculos
+          if (notificacion.tipo === 'mora' || notificacion.tipo === 'prestamo_vencido') {
+            const mensajeMejorado = generarMensajeMoraConCalculos(
+              notificacion.destinatario || 'Cliente',
+              data,
+              notificacion.metadata.diasMora,
+              periodos,
+              tipoPeriodo,
+              interesPorPeriodo,
+              totalMora
+            );
+            setMensaje(mensajeMejorado);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error cargando préstamo:', error);
+    }
+  };
+
+  // ============================================
+  // 🔥 GENERAR MENSAJE DE MORA CON CÁLCULOS DETALLADOS
+  // ============================================
+  const generarMensajeMoraConCalculos = (nombre, prestamo, diasAtraso, periodos, tipoPeriodo, interesPorPeriodo, totalMora) => {
+    const fechaProximoPago = prestamo.fechaProximoPago 
+      ? parseFechaDDMMYYYY(prestamo.fechaProximoPago)?.toLocaleDateString('es-DO') 
+      : 'No disponible';
+    
+    const frecuenciaTexto = {
+      'diario': 'día',
+      'semanal': 'semana',
+      'quincenal': 'quincena',
+      'mensual': 'mes'
+    }[prestamo.frecuencia] || 'período';
+    
+    const frecuenciaCapitalizada = frecuenciaTexto.charAt(0).toUpperCase() + frecuenciaTexto.slice(1);
+    
+    return `⚠️ *ALERTA DE MORA* - EYS Inversiones
+
+Estimado(a) *${nombre}*,
+
+Su préstamo presenta un atraso de *${diasAtraso} días* (${periodos} ${tipoPeriodo}).
+
+📊 *Detalles del cálculo:*
+
+• Capital pendiente: ${formatMonto(prestamo.capitalRestante || 0)}
+• Tasa de interés: ${prestamo.interesPercent || 10}% ${frecuenciaTexto}
+• Interés por ${frecuenciaTexto}: ${formatMonto(interesPorPeriodo)}
+• Períodos atrasados: ${periodos} ${tipoPeriodo}
+• *Total a pagar por mora: ${formatMonto(totalMora)}*
+
+📅 *Próximo pago programado:* ${fechaProximoPago}
+
+💰 *Desglose del pago pendiente:*
+• Capital restante: ${formatMonto(prestamo.capitalRestante || 0)}
+• Interés acumulado (${periodos} ${tipoPeriodo}): ${formatMonto(totalMora)}
+• *Total adeudado: ${formatMonto((prestamo.capitalRestante || 0) + totalMora)}*
+
+🔔 *Acción requerida:*
+Realice su pago lo antes posible para evitar más cargos. Comuníquese con nosotros para más información.
+
+- EYS Inversiones`;
+  };
 
   const buscarCliente = async () => {
     setCargando(true);
@@ -232,37 +509,23 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
     setTelefono('');
 
     try {
-      // OBTENER DATOS DIRECTAMENTE DE LA NOTIFICACIÓN
       const clienteID = notificacion?.clienteID;
       const destinatario = notificacion?.destinatario;
       const telefonoNotificacion = notificacion?.telefono;
 
-      console.log('🔍 === DATOS DE LA NOTIFICACIÓN ===');
-      console.log('clienteID:', clienteID);
-      console.log('destinatario:', destinatario);
-      console.log('telefono en notificación:', telefonoNotificacion);
-
       let clienteEncontrado = null;
       let clienteData = null;
 
-      // MÉTODO 1: Buscar por clienteID en la colección "clientes"
       if (clienteID) {
-        console.log('🔍 Buscando por clienteID:', clienteID);
         const clienteDoc = await getDoc(doc(db, 'clientes', clienteID));
         
         if (clienteDoc.exists()) {
           clienteData = clienteDoc.data();
           clienteEncontrado = { id: clienteDoc.id, ...clienteData };
-          console.log('✅ Cliente encontrado por ID:', clienteEncontrado);
-        } else {
-          console.log('⚠️ No se encontró cliente con ID:', clienteID);
         }
       }
 
-      // MÉTODO 2: Si no se encontró por ID, buscar por NOMBRE (destinatario)
       if (!clienteEncontrado && destinatario) {
-        console.log('🔍 Buscando por nombre:', destinatario);
-        
         const clientesRef = collection(db, 'clientes');
         const querySnapshot = await getDocs(clientesRef);
         
@@ -274,23 +537,10 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
               nombreCliente.toLowerCase().includes(destinatario.toLowerCase()) ||
               destinatario.toLowerCase().includes(nombreCliente.toLowerCase())) {
             clienteEncontrado = { id: doc.id, ...data };
-            console.log('✅ Cliente encontrado por nombre:', clienteEncontrado);
           }
         });
       }
 
-      // MÉTODO 3: Si aún no se encuentra, listar todos los clientes para depuración
-      if (!clienteEncontrado) {
-        console.log('🔍 Listando todos los clientes disponibles:');
-        const clientesRef = collection(db, 'clientes');
-        const allClientes = await getDocs(clientesRef);
-        allClientes.forEach(doc => {
-          const data = doc.data();
-          console.log(`   - ${doc.id}: ${data.nombre} (${data.celular || 'sin teléfono'})`);
-        });
-      }
-
-      // Procesar resultados
       if (clienteEncontrado) {
         const telefonoReal = clienteEncontrado.celular || clienteEncontrado.telefono || telefonoNotificacion;
         
@@ -307,11 +557,9 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
         setTelefono(telefonoReal);
         
         if (!telefonoReal) {
-          setError(`El cliente "${clienteEncontrado.nombre}" no tiene número de teléfono registrado en Firestore`);
+          setError(`El cliente "${clienteEncontrado.nombre}" no tiene número de teléfono registrado`);
         }
       } else {
-        // Usar los datos de la notificación como fallback
-        console.log('⚠️ Usando datos de la notificación como fallback');
         setClienteInfo({
           nombre: destinatario || 'Cliente',
           telefono: telefonoNotificacion
@@ -320,8 +568,6 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
         
         if (!telefonoNotificacion) {
           setError(`No hay número de teléfono para ${destinatario || 'el destinatario'}`);
-        } else {
-          setError(`Cliente no encontrado en Firestore. Se usará el teléfono de la notificación: ${telefonoNotificacion}`);
         }
       }
       
@@ -362,6 +608,9 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
         enviada: true,
         fechaEnvio: new Date().toISOString()
       });
+
+      // 🔥 DISPARAR EVENTO PARA ACTUALIZAR LA LISTA PRINCIPAL
+      window.dispatchEvent(new CustomEvent('notificacion-enviada'));
 
       onEnviar && onEnviar(notificacion.id);
       onClose();
@@ -413,7 +662,7 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
                         Enviar por WhatsApp
                       </h3>
                       <p className={`text-[10px] sm:text-sm mt-0.5 sm:mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                        Confirma el mensaje antes de enviar
+                        {notificacion?.tipo === 'mora' ? 'Mensaje con cálculo de mora' : 'Confirma el mensaje antes de enviar'}
                       </p>
                     </div>
                   </div>
@@ -431,6 +680,7 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
               </div>
 
               <div className="p-3 sm:p-6 space-y-3 sm:space-y-6">
+                {/* Información del Destinatario */}
                 <div className={`p-3 sm:p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-100'} border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                   <div className="flex items-center space-x-2 mb-2 sm:mb-3">
                     <div className="p-1.5 bg-green-600 rounded-lg">
@@ -442,7 +692,7 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
                   {cargando ? (
                     <div className="flex items-center space-x-2">
                       <ArrowPathIcon className="h-3 w-3 sm:h-4 sm:w-4 animate-spin text-green-600" />
-                      <span className="text-xs sm:text-sm">Buscando información del cliente...</span>
+                      <span className="text-xs sm:text-sm">Buscando información...</span>
                     </div>
                   ) : clienteInfo ? (
                     <div className="space-y-1 sm:space-y-2">
@@ -463,18 +713,40 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
                           <span className="text-gray-500">Email:</span>
                           <p className="text-xs sm:text-sm truncate">{clienteInfo.email || 'N/A'}</p>
                         </div>
-                        {clienteInfo.trabajo && (
-                          <div className="sm:col-span-2">
-                            <span className="text-gray-500">Trabajo:</span>
-                            <p className="text-xs sm:text-sm">{clienteInfo.trabajo}</p>
-                          </div>
-                        )}
                       </div>
                     </div>
                   ) : (
                     <p className="text-red-500 text-xs sm:text-sm">{error || 'No se encontró información del cliente'}</p>
                   )}
                 </div>
+
+                {/* 🔥 Cálculo de Mora (si aplica) */}
+                {calculosMora && notificacion?.tipo === 'mora' && (
+                  <div className={`p-3 sm:p-4 rounded-xl ${theme === 'dark' ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-200'} border`}>
+                    <div className="flex items-center space-x-2 mb-2">
+                      <CalculatorIcon className="h-4 w-4 text-red-500" />
+                      <span className="text-xs sm:text-sm font-semibold text-red-600 dark:text-red-400">Cálculo de Mora</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs sm:text-sm">
+                      <div>
+                        <span className="text-gray-500">Días de atraso:</span>
+                        <p className="font-bold text-red-600">{calculosMora.diasAtraso} días</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Períodos atrasados:</span>
+                        <p className="font-bold text-orange-600">{calculosMora.periodos} {calculosMora.tipoPeriodo}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Interés por período:</span>
+                        <p className="font-bold text-yellow-600">{formatMonto(calculosMora.interesPorPeriodo)}</p>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <span className="text-gray-500">Total mora acumulada:</span>
+                        <p className="font-bold text-red-600 text-base">{formatMonto(calculosMora.totalMora)}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {error && (
                   <div className={`p-2 sm:p-3 rounded-lg text-xs sm:text-sm ${
@@ -485,14 +757,18 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
                   </div>
                 )}
 
+                {/* Mensaje */}
                 <div>
                   <label className={`block text-xs sm:text-sm font-medium mb-1 sm:mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                     Mensaje
+                    {calculosMora && notificacion?.tipo === 'mora' && (
+                      <span className="ml-2 text-green-500 text-[10px]">✓ Calculado automáticamente</span>
+                    )}
                   </label>
                   <textarea
                     value={mensaje}
                     onChange={(e) => setMensaje(e.target.value)}
-                    rows={5}
+                    rows={8}
                     className={`w-full px-3 sm:px-4 py-2 sm:py-3 rounded-lg border-2 text-xs sm:text-sm resize-none ${
                       theme === 'dark'
                         ? 'bg-gray-800 border-gray-700 text-white focus:border-green-500'
@@ -552,7 +828,7 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
 };
 
 // ============================================
-// COMPONENTE DE ESTADÍSTICAS (RESPONSIVE)
+// COMPONENTE DE ESTADÍSTICAS
 // ============================================
 const EstadisticasNotificaciones = ({ notificaciones }) => {
   const total = notificaciones.length;
@@ -594,7 +870,211 @@ const EstadisticasNotificaciones = ({ notificaciones }) => {
 };
 
 // ============================================
-// COMPONENTE PRINCIPAL DEL PANEL DE NOTIFICACIONES (RESPONSIVE - CORREGIDO)
+// 🔥 GENERACIÓN AUTOMÁTICA DE NOTIFICACIONES (MEJORADO)
+// ============================================
+const generarNotificacionesAutomaticas = async () => {
+  console.log('🔄 Generando notificaciones automáticas...');
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const notificacionesCreadas = [];
+  let totalPrestamosRevisados = 0;
+  let prestamosEnMora = 0;
+  let prestamosProximos = 0;
+
+  try {
+    // Obtener todos los préstamos activos
+    const prestamosRef = collection(db, 'prestamos');
+    const prestamosQuery = query(prestamosRef, where('estado', '==', 'activo'));
+    const prestamosSnap = await getDocs(prestamosQuery);
+    
+    console.log(`📊 ${prestamosSnap.size} préstamos activos encontrados`);
+    
+    for (const docPrestamo of prestamosSnap.docs) {
+      const prestamo = docPrestamo.data();
+      const clienteNombre = prestamo.clienteNombre || 'Cliente';
+      const clienteID = prestamo.clienteID;
+      const capitalRestante = prestamo.capitalRestante || 0;
+      
+      totalPrestamosRevisados++;
+      
+      let fechaProximoPago = null;
+      if (prestamo.fechaProximoPago) {
+        fechaProximoPago = parseFechaDDMMYYYY(prestamo.fechaProximoPago);
+      }
+      
+      if (!fechaProximoPago) {
+        continue;
+      }
+      
+      const fechaProximoPagoSinHora = new Date(fechaProximoPago);
+      fechaProximoPagoSinHora.setHours(0, 0, 0, 0);
+      
+      const diffTime = fechaProximoPagoSinHora - hoy;
+      const diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      // ============================================
+      // 🔥 VERIFICAR MORA CON CÁLCULO DE PERÍODOS
+      // ============================================
+      if (diasRestantes < 0 && capitalRestante > 0) {
+        const diasMora = Math.abs(diasRestantes);
+        prestamosEnMora++;
+        
+        // Calcular períodos de mora
+        const { periodos, tipoPeriodo } = calcularPeriodosMora(diasMora, prestamo.frecuencia || 'quincenal');
+        const interesPorPeriodo = capitalRestante * (prestamo.interesPercent || 10) / 100;
+        const totalMora = periodos * interesPorPeriodo;
+        
+        const mensajeMora = `⚠️ *ALERTA DE MORA* - EYS Inversiones
+
+El cliente *${clienteNombre}* tiene un pago VENCIDO desde hace *${diasMora} días* (${periodos} ${tipoPeriodo}).
+
+📊 *Detalles del cálculo:*
+• Capital pendiente: ${formatMonto(capitalRestante)}
+• Interés por ${tipoPeriodo.slice(0, -1)}: ${formatMonto(interesPorPeriodo)}
+• Períodos atrasados: ${periodos} ${tipoPeriodo}
+• Total mora acumulada: ${formatMonto(totalMora)}
+• Fecha de vencimiento: ${fechaProximoPagoSinHora.toLocaleDateString('es-DO')}
+• Frecuencia: ${prestamo.frecuencia || 'No especificada'}
+
+💰 *Total adeudado:* ${formatMonto(capitalRestante + totalMora)}
+
+🚨 *ACCION REQUERIDA:* Contactar al cliente de inmediato.`;
+        
+        const notificacionData = {
+          tipo: 'mora',
+          titulo: `🚨 Pago VENCIDO - ${diasMora} días de mora`,
+          mensaje: mensajeMora,
+          destinatario: clienteNombre,
+          clienteID: clienteID,
+          telefono: prestamo.telefonoCliente || '',
+          metadata: {
+            prestamoID: docPrestamo.id,
+            capitalRestante: capitalRestante,
+            diasMora: diasMora,
+            fechaProximoPago: prestamo.fechaProximoPago,
+            frecuencia: prestamo.frecuencia,
+            interesPercent: prestamo.interesPercent || 10,
+            periodosMora: periodos,
+            tipoPeriodo: tipoPeriodo,
+            interesPorPeriodo: interesPorPeriodo,
+            totalMora: totalMora
+          }
+        };
+        
+        const resultado = await crearNotificacionConIdPersonalizado(notificacionData);
+        if (!resultado.yaExiste) {
+          notificacionesCreadas.push(resultado.id);
+        }
+      }
+      
+      // ============================================
+      // 🔥 VERIFICAR PAGO PRÓXIMO
+      // ============================================
+      if (diasRestantes >= 0 && diasRestantes <= 3 && capitalRestante > 0) {
+        prestamosProximos++;
+        
+        const mensajeRecordatorio = `📋 *RECORDATORIO DE PAGO* - EYS Inversiones
+
+Estimado(a) *${clienteNombre}*,
+
+Le recordamos que tiene un pago programado en *${diasRestantes} días*.
+
+📊 *Detalles del préstamo:*
+• Monto pendiente: ${formatMonto(capitalRestante)}
+• Fecha de vencimiento: ${fechaProximoPagoSinHora.toLocaleDateString('es-DO')}
+• Frecuencia: ${prestamo.frecuencia || 'No especificada'}
+
+💡 *Recomendación:* Realice su pago a tiempo para evitar cargos por mora.
+
+- EYS Inversiones`;
+        
+        const notificacionData = {
+          tipo: 'pago_proximo',
+          titulo: `⏰ Pago en ${diasRestantes} días`,
+          mensaje: mensajeRecordatorio,
+          destinatario: clienteNombre,
+          clienteID: clienteID,
+          telefono: prestamo.telefonoCliente || '',
+          metadata: {
+            prestamoID: docPrestamo.id,
+            capitalRestante: capitalRestante,
+            diasRestantes: diasRestantes,
+            fechaProximoPago: prestamo.fechaProximoPago,
+            frecuencia: prestamo.frecuencia
+          }
+        };
+        
+        const resultado = await crearNotificacionConIdPersonalizado(notificacionData);
+        if (!resultado.yaExiste) {
+          notificacionesCreadas.push(resultado.id);
+        }
+      }
+    }
+    
+    // Nuevas solicitudes pendientes
+    try {
+      const solicitudesRef = collection(db, 'solicitudes');
+      const solicitudesQuery = query(solicitudesRef, where('estado', '==', 'pendiente'));
+      const solicitudesSnap = await getDocs(solicitudesQuery);
+      
+      for (const docSolicitud of solicitudesSnap.docs) {
+        const solicitud = docSolicitud.data();
+        const clienteNombre = solicitud.clienteNombre || 'Cliente';
+        const clienteID = solicitud.clienteID;
+        const montoSolicitado = solicitud.montoSolicitado || 0;
+        
+        const idEsperado = generarIdNotificacion('nueva_solicitud', clienteNombre, new Date());
+        const docRef = doc(db, 'notificaciones', idEsperado);
+        const docSnap = await getDoc(docRef);
+        
+        if (!docSnap.exists()) {
+          const mensajeSolicitud = `📋 *NUEVA SOLICITUD DE PRÉSTAMO* - EYS Inversiones
+
+El cliente *${clienteNombre}* ha solicitado un préstamo de *${formatMonto(montoSolicitado)}*.
+
+📊 *Detalles:*
+• Monto: ${formatMonto(montoSolicitado)}
+• Frecuencia: ${solicitud.frecuencia || 'No especificada'}
+• Plazo: ${solicitud.plazoMeses || 0} meses
+
+🔗 *Acción:* Revisar la solicitud en el sistema para su aprobación.`;
+          
+          const notificacionData = {
+            tipo: 'nueva_solicitud',
+            titulo: `📋 Nueva Solicitud de ${clienteNombre}`,
+            mensaje: mensajeSolicitud,
+            destinatario: 'Administrador',
+            clienteID: clienteID,
+            telefono: solicitud.telefono || '',
+            metadata: {
+              solicitudID: docSolicitud.id,
+              montoSolicitado: montoSolicitado,
+              frecuencia: solicitud.frecuencia,
+              plazoMeses: solicitud.plazoMeses
+            }
+          };
+          
+          const resultado = await crearNotificacionConIdPersonalizado(notificacionData);
+          if (!resultado.yaExiste) {
+            notificacionesCreadas.push(resultado.id);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error procesando solicitudes:', error);
+    }
+    
+    console.log(`✅ ${notificacionesCreadas.length} notificaciones generadas`);
+    return notificacionesCreadas;
+    
+  } catch (error) {
+    console.error('❌ Error generando notificaciones:', error);
+    return notificacionesCreadas;
+  }
+};
+
+// ============================================
+// COMPONENTE PRINCIPAL
 // ============================================
 const NotificacionesPanel = ({ isOpen, onClose }) => {
   const { theme } = useTheme();
@@ -606,12 +1086,13 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [selectedNotificacion, setSelectedNotificacion] = useState(null);
+  const [generando, setGenerando] = useState(false);
   const panelRef = useRef(null);
 
   const cargarNotificaciones = async () => {
     try {
       setLoading(true);
-      const q = query(collection(db, 'notificaciones'), orderBy('fechaCreacion', 'desc'), limit(30));
+      const q = query(collection(db, 'notificaciones'), orderBy('fechaCreacion', 'desc'), limit(50));
       const snapshot = await getDocs(q);
       const notis = [];
       snapshot.forEach(doc => {
@@ -623,7 +1104,6 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
         });
       });
       setNotificaciones(notis);
-      console.log('📋 Notificaciones cargadas:', notis.length);
     } catch (error) {
       console.error('Error cargando notificaciones:', error);
     } finally {
@@ -631,10 +1111,38 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
     }
   };
 
+  // 🔥 ESCUCHAR EVENTO DE NOTIFICACIÓN ENVIADA
+  useEffect(() => {
+    const handleNotificacionEnviada = () => {
+      console.log('📩 Evento: notificacion-enviada - Recargando lista...');
+      cargarNotificaciones();
+    };
+    
+    window.addEventListener('notificacion-enviada', handleNotificacionEnviada);
+    
+    return () => {
+      window.removeEventListener('notificacion-enviada', handleNotificacionEnviada);
+    };
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       cargarNotificaciones();
-      const interval = setInterval(cargarNotificaciones, 30000);
+      
+      const generarYRecargar = async () => {
+        setGenerando(true);
+        await generarNotificacionesAutomaticas();
+        await cargarNotificaciones();
+        setGenerando(false);
+      };
+      
+      generarYRecargar();
+      
+      const interval = setInterval(async () => {
+        await generarNotificacionesAutomaticas();
+        await cargarNotificaciones();
+      }, 60000);
+      
       return () => clearInterval(interval);
     }
   }, [isOpen]);
@@ -671,8 +1179,6 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
   };
 
   const handleNotificacionClick = async (notificacion) => {
-    console.log('📱 Notificación clickeada:', notificacion);
-    
     if (!notificacion.leida) {
       await marcarComoLeida(notificacion.id);
     }
@@ -682,15 +1188,23 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
     setWhatsappModalOpen(true);
   };
 
+  const handleEnviarWhatsApp = () => {
+    cargarNotificaciones();
+  };
+
   const notificacionesFiltradas = notificaciones.filter(notif => {
     if (filter === 'no_leidas' && notif.leida) return false;
     if (filter === 'pendientes_whatsapp' && (notif.whatsappEnviado || !notif.leida)) return false;
+    if (filter === 'mora' && notif.tipo !== 'mora') return false;
+    if (filter === 'pago_proximo' && notif.tipo !== 'pago_proximo') return false;
+    if (filter === 'nueva_solicitud' && notif.tipo !== 'nueva_solicitud') return false;
     
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
       return notif.tipo?.toLowerCase().includes(searchLower) ||
              notif.mensaje?.toLowerCase().includes(searchLower) ||
-             notif.destinatario?.toLowerCase().includes(searchLower);
+             notif.destinatario?.toLowerCase().includes(searchLower) ||
+             notif.titulo?.toLowerCase().includes(searchLower);
     }
     
     return true;
@@ -698,6 +1212,8 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
 
   const notificacionesNoLeidas = notificaciones.filter(n => !n.leida).length;
   const notificacionesSinWhatsApp = notificaciones.filter(n => !n.whatsappEnviado && n.leida).length;
+  const notificacionesMora = notificaciones.filter(n => n.tipo === 'mora').length;
+  const notificacionesPagoProximo = notificaciones.filter(n => n.tipo === 'pago_proximo').length;
 
   if (!isOpen) return null;
 
@@ -723,6 +1239,9 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
                     <BellIcon className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
                   </div>
                   <h3 className="text-white font-bold text-sm sm:text-base">Notificaciones</h3>
+                  {generando && (
+                    <ArrowPathIcon className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-400 animate-spin" />
+                  )}
                 </div>
                 <div className="flex items-center space-x-1 sm:space-x-2">
                   {notificacionesNoLeidas > 0 && (
@@ -744,7 +1263,7 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
                     <MagnifyingGlassIcon className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400" />
                   </motion.button>
                   <motion.button
-                    whileHover={{ scale: 1.05, rotate: 90 }}
+                    whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={onClose}
                     className="p-1 rounded-lg hover:bg-white/10 transition-colors"
@@ -766,7 +1285,7 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
                       <MagnifyingGlassIcon className="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 h-3 w-3 sm:h-4 sm:w-4 text-gray-400" />
                       <input
                         type="text"
-                        placeholder="Buscar por cliente o mensaje..."
+                        placeholder="Buscar por cliente, tipo o mensaje..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-full pl-7 sm:pl-9 pr-2 sm:pr-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:border-red-500"
@@ -776,7 +1295,7 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
                 )}
               </AnimatePresence>
               
-              <div className="flex gap-1 bg-black/20 rounded-lg p-0.5 sm:p-1">
+              <div className="flex flex-wrap gap-1 bg-black/20 rounded-lg p-0.5 sm:p-1">
                 <button
                   onClick={() => setFilter('todas')}
                   className={`flex-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${
@@ -807,6 +1326,26 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
                 >
                   Pendientes ({notificacionesSinWhatsApp})
                 </button>
+                <button
+                  onClick={() => setFilter('mora')}
+                  className={`flex-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${
+                    filter === 'mora'
+                      ? 'bg-red-600 text-white shadow-lg'
+                      : 'text-gray-300 hover:text-white'
+                  }`}
+                >
+                  ⚠️ Mora ({notificacionesMora})
+                </button>
+                <button
+                  onClick={() => setFilter('pago_proximo')}
+                  className={`flex-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${
+                    filter === 'pago_proximo'
+                      ? 'bg-red-600 text-white shadow-lg'
+                      : 'text-gray-300 hover:text-white'
+                  }`}
+                >
+                  ⏰ Próximo ({notificacionesPagoProximo})
+                </button>
               </div>
             </div>
 
@@ -831,6 +1370,18 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
                   <p className="text-gray-500 text-[10px] sm:text-xs mt-1">
                     {searchTerm ? 'Intenta con otra búsqueda' : 'Las notificaciones aparecerán aquí'}
                   </p>
+                  <button
+                    onClick={async () => {
+                      setGenerando(true);
+                      await generarNotificacionesAutomaticas();
+                      await cargarNotificaciones();
+                      setGenerando(false);
+                    }}
+                    className="mt-3 px-4 py-1.5 bg-red-600/50 hover:bg-red-600/70 rounded-lg text-xs text-white transition-colors"
+                  >
+                    <ArrowPathIcon className="h-3 w-3 inline mr-1 animate-spin" />
+                    Generar ahora
+                  </button>
                 </motion.div>
               ) : (
                 <div className="divide-y divide-red-500/20">

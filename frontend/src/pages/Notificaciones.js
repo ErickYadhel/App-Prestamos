@@ -27,7 +27,7 @@ import {
 } from '@heroicons/react/24/outline';
 import api from '../services/api';
 import { db } from '../services/firebase';
-import { collection, getDocs, query, orderBy, limit, where, doc, updateDoc, deleteDoc, addDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, where, doc, updateDoc, deleteDoc, addDoc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 
 // ============================================
 // CONSTANTES
@@ -132,11 +132,14 @@ const NotificacionCard = ({ notificacion, onReenviar, onEliminar, onVerDetalle }
   const Icon = tipoInfo.icon;
   const tipoColor = tipoInfo.color;
 
+  // 🔥 USAR fechaCreacion O fechaProgramada O fechaEnvio
   const fechaMostrar = notificacion.fechaEnvio 
     ? new Date(notificacion.fechaEnvio)
-    : notificacion.fechaProgramada 
-      ? new Date(notificacion.fechaProgramada)
-      : null;
+    : notificacion.fechaCreacion
+      ? new Date(notificacion.fechaCreacion)
+      : notificacion.fechaProgramada 
+        ? new Date(notificacion.fechaProgramada)
+        : null;
 
   const fechaFormateada = fechaMostrar 
     ? fechaMostrar.toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -342,7 +345,7 @@ const DetalleNotificacionModal = ({ isOpen, onClose, notificacion }) => {
                   <div>
                     <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">Fecha</p>
                     <p className={`text-sm sm:text-base font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      {new Date(notificacion.fechaProgramada || notificacion.fechaEnvio).toLocaleString('es-DO')}
+                      {new Date(notificacion.fechaCreacion || notificacion.fechaProgramada || notificacion.fechaEnvio).toLocaleString('es-DO')}
                     </p>
                   </div>
                 </div>
@@ -780,6 +783,38 @@ const ConfirmacionEnvioModal = ({ isOpen, onClose, onAbrirWhatsApp, telefono, me
 };
 
 // ============================================
+// 🔥 FUNCIÓN PARA GENERAR ID PERSONALIZADO DE NOTIFICACIÓN
+// ============================================
+const generarIdNotificacion = (tipo, destinatario, fecha = new Date()) => {
+  const tipoLimpio = tipo
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[^a-z0-9]/g, '');
+  
+  const nombreLimpio = destinatario
+    ? destinatario
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, '')
+        .replace(/[^a-z0-9]/g, '')
+    : 'usuario';
+  
+  const dia = fecha.getDate();
+  const mes = fecha.getMonth() + 1;
+  const año = fecha.getFullYear().toString().slice(-2);
+  const fechaFormateada = `${dia}-${mes}-${año}`;
+  
+  let idGenerado = `${tipoLimpio}-${nombreLimpio}-${fechaFormateada}`;
+  
+  if (idGenerado.length > 100) {
+    idGenerado = idGenerado.substring(0, 100);
+  }
+  
+  return idGenerado;
+};
+
+// ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
 const Notificaciones = () => {
@@ -795,7 +830,9 @@ const Notificaciones = () => {
   const [detalleModalOpen, setDetalleModalOpen] = useState(false);
   const [notificacionSeleccionada, setNotificacionSeleccionada] = useState(null);
 
-  // Cargar clientes desde Firestore
+  // ============================================
+  // 🔥 FUNCIÓN PARA CARGAR CLIENTES
+  // ============================================
   const cargarClientes = useCallback(async () => {
     try {
       setCargandoClientes(true);
@@ -826,55 +863,133 @@ const Notificaciones = () => {
     }
   }, []);
 
-  // Cargar notificaciones desde Firestore
-  const cargarNotificaciones = useCallback(async () => {
+  // ============================================
+  // 🔥 FUNCIÓN PARA CARGAR NOTIFICACIONES - CON onSnapshot PARA ACTUALIZACIÓN EN TIEMPO REAL
+  // ============================================
+  const cargarNotificaciones = useCallback(() => {
     try {
       setLoading(true);
       const notificacionesRef = collection(db, 'notificaciones');
-      const q = query(notificacionesRef, orderBy('fechaProgramada', 'desc'));
+      const q = query(notificacionesRef, orderBy('fechaCreacion', 'desc'));
+      
+      // 🔥 Usar onSnapshot para escuchar cambios en tiempo real
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const notificacionesList = [];
+        querySnapshot.forEach((doc) => {
+          notificacionesList.push({ id: doc.id, ...doc.data() });
+        });
+        setNotificaciones(notificacionesList);
+        console.log(`✅ ${notificacionesList.length} notificaciones cargadas en tiempo real`);
+        setLoading(false);
+      }, (error) => {
+        console.error('Error en onSnapshot:', error);
+        setLoading(false);
+        // Fallback a getDocs si onSnapshot falla
+        cargarNotificacionesFallback();
+      });
+      
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error cargando notificaciones:', error);
+      setLoading(false);
+      return null;
+    }
+  }, []);
+
+  // ============================================
+  // 🔥 FALLBACK PARA CARGAR NOTIFICACIONES
+  // ============================================
+  const cargarNotificacionesFallback = useCallback(async () => {
+    try {
+      const notificacionesRef = collection(db, 'notificaciones');
+      const q = query(notificacionesRef, orderBy('fechaCreacion', 'desc'));
       const querySnapshot = await getDocs(q);
       const notificacionesList = [];
       querySnapshot.forEach((doc) => {
         notificacionesList.push({ id: doc.id, ...doc.data() });
       });
       setNotificaciones(notificacionesList);
-      console.log(`✅ ${notificacionesList.length} notificaciones cargadas`);
+      console.log(`✅ ${notificacionesList.length} notificaciones cargadas (fallback)`);
     } catch (error) {
-      console.error('Error cargando notificaciones:', error);
+      console.error('Error cargando notificaciones (fallback):', error);
       setNotificaciones([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // ============================================
+  // 🔥 EFECTO PARA CARGAR NOTIFICACIONES EN TIEMPO REAL
+  // ============================================
   useEffect(() => {
     cargarClientes();
-    cargarNotificaciones();
+    const unsubscribe = cargarNotificaciones();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, [cargarClientes, cargarNotificaciones]);
 
+  // ============================================
+  // 🔥 ESCUCHAR EVENTO DE NOTIFICACIÓN ENVIADA DESDE EL PANEL
+  // ============================================
+  useEffect(() => {
+    const handleNotificacionEnviada = () => {
+      console.log('📩 Evento: notificacion-enviada - Recargando lista principal...');
+      cargarNotificaciones();
+    };
+    
+    window.addEventListener('notificacion-enviada', handleNotificacionEnviada);
+    
+    return () => {
+      window.removeEventListener('notificacion-enviada', handleNotificacionEnviada);
+    };
+  }, [cargarNotificaciones]);
+
+  // ============================================
+  // 🔥 ENVIAR NOTIFICACIÓN - CON ID PERSONALIZADO
+  // ============================================
   const handleEnviarNotificacion = async (notificacionData) => {
     try {
+      // Generar ID personalizado
+      const idPersonalizado = generarIdNotificacion(
+        notificacionData.tipo,
+        notificacionData.destinatario || 'cliente',
+        new Date()
+      );
+      
+      const docRef = doc(db, 'notificaciones', idPersonalizado);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        alert('⚠️ Ya existe una notificación similar para este cliente y fecha');
+        return false;
+      }
+      
       const nuevaNotificacion = {
         ...notificacionData,
+        id: idPersonalizado,
+        fechaCreacion: new Date().toISOString(),
         fechaProgramada: new Date().toISOString(),
         enviada: false,
         intentos: 0,
-        error: null
+        error: null,
+        leida: false,
+        whatsappEnviado: false
       };
       
-      const docRef = await addDoc(collection(db, 'notificaciones'), nuevaNotificacion);
+      await setDoc(docRef, nuevaNotificacion);
       
       const notificacionCompleta = {
         ...nuevaNotificacion,
-        id: docRef.id
+        id: idPersonalizado
       };
       
-      setNotificaciones(prev => [notificacionCompleta, ...prev]);
+      // No necesitamos actualizar el estado manualmente porque onSnapshot lo hará
       
       setNotificacionPendiente({
         telefono: notificacionData.telefono,
         mensaje: notificacionData.mensaje,
-        notificacionId: docRef.id
+        notificacionId: idPersonalizado
       });
       setShowConfirmModal(true);
       
@@ -885,6 +1000,9 @@ const Notificaciones = () => {
     }
   };
 
+  // ============================================
+  // 🔥 CONFIRMAR ENVÍO Y ACTUALIZAR ESTADO
+  // ============================================
   const handleConfirmarEnvio = async () => {
     if (notificacionPendiente) {
       try {
@@ -892,16 +1010,10 @@ const Notificaciones = () => {
         await updateDoc(notifRef, {
           enviada: true,
           fechaEnvio: new Date().toISOString(),
-          intentos: 1
+          intentos: 1,
+          whatsappEnviado: true
         });
-        
-        setNotificaciones(prev => 
-          prev.map(n => 
-            n.id === notificacionPendiente.notificacionId 
-              ? { ...n, enviada: true, fechaEnvio: new Date().toISOString(), intentos: 1 }
-              : n
-          )
-        );
+        // onSnapshot actualizará automáticamente la lista
       } catch (error) {
         console.error('Error actualizando estado de notificación:', error);
       }
@@ -923,7 +1035,7 @@ const Notificaciones = () => {
     if (window.confirm('¿Estás seguro de que quieres eliminar esta notificación?')) {
       try {
         await deleteDoc(doc(db, 'notificaciones', notificacionId));
-        setNotificaciones(prev => prev.filter(n => n.id !== notificacionId));
+        // onSnapshot actualizará automáticamente la lista
       } catch (error) {
         console.error('Error eliminando notificación:', error);
         alert('Error al eliminar la notificación');
@@ -970,34 +1082,50 @@ const Notificaciones = () => {
             const diasRestantes = Math.ceil((fechaObj - hoy) / (1000 * 60 * 60 * 24));
             
             if (diasRestantes >= 0 && diasRestantes <= 3) {
-              const notificacionData = {
-                tipo: 'pago_recordatorio',
-                clienteID: prestamo.clienteID,
-                destinatario: prestamo.clienteNombre,
-                telefono: prestamo.telefonoCliente,
-                mensaje: `📋 *RECORDATORIO DE PAGO* - EYS Inversiones\n\nEstimado(a) *${prestamo.clienteNombre}*,\n\nLe recordamos que tiene un pago pendiente por *RD$ ${prestamo.capitalRestante?.toLocaleString()}*. Fecha límite: ${fechaObj.toLocaleDateString('es-DO')}\n\nPor favor, realice su pago a tiempo para evitar cargos adicionales.\n\n- EYS Inversiones`,
-                metadata: {
-                  prestamoID: docPrestamo.id,
-                  montoPendiente: prestamo.capitalRestante,
-                  fechaLimite: fechaObj.toLocaleDateString('es-DO'),
-                  diasRestantes
-                }
-              };
+              const idPersonalizado = generarIdNotificacion(
+                'pago_recordatorio',
+                prestamo.clienteNombre,
+                new Date()
+              );
               
-              await addDoc(collection(db, 'notificaciones'), {
-                ...notificacionData,
-                fechaProgramada: new Date().toISOString(),
-                enviada: false,
-                intentos: 0
-              });
-              recordatoriosGenerados++;
+              const docRef = doc(db, 'notificaciones', idPersonalizado);
+              const docSnap = await getDoc(docRef);
+              
+              if (!docSnap.exists()) {
+                const notificacionData = {
+                  tipo: 'pago_recordatorio',
+                  clienteID: prestamo.clienteID,
+                  destinatario: prestamo.clienteNombre,
+                  telefono: prestamo.telefonoCliente,
+                  mensaje: `📋 *RECORDATORIO DE PAGO* - EYS Inversiones\n\nEstimado(a) *${prestamo.clienteNombre}*,\n\nLe recordamos que tiene un pago pendiente por *RD$ ${prestamo.capitalRestante?.toLocaleString()}*. Fecha límite: ${fechaObj.toLocaleDateString('es-DO')}\n\nPor favor, realice su pago a tiempo para evitar cargos adicionales.\n\n- EYS Inversiones`,
+                  metadata: {
+                    prestamoID: docPrestamo.id,
+                    montoPendiente: prestamo.capitalRestante,
+                    fechaLimite: fechaObj.toLocaleDateString('es-DO'),
+                    diasRestantes
+                  }
+                };
+                
+                await setDoc(docRef, {
+                  ...notificacionData,
+                  id: idPersonalizado,
+                  fechaCreacion: new Date().toISOString(),
+                  fechaProgramada: new Date().toISOString(),
+                  enviada: false,
+                  intentos: 0,
+                  error: null,
+                  leida: false,
+                  whatsappEnviado: false
+                });
+                recordatoriosGenerados++;
+              }
             }
           }
         }
       }
       
       alert(`✅ Se generaron ${recordatoriosGenerados} recordatorios automáticos`);
-      await cargarNotificaciones();
+      // onSnapshot actualizará automáticamente la lista
       
     } catch (error) {
       console.error('Error generando recordatorios:', error);
@@ -1075,7 +1203,7 @@ const Notificaciones = () => {
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={cargarNotificaciones}
+                  onClick={() => cargarNotificaciones()}
                   className="px-3 py-1.5 sm:py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-all flex items-center space-x-1 text-xs sm:text-sm"
                   title="Actualizar"
                 >

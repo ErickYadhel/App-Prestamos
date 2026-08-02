@@ -1,3 +1,4 @@
+// src/pages/Pagos.js
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -35,7 +36,9 @@ import {
   ArrowsUpDownIcon,
   FireIcon,
   NoSymbolIcon,
-  CheckBadgeIcon
+  CheckBadgeIcon,
+  ViewColumnsIcon,
+  TableCellsIcon
 } from '@heroicons/react/24/outline';
 import api from '../services/api';
 import { useTheme } from '../context/ThemeContext';
@@ -551,9 +554,152 @@ const AdvancedFilters = ({ isOpen, onClose, filtros, onFilterChange, clientes })
 };
 
 // ============================================
+// COMPONENTE DE TABLA DE PAGOS
+// ============================================
+const PagosTable = ({ pagos, onVer, sortConfig, requestSort, getSortIcon, theme, getTipoPagoBadge, formatFecha }) => {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <thead className={theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}>
+          <tr>
+            <th 
+              className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors whitespace-nowrap"
+              onClick={() => requestSort('clienteNombre')}
+            >
+              Cliente {getSortIcon('clienteNombre')}
+            </th>
+            <th 
+              className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors whitespace-nowrap"
+              onClick={() => requestSort('montoTotal')}
+            >
+              Monto {getSortIcon('montoTotal')}
+            </th>
+            <th 
+              className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors whitespace-nowrap"
+              onClick={() => requestSort('capitalPagado')}
+            >
+              Capital {getSortIcon('capitalPagado')}
+            </th>
+            <th 
+              className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors whitespace-nowrap"
+              onClick={() => requestSort('interesPagado')}
+            >
+              Interés {getSortIcon('interesPagado')}
+            </th>
+            <th 
+              className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors whitespace-nowrap"
+              onClick={() => requestSort('fechaPago')}
+            >
+              Fecha {getSortIcon('fechaPago')}
+            </th>
+            <th 
+              className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors whitespace-nowrap"
+              onClick={() => requestSort('tipoPago')}
+            >
+              Tipo {getSortIcon('tipoPago')}
+            </th>
+            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              Acciones
+            </th>
+          </tr>
+        </thead>
+        <tbody className={`divide-y divide-gray-200 dark:divide-gray-700 ${
+          theme === 'dark' ? 'bg-gray-800/50' : 'bg-white'
+        }`}>
+          {pagos.map((pago) => {
+            const { montoTotal, montoCapital, montoInteres } = extraerMontoPago(pago);
+            
+            return (
+              <motion.tr
+                key={pago.id}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className={`cursor-pointer transition-all duration-300 hover:bg-gray-100 dark:hover:bg-gray-700/50`}
+                onClick={() => onVer(pago)}
+              >
+                <td className="px-6 py-4">
+                  <div className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    {pago.clienteNombre || pago.cliente || 'N/A'}
+                  </div>
+                  <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                    ID: {pago.id?.substring(0, 15) || pago.prestamoID}
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    RD$ {montoTotal.toLocaleString()}
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
+                    RD$ {montoCapital.toLocaleString()}
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
+                    RD$ {montoInteres.toLocaleString()}
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
+                    {formatFecha(pago.fechaPago)}
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  {getTipoPagoBadge(pago.tipoPago)}
+                </td>
+                <td className="px-6 py-4 text-right text-sm font-medium">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onVer(pago);
+                    }}
+                    className={`p-2 rounded-lg transition-colors ${
+                      theme === 'dark'
+                        ? 'hover:bg-gray-700 text-blue-400'
+                        : 'hover:bg-blue-50 text-blue-600'
+                    }`}
+                    title="Ver detalles completos"
+                  >
+                    <EyeIcon className="h-4 w-4" />
+                  </button>
+                </td>
+              </motion.tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {pagos.length === 0 && (
+        <div className="text-center py-12">
+          <div className={`text-6xl mb-4 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-300'}`}>💰</div>
+          <p className={`text-lg font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+            No hay pagos para mostrar
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================
+// FUNCIÓN PARA EXTRAER MONTOS DE PAGO
+// ============================================
+const extraerMontoPago = (pago) => {
+  const montoTotal = pago.montoTotal ?? pago.total ?? pago.monto ?? 0;
+  const montoCapital = pago.montoCapital ?? pago.capital ?? pago.distribucion?.capital ?? 0;
+  const montoInteres = pago.montoInteres ?? pago.interes ?? pago.distribucion?.interes ?? 0;
+  const montoMora = pago.montoMora ?? pago.mora ?? pago.distribucion?.mora ?? 0;
+  return { montoTotal, montoCapital, montoInteres, montoMora };
+};
+
+// ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
 const Pagos = () => {
+  const { theme } = useTheme();
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+
   const [pagos, setPagos] = useState([]);
   const [prestamos, setPrestamos] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -570,6 +716,7 @@ const Pagos = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [showStatsCards, setShowStatsCards] = useState(true);
   const [hoveredRow, setHoveredRow] = useState(null);
+  const [viewDisplayMode, setViewDisplayMode] = useState('table'); // 'table' | 'cards'
   
   // Estado para ordenamiento de tabla
   const [sortConfig, setSortConfig] = useState({
@@ -588,6 +735,9 @@ const Pagos = () => {
     clienteID: ''
   });
   
+  // Estado para acciones rápidas (evita acumulación)
+  const [accionRapidaActiva, setAccionRapidaActiva] = useState(null);
+  
   const [stats, setStats] = useState({
     totalPagos: 0,
     totalRecaudado: 0,
@@ -603,10 +753,10 @@ const Pagos = () => {
   const [distribucionTipos, setDistribucionTipos] = useState({ normal: 0, adelantado: 0, mora: 0, abono: 0 });
   const [ultimasComisiones, setUltimasComisiones] = useState([]);
   
-  // 🔥 ESTADOS PARA CLIENTES
+  // ESTADOS PARA CLIENTES
   const [clienteMayorInteres, setClienteMayorInteres] = useState({ nombre: '', totalInteres: 0 });
   
-  // 🔥 NUEVAS ESTADÍSTICAS
+  // NUEVAS ESTADÍSTICAS
   const [capitalPagado, setCapitalPagado] = useState(0);
   const [pagadoEsteMes, setPagadoEsteMes] = useState(0);
   const [totalGeneralRecaudado, setTotalGeneralRecaudado] = useState(0);
@@ -615,14 +765,29 @@ const Pagos = () => {
   const [pagoMaximo, setPagoMaximo] = useState(0);
   const [pagoMinimo, setPagoMinimo] = useState(0);
   
-  // 🔥 NUEVAS ESTADÍSTICAS PARA TARJETAS ADICIONALES
+  // NUEVAS ESTADÍSTICAS PARA TARJETAS ADICIONALES
   const [pagosConMora, setPagosConMora] = useState(0);
   const [montoEnMora, setMontoEnMora] = useState(0);
   const [tasaRecuperacion, setTasaRecuperacion] = useState(0);
   const [diasSinPagos, setDiasSinPagos] = useState(0);
   const [promedioDiario, setPromedioDiario] = useState(0);
 
-  const { theme } = useTheme();
+  // Detectar tamaño de pantalla y establecer vista predeterminada
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      if (mobile) {
+        setViewDisplayMode('cards');
+      } else {
+        setViewDisplayMode('table');
+      }
+    };
+    
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // ============================================
   // CARGA INICIAL - TODOS LOS DATOS JUNTOS
@@ -688,17 +853,6 @@ const Pagos = () => {
     
     cargarDatosIniciales();
   }, []);
-
-  // ============================================
-  // FUNCIÓN PARA EXTRAER MONTOS DE PAGO
-  // ============================================
-  const extraerMontoPago = (pago) => {
-    const montoTotal = pago.montoTotal ?? pago.total ?? pago.monto ?? 0;
-    const montoCapital = pago.montoCapital ?? pago.capital ?? pago.distribucion?.capital ?? 0;
-    const montoInteres = pago.montoInteres ?? pago.interes ?? pago.distribucion?.interes ?? 0;
-    const montoMora = pago.montoMora ?? pago.mora ?? pago.distribucion?.mora ?? 0;
-    return { montoTotal, montoCapital, montoInteres, montoMora };
-  };
 
   // ============================================
   // CALCULAR ESTADÍSTICAS COMPLETAS
@@ -795,7 +949,7 @@ const Pagos = () => {
       }
     });
 
-    // 🔥 CLIENTE CON MAYOR INTERÉS PAGADO
+    // CLIENTE CON MAYOR INTERÉS PAGADO
     let topInteres = { nombre: '', totalInteres: 0 };
     for (const [nombre, total] of Object.entries(interesPorCliente)) {
       if (total > topInteres.totalInteres) {
@@ -803,18 +957,18 @@ const Pagos = () => {
       }
     }
 
-    // 🔥 CALCULAR DÍAS SIN PAGOS
+    // CALCULAR DÍAS SIN PAGOS
     let diasSinPagosCount = 0;
     if (ultimaFechaPago) {
       const diffTime = Math.abs(hoy - ultimaFechaPago);
       diasSinPagosCount = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     }
 
-    // 🔥 CALCULAR TASA DE RECUPERACIÓN
+    // CALCULAR TASA DE RECUPERACIÓN
     const totalCapitalPrestado = prestamos.reduce((sum, p) => sum + (p.montoPrestado || 0), 0);
     const tasaRecuperacionCalc = totalCapitalPrestado > 0 ? (totalCapital / totalCapitalPrestado) * 100 : 0;
 
-    // 🔥 CALCULAR PROMEDIO DIARIO (últimos 7 días)
+    // CALCULAR PROMEDIO DIARIO (últimos 7 días)
     const pagosUltimaSemana = pagosData.filter(pago => {
       const fecha = firebaseTimestampToDate(pago.fechaPago);
       return fecha && fecha >= inicioSemana;
@@ -982,6 +1136,48 @@ const Pagos = () => {
     return sortConfig.direction === 'asc' 
       ? <ArrowUpIcon className="h-3 w-3 inline ml-1" />
       : <ArrowDownIcon className="h-3 w-3 inline ml-1" />;
+  };
+
+  // ============================================
+  // FUNCIONES PARA ACCIONES RÁPIDAS (CON LIMPIEZA)
+  // ============================================
+  const handleAccionRapida = (tipo) => {
+    // Si la misma acción está activa, la desactivamos (toggle)
+    if (accionRapidaActiva === tipo) {
+      setAccionRapidaActiva(null);
+      setFiltroEstado('todos');
+      setSearchTerm('');
+      setFiltros({ ...filtros, rangoMonto: 'todos', montoMin: '', montoMax: '' });
+      fetchPagos();
+      return;
+    }
+    
+    setAccionRapidaActiva(tipo);
+    
+    // Limpiar filtros anteriores
+    setFiltroEstado('todos');
+    setSearchTerm('');
+    setFiltros({ ...filtros, rangoMonto: 'todos', montoMin: '', montoMax: '' });
+    
+    // Aplicar el nuevo filtro
+    if (tipo === 'todos') {
+      // Ya está limpio
+    } else if (tipo === 'normal') {
+      setFiltroEstado('normal');
+    } else if (tipo === 'adelantado') {
+      setFiltroEstado('adelantado');
+    } else if (tipo === 'mora') {
+      setFiltroEstado('mora');
+    } else if (tipo === 'abono') {
+      setFiltroEstado('abono');
+    } else if (tipo === '50k-100k') {
+      setFiltros({ ...filtros, rangoMonto: '50000-100000' });
+    } else if (tipo === '30k-50k') {
+      setFiltros({ ...filtros, rangoMonto: '30000-50000' });
+    }
+    
+    // Aplicar filtros después de un breve delay
+    setTimeout(() => fetchPagos(), 50);
   };
 
   // ============================================
@@ -1167,6 +1363,7 @@ const Pagos = () => {
       setSearchTerm('');
       setFiltroEstado('todos');
       setSelectedPrestamo('todos');
+      setAccionRapidaActiva(null);
     } else if (key === 'aplicar') {
       setFiltros(value);
     } else {
@@ -1290,6 +1487,9 @@ const Pagos = () => {
     return <PagosSkeleton />;
   }
 
+  // Determinar qué vista mostrar
+  const mostrarVistaTabla = viewDisplayMode === 'table';
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1316,6 +1516,32 @@ const Pagos = () => {
             </div>
             
             <div className="flex items-center space-x-2 w-full sm:w-auto">
+              {/* Toggle de vista - SIEMPRE VISIBLE */}
+              <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                <button
+                  onClick={() => setViewDisplayMode('cards')}
+                  className={`p-1.5 rounded-lg transition-all ${
+                    viewDisplayMode === 'cards'
+                      ? 'bg-red-600 text-white shadow-md'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                  title="Vista de tarjetas"
+                >
+                  <ViewColumnsIcon className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setViewDisplayMode('table')}
+                  className={`p-1.5 rounded-lg transition-all ${
+                    viewDisplayMode === 'table'
+                      ? 'bg-red-600 text-white shadow-md'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                  title="Vista de tabla"
+                >
+                  <TableCellsIcon className="h-4 w-4" />
+                </button>
+              </div>
+
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`p-3 rounded-lg transition-all ${
@@ -1460,7 +1686,7 @@ const Pagos = () => {
         )}
       </AnimatePresence>
 
-      {/* Stats Cards - CON NUEVAS TARJETAS */}
+      {/* Stats Cards */}
       <StatsCardsContainer 
         title="Métricas del Dashboard" 
         icon={ChartBarIcon}
@@ -1524,7 +1750,7 @@ const Pagos = () => {
           />
         </div>
 
-        {/* Fila 2 - Métricas Adicionales (NUEVAS) */}
+        {/* Fila 2 - Métricas Adicionales */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
           <StatsCard
             icon={PresentationChartLineIcon}
@@ -1627,14 +1853,14 @@ const Pagos = () => {
         </GlassCard>
       </div>
 
-      {/* Filtros Rápidos */}
+      {/* Filtros Rápidos con acciones corregidas */}
       <GlassCard>
         <div className="p-4">
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => setFiltroEstado('todos')}
+              onClick={() => handleAccionRapida('todos')}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                filtroEstado === 'todos'
+                accionRapidaActiva === 'todos' || (accionRapidaActiva === null && filtroEstado === 'todos')
                   ? 'bg-red-600 text-white'
                   : theme === 'dark'
                   ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -1644,9 +1870,9 @@ const Pagos = () => {
               Todos ({stats.totalPagos})
             </button>
             <button
-              onClick={() => setFiltroEstado('normal')}
+              onClick={() => handleAccionRapida('normal')}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                filtroEstado === 'normal'
+                accionRapidaActiva === 'normal'
                   ? 'bg-green-600 text-white'
                   : theme === 'dark'
                   ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -1656,9 +1882,9 @@ const Pagos = () => {
               ✅ Normal
             </button>
             <button
-              onClick={() => setFiltroEstado('adelantado')}
+              onClick={() => handleAccionRapida('adelantado')}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                filtroEstado === 'adelantado'
+                accionRapidaActiva === 'adelantado'
                   ? 'bg-blue-600 text-white'
                   : theme === 'dark'
                   ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -1668,9 +1894,9 @@ const Pagos = () => {
               ⏰ Adelantado
             </button>
             <button
-              onClick={() => setFiltroEstado('mora')}
+              onClick={() => handleAccionRapida('mora')}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                filtroEstado === 'mora'
+                accionRapidaActiva === 'mora'
                   ? 'bg-red-600 text-white'
                   : theme === 'dark'
                   ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -1680,9 +1906,9 @@ const Pagos = () => {
               ⚠️ Con Mora
             </button>
             <button
-              onClick={() => setFiltroEstado('abono')}
+              onClick={() => handleAccionRapida('abono')}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                filtroEstado === 'abono'
+                accionRapidaActiva === 'abono'
                   ? 'bg-purple-600 text-white'
                   : theme === 'dark'
                   ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -1692,21 +1918,25 @@ const Pagos = () => {
               💰 Abono
             </button>
             <button
-              onClick={() => setFiltros({ ...filtros, rangoMonto: '50000-100000' })}
+              onClick={() => handleAccionRapida('50k-100k')}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                theme === 'dark'
-                  ? 'bg-blue-900/30 text-blue-400 hover:bg-blue-800/50'
-                  : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                accionRapidaActiva === '50k-100k'
+                  ? 'bg-blue-600 text-white'
+                  : theme === 'dark'
+                  ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
               📊 50K-100K
             </button>
             <button
-              onClick={() => setFiltros({ ...filtros, rangoMonto: '30000-50000' })}
+              onClick={() => handleAccionRapida('30k-50k')}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                theme === 'dark'
-                  ? 'bg-cyan-900/30 text-cyan-400 hover:bg-cyan-800/50'
-                  : 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
+                accionRapidaActiva === '30k-50k'
+                  ? 'bg-cyan-600 text-white'
+                  : theme === 'dark'
+                  ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
               📊 30K-50K
@@ -1715,158 +1945,111 @@ const Pagos = () => {
         </div>
       </GlassCard>
 
-      {/* Tabla de Pagos con Ordenamiento */}
-      <GlassCard>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className={theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}>
-              <tr>
-                <th 
-                  className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors"
-                  onClick={() => requestSort('clienteNombre')}
-                >
-                  Cliente {getSortIcon('clienteNombre')}
-                </th>
-                <th 
-                  className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors"
-                  onClick={() => requestSort('montoTotal')}
-                >
-                  Monto {getSortIcon('montoTotal')}
-                </th>
-                <th 
-                  className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors"
-                  onClick={() => requestSort('capitalPagado')}
-                >
-                  Capital {getSortIcon('capitalPagado')}
-                </th>
-                <th 
-                  className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors"
-                  onClick={() => requestSort('interesPagado')}
-                >
-                  Interés {getSortIcon('interesPagado')}
-                </th>
-                <th 
-                  className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors"
-                  onClick={() => requestSort('fechaPago')}
-                >
-                  Fecha {getSortIcon('fechaPago')}
-                </th>
-                <th 
-                  className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors"
-                  onClick={() => requestSort('tipoPago')}
-                >
-                  Tipo {getSortIcon('tipoPago')}
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody className={`divide-y divide-gray-200 dark:divide-gray-700 ${
-              theme === 'dark' ? 'bg-gray-800/50' : 'bg-white'
-            }`}>
-              <AnimatePresence>
-                {filteredAndSortedPagos.map((pago) => {
-                  const { montoTotal, montoCapital, montoInteres } = extraerMontoPago(pago);
-                  const isHovered = hoveredRow === pago.id;
-                  
-                  return (
-                    <motion.tr
-                      key={pago.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      onHoverStart={() => setHoveredRow(pago.id)}
-                      onHoverEnd={() => setHoveredRow(null)}
-                      className={`cursor-pointer transition-all duration-300 ${
-                        isHovered
-                          ? theme === 'dark'
-                            ? 'bg-gray-700/50'
-                            : 'bg-gray-100'
-                          : ''
+      {/* Lista de pagos - Vista responsiva */}
+      {mostrarVistaTabla ? (
+        // Vista de tabla
+        <GlassCard>
+          <PagosTable
+            pagos={filteredAndSortedPagos}
+            onVer={handleViewDetails}
+            sortConfig={sortConfig}
+            requestSort={requestSort}
+            getSortIcon={getSortIcon}
+            theme={theme}
+            getTipoPagoBadge={getTipoPagoBadge}
+            formatFecha={formatFecha}
+          />
+        </GlassCard>
+      ) : (
+        // Vista de tarjetas
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredAndSortedPagos.map((pago) => {
+            const { montoTotal, montoCapital, montoInteres } = extraerMontoPago(pago);
+            return (
+              <motion.div
+                key={pago.id}
+                whileHover={{ scale: 1.02 }}
+                className={`relative overflow-hidden rounded-xl border-2 cursor-pointer transition-all duration-300 ${
+                  theme === 'dark' ? 'bg-gray-800/90 border-gray-700' : 'bg-white border-gray-200'
+                } shadow-lg hover:shadow-xl`}
+                onClick={() => handleViewDetails(pago)}
+              >
+                <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-red-500 to-red-700" />
+                <div className="p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <p className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                        {pago.clienteNombre || pago.cliente || 'N/A'}
+                      </p>
+                      <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {formatFecha(pago.fechaPago)}
+                      </p>
+                    </div>
+                    {getTipoPagoBadge(pago.tipoPago)}
+                  </div>
+                  <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Monto</p>
+                      <p className={`text-base font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                        RD$ {montoTotal.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Capital</p>
+                      <p className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                        RD$ {montoCapital.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Interés</p>
+                      <p className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                        RD$ {montoInteres.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewDetails(pago);
+                      }}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        theme === 'dark'
+                          ? 'hover:bg-gray-700 text-blue-400'
+                          : 'hover:bg-blue-50 text-blue-600'
                       }`}
-                      onClick={() => handleViewDetails(pago)}
+                      title="Ver detalles completos"
                     >
-                      <td className="px-6 py-4">
-                        <div className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                          {pago.clienteNombre || pago.cliente || 'N/A'}
-                        </div>
-                        <div className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                          ID: {pago.id?.substring(0, 15) || pago.prestamoID}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                          RD$ {montoTotal.toLocaleString()}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
-                          RD$ {montoCapital.toLocaleString()}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
-                          RD$ {montoInteres.toLocaleString()}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
-                          {formatFecha(pago.fechaPago)}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        {getTipoPagoBadge(pago.tipoPago)}
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm font-medium">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleViewDetails(pago);
-                          }}
-                          className={`p-2 rounded-lg transition-colors ${
-                            theme === 'dark'
-                              ? 'hover:bg-gray-700 text-blue-400'
-                              : 'hover:bg-blue-50 text-blue-600'
-                          }`}
-                          title="Ver detalles completos"
-                        >
-                          <EyeIcon className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </motion.tr>
-                  );
-                })}
-              </AnimatePresence>
-            </tbody>
-          </table>
+                      <EyeIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
 
-          {filteredAndSortedPagos.length === 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-12"
+      {filteredAndSortedPagos.length === 0 && (
+        <div className="text-center py-12">
+          <div className={`text-6xl mb-4 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-300'}`}>💰</div>
+          <p className={`text-lg font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+            {searchTerm || filtroEstado !== 'todos' 
+              ? 'No se encontraron pagos' 
+              : 'No hay pagos registrados'
+            }
+          </p>
+          {!searchTerm && filtroEstado === 'todos' && (
+            <button
+              onClick={handleRegistrarPago}
+              className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all inline-flex items-center space-x-2"
             >
-              <div className={`text-6xl mb-4 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-300'}`}>💰</div>
-              <p className={`text-lg font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                {searchTerm || filtroEstado !== 'todos' 
-                  ? 'No se encontraron pagos' 
-                  : 'No hay pagos registrados'
-                }
-              </p>
-              {!searchTerm && filtroEstado === 'todos' && (
-                <button
-                  onClick={handleRegistrarPago}
-                  className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all inline-flex items-center space-x-2"
-                >
-                  <PlusIcon className="h-5 w-5" />
-                  <span>Registrar Primer Pago</span>
-                </button>
-              )}
-            </motion.div>
+              <PlusIcon className="h-5 w-5" />
+              <span>Registrar Primer Pago</span>
+            </button>
           )}
         </div>
-      </GlassCard>
+      )}
 
       {/* Últimas comisiones */}
       {ultimasComisiones.length > 0 && (

@@ -1,6 +1,4 @@
-// src/pages/Operaciones/Comisiones.js
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../../context/ThemeContext';
@@ -11,6 +9,7 @@ import {
   ChartBarIcon,
   DocumentTextIcon,
   XMarkIcon,
+  RocketLaunchIcon,
   PlusIcon,
   PencilIcon,
   TrashIcon,
@@ -30,7 +29,19 @@ import {
   ArrowTopRightOnSquareIcon,
   ChartPieIcon,
   ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon
+  ArrowTrendingDownIcon,
+  InformationCircleIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  TrophyIcon,
+  PresentationChartLineIcon,
+  PercentBadgeIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  ArrowsUpDownIcon,
+  FireIcon,
+  ViewColumnsIcon,
+  TableCellsIcon
 } from '@heroicons/react/24/outline';
 import api from '../../services/api';
 import { formatFecha } from '../../utils/firebaseUtils';
@@ -86,43 +97,149 @@ const GlassCard = ({ children, className = '' }) => {
 };
 
 // ============================================
-// TARJETA DE ESTADÍSTICA
+// COMPONENTE DE SECCIÓN DESPLEGABLE GLOBAL
 // ============================================
-const StatCard = ({ icon: Icon, label, value, color, subValue, change }) => {
+const StatsCardsContainer = ({ children, title, icon: Icon, isOpen, onToggle }) => {
   const { theme } = useTheme();
+
+  return (
+    <div className={`rounded-xl shadow-xl border border-red-600/20 hover:border-red-600/40 transition-all duration-300 ${
+      theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+    }`}>
+      <div 
+        className={`p-3 sm:p-4 flex items-center justify-between cursor-pointer hover:bg-red-50/50 dark:hover:bg-red-900/10 transition-colors ${
+          !isOpen ? 'border-b-0' : 'border-b border-red-600/20'
+        }`}
+        onClick={onToggle}
+      >
+        <div className="flex items-center space-x-2 sm:space-x-3">
+          <div className="p-1.5 sm:p-2 bg-gradient-to-br from-red-600 to-red-800 rounded-lg shadow-lg">
+            <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+          </div>
+          <h3 className={`text-sm sm:text-base font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
+            {title}
+          </h3>
+        </div>
+        <div className="flex items-center space-x-2">
+          <span className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+            {isOpen ? 'Ocultar' : 'Mostrar'}
+          </span>
+          <motion.div
+            animate={{ rotate: isOpen ? 180 : 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            {isOpen ? (
+              <ChevronUpIcon className={`h-5 w-5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`} />
+            ) : (
+              <ChevronDownIcon className={`h-5 w-5 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`} />
+            )}
+          </motion.div>
+        </div>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="p-3 sm:p-4">
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+// ============================================
+// TARJETA DE ESTADÍSTICA MEJORADA
+// ============================================
+const StatCard = ({ icon: Icon, label, value, color, subValue, change, tooltip, badge }) => {
+  const { theme } = useTheme();
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  const gradientColors = {
+    red: 'from-red-500 to-red-700',
+    green: 'from-green-500 to-green-700',
+    blue: 'from-blue-500 to-blue-700',
+    yellow: 'from-yellow-500 to-yellow-700',
+    purple: 'from-purple-500 to-purple-700',
+    pink: 'from-pink-500 to-pink-700',
+    indigo: 'from-indigo-500 to-indigo-700',
+    teal: 'from-teal-500 to-teal-700',
+    orange: 'from-orange-500 to-orange-700',
+    emerald: 'from-emerald-500 to-emerald-700'
+  };
 
   return (
     <motion.div
       whileHover={{ scale: 1.02 }}
-      className={`relative overflow-hidden rounded-xl p-4 border ${
+      className={`relative overflow-hidden rounded-xl p-3 sm:p-4 border-2 hover:border-red-600/40 transition-all duration-300 ${
         theme === 'dark' ? 'bg-gray-800/90 border-gray-700' : 'bg-white border-gray-200'
       } shadow-lg`}
     >
       <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${color} opacity-10 rounded-full -mr-8 -mt-8`} />
-      <div className="flex items-center justify-between">
-        <div>
-          <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>{label}</p>
-          <p className={`text-2xl font-bold mt-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{value}</p>
+      
+      <div className="relative flex items-center justify-between">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1">
+            <p className={`text-[10px] sm:text-xs font-medium truncate ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+              {label}
+            </p>
+            {tooltip && (
+              <button
+                onMouseEnter={() => setShowTooltip(true)}
+                onMouseLeave={() => setShowTooltip(false)}
+                className="focus:outline-none"
+              >
+                <InformationCircleIcon className="h-3 w-3 text-gray-400" />
+              </button>
+            )}
+          </div>
+          <p className={`text-lg sm:text-xl font-bold mt-0.5 truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+            {value}
+          </p>
           {subValue && (
-            <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>{subValue}</p>
+            <p className={`text-[10px] truncate ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'} mt-0.5`}>
+              {subValue}
+            </p>
           )}
           {change && (
-            <p className={`text-xs mt-1 flex items-center ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {change > 0 ? <ArrowTrendingUpIcon className="h-3 w-3 mr-1" /> : <ArrowTrendingDownIcon className="h-3 w-3 mr-1" />}
-              {Math.abs(change)}% vs período anterior
+            <p className={`text-[10px] mt-0.5 flex items-center ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {change > 0 ? <ArrowTrendingUpIcon className="h-3 w-3 mr-0.5" /> : <ArrowTrendingDownIcon className="h-3 w-3 mr-0.5" />}
+              {Math.abs(change)}%
             </p>
           )}
         </div>
-        <div className={`p-3 rounded-xl bg-gradient-to-br ${color} shadow-lg`}>
-          <Icon className="h-6 w-6 text-white" />
+        <div className={`p-2 sm:p-2.5 rounded-xl bg-gradient-to-br ${gradientColors[color]} shadow-lg ml-2 flex-shrink-0`}>
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
         </div>
       </div>
+
+      {badge && (
+        <div className="absolute -top-1 -right-1">
+          <span className={`px-1.5 py-0.5 text-[8px] font-bold rounded-full ${badge.color || 'bg-red-600'} text-white`}>
+            {badge.text}
+          </span>
+        </div>
+      )}
+
+      {showTooltip && tooltip && (
+        <div className="absolute bottom-full left-0 mb-2 px-2 py-1 text-[10px] bg-gray-900 text-white rounded whitespace-nowrap z-50 shadow-lg">
+          {tooltip}
+        </div>
+      )}
     </motion.div>
   );
 };
 
 // ============================================
-// MODAL DE DASHBOARD DE COMISIONES (AMPLIAR)
+// MODAL DE DASHBOARD DE COMISIONES (AMPLIADO)
 // ============================================
 const DashboardComisionesModal = ({ isOpen, onClose, comisiones, estadisticas }) => {
   const { theme } = useTheme();
@@ -136,7 +253,6 @@ const DashboardComisionesModal = ({ isOpen, onClose, comisiones, estadisticas })
     }).format(valor || 0);
   };
 
-  // Datos para gráfico de comisiones por garante
   const comisionesPorGarante = comisiones.reduce((acc, com) => {
     const nombre = com.garanteNombre || com.garanteID || 'Sin garante';
     if (!acc[nombre]) {
@@ -176,7 +292,6 @@ const DashboardComisionesModal = ({ isOpen, onClose, comisiones, estadisticas })
     ],
   };
 
-  // Datos para gráfico de comisiones por mes
   const comisionesPorMes = comisiones.reduce((acc, com) => {
     if (!com.fechaPago) return acc;
     const fecha = new Date(com.fechaPago);
@@ -229,7 +344,6 @@ const DashboardComisionesModal = ({ isOpen, onClose, comisiones, estadisticas })
     ],
   };
 
-  // Datos para gráfico de estado
   const doughnutData = {
     labels: ['Pagadas', 'Pendientes', 'Canceladas'],
     datasets: [
@@ -318,40 +432,38 @@ const DashboardComisionesModal = ({ isOpen, onClose, comisiones, estadisticas })
             </div>
 
             <div className="p-6 max-h-[calc(90vh-120px)] overflow-y-auto space-y-6">
-              {/* Resumen de estadísticas */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
                   icon={CurrencyDollarIcon}
                   label="Total Comisiones"
                   value={formatearMonto(estadisticas.montoTotal)}
-                  color="from-red-500 to-red-700"
+                  color="red"
                   subValue={`${estadisticas.total} comisiones`}
                 />
                 <StatCard
                   icon={CheckCircleIcon}
                   label="Pagadas"
                   value={formatearMonto(estadisticas.montoPagado)}
-                  color="from-green-500 to-green-700"
+                  color="green"
                   subValue={`${estadisticas.pagadas} pagadas`}
                 />
                 <StatCard
                   icon={ClockIcon}
                   label="Pendientes"
                   value={formatearMonto(estadisticas.montoPendiente)}
-                  color="from-yellow-500 to-yellow-700"
+                  color="yellow"
                   subValue={`${estadisticas.pendientes} pendientes`}
                 />
                 <StatCard
                   icon={UserGroupIcon}
                   label="Garantes Activos"
                   value={Object.keys(comisionesPorGarante).length}
-                  color="from-blue-500 to-blue-700"
+                  color="blue"
+                  subValue="con comisiones"
                 />
               </div>
 
-              {/* Gráficos */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Top Garantes */}
                 <GlassCard>
                   <div className="p-4">
                     <h4 className={`text-base font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
@@ -363,7 +475,6 @@ const DashboardComisionesModal = ({ isOpen, onClose, comisiones, estadisticas })
                   </div>
                 </GlassCard>
 
-                {/* Evolución mensual */}
                 <GlassCard>
                   <div className="p-4">
                     <h4 className={`text-base font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
@@ -377,7 +488,6 @@ const DashboardComisionesModal = ({ isOpen, onClose, comisiones, estadisticas })
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Distribución por estado */}
                 <GlassCard>
                   <div className="p-4">
                     <h4 className={`text-base font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
@@ -391,7 +501,6 @@ const DashboardComisionesModal = ({ isOpen, onClose, comisiones, estadisticas })
                   </div>
                 </GlassCard>
 
-                {/* Tabla de top garantes */}
                 <GlassCard>
                   <div className="p-4">
                     <h4 className={`text-base font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
@@ -405,6 +514,7 @@ const DashboardComisionesModal = ({ isOpen, onClose, comisiones, estadisticas })
                             <th className="px-3 py-2 text-right">Total</th>
                             <th className="px-3 py-2 text-right">Pagado</th>
                             <th className="px-3 py-2 text-right">Pendiente</th>
+                            <th className="px-3 py-2 text-center">Cantidad</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -420,6 +530,7 @@ const DashboardComisionesModal = ({ isOpen, onClose, comisiones, estadisticas })
                               <td className="px-3 py-2 text-right text-yellow-600">
                                 {formatearMonto(garante.pendientes)}
                               </td>
+                              <td className="px-3 py-2 text-center">{garante.cantidad}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -597,11 +708,89 @@ const DetalleComisionModal = ({ isOpen, onClose, comision }) => {
 };
 
 // ============================================
-// TARJETA DE COMISIÓN
+// TARJETA DE COMISIÓN MEJORADA
 // ============================================
 const ComisionCard = ({ comision, onVer }) => {
   const { theme } = useTheme();
+  const [isHovered, setIsHovered] = useState(false);
 
+  const formatearMonto = (valor) => {
+    return new Intl.NumberFormat('es-DO', {
+      style: 'currency',
+      currency: 'DOP'
+    }).format(valor || 0);
+  };
+
+  const getEstadoColor = (estado) => {
+    switch(estado) {
+      case 'pagada': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800';
+      case 'pendiente': return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800';
+      case 'cancelada': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800';
+      default: return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 border-gray-200 dark:border-gray-700';
+    }
+  };
+
+  return (
+    <motion.div
+      whileHover={{ scale: 1.02, y: -2 }}
+      onHoverStart={() => setIsHovered(true)}
+      onHoverEnd={() => setIsHovered(false)}
+      className={`relative overflow-hidden rounded-xl border-2 cursor-pointer transition-all duration-300 ${
+        isHovered
+          ? 'border-red-600 shadow-xl shadow-red-600/20'
+          : theme === 'dark' ? 'bg-gray-800/90 border-gray-700' : 'bg-white border-gray-200'
+      }`}
+      onClick={() => onVer(comision)}
+    >
+      <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-red-500 to-red-700" />
+      
+      <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-black/5 dark:to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      
+      <div className="p-4">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center space-x-2">
+            <div className="p-1.5 bg-gradient-to-br from-red-500 to-red-700 rounded-lg">
+              <CurrencyDollarIcon className="h-3.5 w-3.5 text-white" />
+            </div>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full border ${getEstadoColor(comision.estado)}`}>
+              {comision.estado}
+            </span>
+          </div>
+          <span className="text-[10px] text-gray-500 dark:text-gray-400">
+            {formatFecha(comision.fechaPago)}
+          </span>
+        </div>
+
+        <h4 className={`text-sm font-semibold truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+          {comision.clienteNombre}
+        </h4>
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+          Garante: {comision.garanteNombre || comision.garanteID}
+        </p>
+
+        <div className="flex justify-between items-center mt-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+          <div>
+            <p className="text-[9px] text-gray-500 dark:text-gray-400">Monto Base</p>
+            <p className={`text-xs font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+              {formatearMonto(comision.montoBase)}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[9px] text-gray-500 dark:text-gray-400">Comisión</p>
+            <p className="text-base font-bold text-red-600">
+              {formatearMonto(comision.montoComision)}
+            </p>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+// ============================================
+// COMPONENTE DE TABLA DE COMISIONES
+// ============================================
+const ComisionesTable = ({ comisiones, onVer, sortConfig, requestSort, getSortIcon, theme }) => {
   const formatearMonto = (valor) => {
     return new Intl.NumberFormat('es-DO', {
       style: 'currency',
@@ -619,53 +808,122 @@ const ComisionCard = ({ comision, onVer }) => {
   };
 
   return (
-    <motion.div
-      whileHover={{ scale: 1.02 }}
-      className={`relative overflow-hidden rounded-xl border cursor-pointer ${
-        theme === 'dark' ? 'bg-gray-800/90 border-gray-700' : 'bg-white border-gray-200'
-      } shadow-lg hover:shadow-xl transition-all`}
-      onClick={() => onVer(comision)}
-    >
-      <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-red-500 to-red-700" />
-      
-      <div className="p-4">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center space-x-2">
-            <div className="p-2 bg-gradient-to-br from-red-500 to-red-700 rounded-lg">
-              <CurrencyDollarIcon className="h-4 w-4 text-white" />
-            </div>
-            <span className={`text-xs px-2 py-1 rounded-full ${getEstadoColor(comision.estado)}`}>
-              {comision.estado}
-            </span>
-          </div>
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            {formatFecha(comision.fechaPago)}
-          </span>
-        </div>
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <thead className={theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}>
+          <tr>
+            <th 
+              className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors whitespace-nowrap"
+              onClick={() => requestSort('clienteNombre')}
+            >
+              Cliente {getSortIcon('clienteNombre')}
+            </th>
+            <th 
+              className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors whitespace-nowrap"
+              onClick={() => requestSort('garanteNombre')}
+            >
+              Garante {getSortIcon('garanteNombre')}
+            </th>
+            <th 
+              className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors whitespace-nowrap"
+              onClick={() => requestSort('montoBase')}
+            >
+              Monto Base {getSortIcon('montoBase')}
+            </th>
+            <th 
+              className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors whitespace-nowrap"
+              onClick={() => requestSort('montoComision')}
+            >
+              Comisión {getSortIcon('montoComision')}
+            </th>
+            <th 
+              className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors whitespace-nowrap"
+              onClick={() => requestSort('fechaPago')}
+            >
+              Fecha {getSortIcon('fechaPago')}
+            </th>
+            <th 
+              className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-red-600 transition-colors whitespace-nowrap"
+              onClick={() => requestSort('estado')}
+            >
+              Estado {getSortIcon('estado')}
+            </th>
+            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              Acciones
+            </th>
+          </tr>
+        </thead>
+        <tbody className={`divide-y divide-gray-200 dark:divide-gray-700 ${
+          theme === 'dark' ? 'bg-gray-800/50' : 'bg-white'
+        }`}>
+          {comisiones.map((comision) => (
+            <motion.tr
+              key={comision.id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className={`cursor-pointer transition-all duration-300 hover:bg-gray-100 dark:hover:bg-gray-700/50`}
+              onClick={() => onVer(comision)}
+            >
+              <td className="px-6 py-4">
+                <div className={`text-sm font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  {comision.clienteNombre || 'N/A'}
+                </div>
+              </td>
+              <td className="px-6 py-4">
+                <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {comision.garanteNombre || comision.garanteID || 'N/A'}
+                </div>
+              </td>
+              <td className="px-6 py-4">
+                <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
+                  {formatearMonto(comision.montoBase)}
+                </div>
+              </td>
+              <td className="px-6 py-4">
+                <div className={`text-sm font-bold text-red-600`}>
+                  {formatearMonto(comision.montoComision)}
+                </div>
+              </td>
+              <td className="px-6 py-4">
+                <div className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
+                  {formatFecha(comision.fechaPago)}
+                </div>
+              </td>
+              <td className="px-6 py-4">
+                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getEstadoColor(comision.estado)}`}>
+                  {comision.estado}
+                </span>
+              </td>
+              <td className="px-6 py-4 text-right text-sm font-medium">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onVer(comision);
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${
+                    theme === 'dark'
+                      ? 'hover:bg-gray-700 text-blue-400'
+                      : 'hover:bg-blue-50 text-blue-600'
+                  }`}
+                  title="Ver detalles completos"
+                >
+                  <EyeIcon className="h-4 w-4" />
+                </button>
+              </td>
+            </motion.tr>
+          ))}
+        </tbody>
+      </table>
 
-        <h4 className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-          {comision.clienteNombre}
-        </h4>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Garante: {comision.garanteNombre || comision.garanteID}
-        </p>
-
-        <div className="flex justify-between items-center mt-3">
-          <div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Monto Base (Interés)</p>
-            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-              {formatearMonto(comision.montoBase)}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Comisión</p>
-            <p className="text-lg font-bold text-red-600">
-              {formatearMonto(comision.montoComision)}
-            </p>
-          </div>
+      {comisiones.length === 0 && (
+        <div className="text-center py-12">
+          <GiftIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <p className={`text-lg ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+            No hay comisiones para mostrar
+          </p>
         </div>
-      </div>
-    </motion.div>
+      )}
+    </div>
   );
 };
 
@@ -676,6 +934,7 @@ const Comisiones = () => {
   const { theme } = useTheme();
   const { user } = useAuth();
   const location = useLocation();
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
 
   const [comisiones, setComisiones] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -690,8 +949,22 @@ const Comisiones = () => {
   const [fechaFin, setFechaFin] = useState('');
   const [montoMin, setMontoMin] = useState('');
   const [montoMax, setMontoMax] = useState('');
+  const [showStatsCards, setShowStatsCards] = useState(true);
   const [garantes, setGarantes] = useState([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  
+  // 🔥 VISTA: Por defecto en PC = tabla, en móvil = tarjetas
+  const [viewMode, setViewMode] = useState('table');
+  
+  // Estado para ordenamiento
+  const [sortConfig, setSortConfig] = useState({
+    key: 'fechaPago',
+    direction: 'desc'
+  });
+  
+  // Estado para acciones rápidas (evita acumulación)
+  const [accionRapidaActiva, setAccionRapidaActiva] = useState(null);
+  
   const [estadisticas, setEstadisticas] = useState({
     total: 0,
     pagadas: 0,
@@ -704,6 +977,26 @@ const Comisiones = () => {
 
   const esGarante = user?.rol === 'garante' || user?.rol === 'agente';
   const esAdmin = user?.rol === 'admin';
+
+  // Detectar tamaño de pantalla y establecer vista predeterminada
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      // Si es móvil, cambiar a tarjetas; si es PC, cambiar a tabla
+      if (mobile) {
+        setViewMode('cards');
+      } else {
+        setViewMode('table');
+      }
+    };
+    
+    // Ejecutar al montar
+    handleResize();
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Leer garanteID de la URL
   useEffect(() => {
@@ -800,7 +1093,226 @@ const Comisiones = () => {
     setFechaFin('');
     setMontoMin('');
     setMontoMax('');
+    setAccionRapidaActiva(null);
     cargarComisiones();
+  };
+
+  // ============================================
+  // FORMATO DE MONTO PARA STATS CARDS (ABREVIADO)
+  // ============================================
+  const formatMontoAbreviado = (valor) => {
+    if (!valor && valor !== 0) return 'RD$ 0';
+    if (valor >= 1000000) return `RD$ ${(valor / 1000000).toFixed(1)}M`;
+    if (valor >= 1000) return `RD$ ${(valor / 1000).toFixed(1)}K`;
+    return `RD$ ${valor.toLocaleString()}`;
+  };
+
+  // ============================================
+  // FORMATO DE MONTO PARA RESUMEN EJECUTIVO (EXACTO)
+  // ============================================
+  const formatMontoExacto = (valor) => {
+    if (!valor && valor !== 0) return 'RD$ 0';
+    return `RD$ ${valor.toLocaleString()}`;
+  };
+
+  // ============================================
+  // FUNCIÓN DE ORDENAMIENTO
+  // ============================================
+  const requestSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) {
+      return <ArrowsUpDownIcon className="h-3 w-3 inline ml-1" />;
+    }
+    return sortConfig.direction === 'asc' 
+      ? <ArrowUpIcon className="h-3 w-3 inline ml-1" />
+      : <ArrowDownIcon className="h-3 w-3 inline ml-1" />;
+  };
+
+  // ============================================
+  // FILTROS Y ORDENAMIENTO
+  // ============================================
+  const filteredAndSortedComisiones = useMemo(() => {
+    let result = [...comisiones];
+
+    // Búsqueda por cliente
+    if (filtroCliente) {
+      result = result.filter(c => 
+        c.clienteNombre?.toLowerCase().includes(filtroCliente.toLowerCase())
+      );
+    }
+
+    // Filtro por estado
+    if (filtroEstado !== 'todos') {
+      result = result.filter(c => c.estado === filtroEstado);
+    }
+
+    // Filtro por garante
+    if (filtroGarante) {
+      result = result.filter(c => c.garanteID === filtroGarante);
+    }
+
+    // Filtro por fecha
+    if (fechaInicio) {
+      const fechaInicioObj = new Date(fechaInicio);
+      result = result.filter(c => {
+        const fecha = new Date(c.fechaPago);
+        return fecha >= fechaInicioObj;
+      });
+    }
+    if (fechaFin) {
+      const fechaFinObj = new Date(fechaFin);
+      fechaFinObj.setHours(23, 59, 59, 999);
+      result = result.filter(c => {
+        const fecha = new Date(c.fechaPago);
+        return fecha <= fechaFinObj;
+      });
+    }
+
+    // Filtro por monto
+    if (montoMin) {
+      result = result.filter(c => (c.montoComision || 0) >= parseFloat(montoMin));
+    }
+    if (montoMax) {
+      result = result.filter(c => (c.montoComision || 0) <= parseFloat(montoMax));
+    }
+
+    // ORDENAMIENTO
+    result.sort((a, b) => {
+      let aVal, bVal;
+      
+      switch (sortConfig.key) {
+        case 'clienteNombre':
+          aVal = a.clienteNombre || '';
+          bVal = b.clienteNombre || '';
+          break;
+        case 'garanteNombre':
+          aVal = a.garanteNombre || a.garanteID || '';
+          bVal = b.garanteNombre || b.garanteID || '';
+          break;
+        case 'montoBase':
+          aVal = a.montoBase || 0;
+          bVal = b.montoBase || 0;
+          break;
+        case 'montoComision':
+          aVal = a.montoComision || 0;
+          bVal = b.montoComision || 0;
+          break;
+        case 'estado':
+          aVal = a.estado || '';
+          bVal = b.estado || '';
+          break;
+        case 'fechaPago':
+        default:
+          aVal = new Date(a.fechaPago).getTime();
+          bVal = new Date(b.fechaPago).getTime();
+          break;
+      }
+
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [comisiones, filtroCliente, filtroEstado, filtroGarante, fechaInicio, fechaFin, montoMin, montoMax, sortConfig]);
+
+  // ============================================
+  // CALCULAR ESTADÍSTICAS ADICIONALES
+  // ============================================
+  const statsAdicionales = useMemo(() => {
+    if (comisiones.length === 0) {
+      return {
+        promedioComision: 0,
+        garanteTop: { nombre: '', total: 0, cantidad: 0 },
+        montoMaximo: 0,
+        montoMinimo: 0,
+        eficienciaPago: 0
+      };
+    }
+
+    const total = comisiones.reduce((sum, c) => sum + (c.montoComision || 0), 0);
+    const promedio = total / comisiones.length;
+
+    const garantesMap = comisiones.reduce((acc, c) => {
+      const nombre = c.garanteNombre || c.garanteID || 'Sin garante';
+      if (!acc[nombre]) {
+        acc[nombre] = { total: 0, cantidad: 0 };
+      }
+      acc[nombre].total += c.montoComision || 0;
+      acc[nombre].cantidad++;
+      return acc;
+    }, {});
+
+    let topGarante = { nombre: '', total: 0, cantidad: 0 };
+    for (const [nombre, data] of Object.entries(garantesMap)) {
+      if (data.total > topGarante.total) {
+        topGarante = { nombre, total: data.total, cantidad: data.cantidad };
+      }
+    }
+
+    const montos = comisiones.map(c => c.montoComision || 0);
+    const maximo = Math.max(...montos);
+    const minimo = Math.min(...montos);
+    const pagadas = comisiones.filter(c => c.estado === 'pagada').length;
+    const eficiencia = comisiones.length > 0 ? (pagadas / comisiones.length) * 100 : 0;
+
+    return {
+      promedioComision: promedio,
+      garanteTop: topGarante,
+      montoMaximo: maximo,
+      montoMinimo: minimo,
+      eficienciaPago: eficiencia
+    };
+  }, [comisiones]);
+
+  // ============================================
+  // FUNCIONES PARA ACCIONES RÁPIDAS (CON LIMPIEZA)
+  // ============================================
+  const handleAccionRapida = (tipo, valor) => {
+    // Si la misma acción está activa, la desactivamos (toggle)
+    if (accionRapidaActiva === tipo) {
+      setAccionRapidaActiva(null);
+      limpiarFiltros();
+      return;
+    }
+    
+    setAccionRapidaActiva(tipo);
+    
+    // Limpiar filtros anteriores
+    setFiltroEstado('todos');
+    setFiltroCliente('');
+    setFechaInicio('');
+    setFechaFin('');
+    setMontoMin('');
+    setMontoMax('');
+    
+    // Aplicar el nuevo filtro
+    if (tipo === 'todos') {
+      // Ya está limpio
+    } else if (tipo === 'pagadas') {
+      setFiltroEstado('pagada');
+    } else if (tipo === 'pendientes') {
+      setFiltroEstado('pendiente');
+    } else if (tipo === 'canceladas') {
+      setFiltroEstado('cancelada');
+    } else if (tipo === 'mas5k') {
+      setMontoMin('5000');
+    } else if (tipo === 'esteMes') {
+      const hoy = new Date();
+      const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+      setFechaInicio(inicioMes.toISOString().split('T')[0]);
+      setFechaFin(hoy.toISOString().split('T')[0]);
+    }
+    
+    // Aplicar filtros después de un breve delay para que los estados se actualicen
+    setTimeout(() => cargarComisiones(), 50);
   };
 
   const formatearMonto = (valor) => {
@@ -809,6 +1321,9 @@ const Comisiones = () => {
       currency: 'DOP'
     }).format(valor || 0);
   };
+
+  // Determinar qué vista mostrar
+  const mostrarVistaTabla = viewMode === 'table';
 
   return (
     <div className="space-y-6">
@@ -830,14 +1345,40 @@ const Comisiones = () => {
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 flex-wrap gap-2">
+          {/* Toggle de vista - SIEMPRE VISIBLE */}
+          <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`p-1.5 rounded-lg transition-all ${
+                viewMode === 'cards'
+                  ? 'bg-red-600 text-white shadow-md'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+              }`}
+              title="Vista de tarjetas"
+            >
+              <ViewColumnsIcon className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              className={`p-1.5 rounded-lg transition-all ${
+                viewMode === 'table'
+                  ? 'bg-red-600 text-white shadow-md'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+              }`}
+              title="Vista de tabla"
+            >
+              <TableCellsIcon className="h-4 w-4" />
+            </button>
+          </div>
+
           <button
             onClick={() => setDashboardAbierto(true)}
             className="px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg font-medium hover:shadow-lg transition-all flex items-center space-x-2"
             title="Dashboard de comisiones"
           >
             <ChartBarIcon className="h-5 w-5" />
-            <span className="hidden sm:inline">Ampliar</span>
+            <span className="hidden sm:inline">Dashboard</span>
             <ArrowTopRightOnSquareIcon className="h-4 w-4" />
           </button>
           <button
@@ -865,66 +1406,100 @@ const Comisiones = () => {
         )}
       </AnimatePresence>
 
-      {/* Dashboard según rol */}
-      {esGarante && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <StatCard
-            icon={CurrencyDollarIcon}
-            label="Total Ganado"
-            value={formatearMonto(estadisticas.montoTotal)}
-            color="from-green-500 to-green-700"
-            subValue={`${estadisticas.total} comisiones`}
-          />
-          <StatCard
-            icon={CheckCircleIcon}
-            label="Comisiones Pagadas"
-            value={formatearMonto(estadisticas.montoPagado)}
-            color="from-blue-500 to-blue-700"
-            subValue={`${estadisticas.pagadas} pagadas`}
-          />
-          <StatCard
-            icon={ClockIcon}
-            label="Comisiones Pendientes"
-            value={formatearMonto(estadisticas.montoPendiente)}
-            color="from-yellow-500 to-yellow-700"
-            subValue={`${estadisticas.pendientes} pendientes`}
-          />
-        </div>
-      )}
-
-      {esAdmin && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      {/* ============================================ */}
+      {/* 🔥 STATS CARDS CON OPCION DE OCULTAR/MOSTRAR */}
+      {/* ============================================ */}
+      <StatsCardsContainer 
+        title={esGarante ? "Resumen de Mis Comisiones" : "Métricas de Comisiones"}
+        icon={ChartBarIcon}
+        isOpen={showStatsCards}
+        onToggle={() => setShowStatsCards(!showStatsCards)}
+      >
+        {/* Fila 1 - Métricas Principales */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 mb-3 sm:mb-4">
           <StatCard
             icon={CurrencyDollarIcon}
             label="Total Comisiones"
-            value={formatearMonto(estadisticas.montoTotal)}
-            color="from-red-500 to-red-700"
+            value={formatMontoAbreviado(estadisticas.montoTotal)}
             subValue={`${estadisticas.total} comisiones`}
+            color="red"
+            tooltip="Total de comisiones generadas"
           />
           <StatCard
             icon={CheckCircleIcon}
             label="Pagadas"
-            value={formatearMonto(estadisticas.montoPagado)}
-            color="from-green-500 to-green-700"
+            value={formatMontoAbreviado(estadisticas.montoPagado)}
             subValue={`${estadisticas.pagadas} pagadas`}
+            color="green"
+            tooltip="Comisiones que ya han sido pagadas"
           />
           <StatCard
             icon={ClockIcon}
             label="Pendientes"
-            value={formatearMonto(estadisticas.montoPendiente)}
-            color="from-yellow-500 to-yellow-700"
+            value={formatMontoAbreviado(estadisticas.montoPendiente)}
             subValue={`${estadisticas.pendientes} pendientes`}
+            color="yellow"
+            tooltip="Comisiones pendientes de pago"
+          />
+          <StatCard
+            icon={PresentationChartLineIcon}
+            label="Promedio por Comisión"
+            value={formatMontoAbreviado(statsAdicionales.promedioComision)}
+            subValue={`${comisiones.length} comisiones`}
+            color="blue"
+            tooltip="Promedio de monto por comisión"
+          />
+          <StatCard
+            icon={TrophyIcon}
+            label="Garante Top"
+            value={statsAdicionales.garanteTop.nombre || 'Ninguno'}
+            subValue={statsAdicionales.garanteTop.total > 0 ? `RD$ ${statsAdicionales.garanteTop.total.toLocaleString()}` : 'Sin comisiones'}
+            color="purple"
+            tooltip="Garante que ha generado más comisiones"
+          />
+        </div>
+
+        {/* Fila 2 - Métricas Adicionales */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+          <StatCard
+            icon={FireIcon}
+            label="Comisión Máxima"
+            value={formatMontoAbreviado(statsAdicionales.montoMaximo)}
+            subValue="Monto más alto"
+            color="orange"
+            tooltip="Monto de comisión más alto registrado"
+          />
+          <StatCard
+            icon={PercentBadgeIcon}
+            label="Eficiencia de Pago"
+            value={`${statsAdicionales.eficienciaPago.toFixed(1)}%`}
+            subValue={`${estadisticas.pagadas} de ${estadisticas.total} pagadas`}
+            color="emerald"
+            tooltip="Porcentaje de comisiones pagadas vs total"
+          />
+          <StatCard
+            icon={UserGroupIcon}
+            label="Garantes Activos"
+            value={garantes.filter(g => {
+              const tieneComisiones = comisiones.some(c => c.garanteID === g.id);
+              return tieneComisiones;
+            }).length}
+            subValue={`${garantes.length} garantes totales`}
+            color="indigo"
+            tooltip="Garantes que han generado al menos una comisión"
           />
           <StatCard
             icon={BanknotesIcon}
-            label="Monto Total"
-            value={formatearMonto(estadisticas.montoTotal)}
-            color="from-purple-500 to-purple-700"
+            label="Monto Base Total"
+            value={formatMontoAbreviado(comisiones.reduce((sum, c) => sum + (c.montoBase || 0), 0))}
+            subValue="Base para comisiones"
+            color="teal"
+            tooltip="Suma de todos los montos base (intereses) sobre los que se calculan comisiones"
           />
         </div>
-      )}
+      </StatsCardsContainer>
 
-      {/* Filtros */}
+      {/* Filtros Avanzados */}
       <GlassCard>
         <div className="p-4">
           <div className="flex flex-wrap gap-4">
@@ -1081,14 +1656,97 @@ const Comisiones = () => {
         </div>
       </GlassCard>
 
-      {/* Grid de comisiones */}
+      {/* Acciones rápidas - CORREGIDAS CON LIMPIEZA */}
+      <GlassCard>
+        <div className="p-3 sm:p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-xs sm:text-sm font-medium mr-1 sm:mr-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
+              Acciones rápidas:
+            </span>
+            <button 
+              onClick={() => handleAccionRapida('todos', null)}
+              className={`px-2 sm:px-3 py-1 rounded-full text-xs transition-colors ${
+                accionRapidaActiva === 'todos'
+                  ? 'bg-red-600 text-white'
+                  : theme === 'dark'
+                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Todos ({estadisticas.total})
+            </button>
+            <button 
+              onClick={() => handleAccionRapida('pagadas', null)}
+              className={`px-2 sm:px-3 py-1 rounded-full text-xs transition-colors ${
+                accionRapidaActiva === 'pagadas'
+                  ? 'bg-green-600 text-white'
+                  : theme === 'dark'
+                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              ✅ Pagadas ({estadisticas.pagadas})
+            </button>
+            <button 
+              onClick={() => handleAccionRapida('pendientes', null)}
+              className={`px-2 sm:px-3 py-1 rounded-full text-xs transition-colors ${
+                accionRapidaActiva === 'pendientes'
+                  ? 'bg-yellow-600 text-white'
+                  : theme === 'dark'
+                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              ⏳ Pendientes ({estadisticas.pendientes})
+            </button>
+            <button 
+              onClick={() => handleAccionRapida('canceladas', null)}
+              className={`px-2 sm:px-3 py-1 rounded-full text-xs transition-colors ${
+                accionRapidaActiva === 'canceladas'
+                  ? 'bg-red-600 text-white'
+                  : theme === 'dark'
+                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              ❌ Canceladas ({estadisticas.canceladas || 0})
+            </button>
+            <button 
+              onClick={() => handleAccionRapida('mas5k', null)}
+              className={`px-2 sm:px-3 py-1 rounded-full text-xs transition-colors ${
+                accionRapidaActiva === 'mas5k'
+                  ? 'bg-purple-600 text-white'
+                  : theme === 'dark'
+                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              💰 +5K
+            </button>
+            <button 
+              onClick={() => handleAccionRapida('esteMes', null)}
+              className={`px-2 sm:px-3 py-1 rounded-full text-xs transition-colors ${
+                accionRapidaActiva === 'esteMes'
+                  ? 'bg-cyan-600 text-white'
+                  : theme === 'dark'
+                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              📅 Este mes
+            </button>
+          </div>
+        </div>
+      </GlassCard>
+
+      {/* Lista de comisiones - Vista responsiva */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6].map(i => (
             <div key={i} className="h-48 bg-gray-200 dark:bg-gray-700 rounded-xl animate-pulse" />
           ))}
         </div>
-      ) : comisiones.length === 0 ? (
+      ) : filteredAndSortedComisiones.length === 0 ? (
         <div className="text-center py-12">
           <GiftIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
           <p className={`text-lg ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -1102,9 +1760,25 @@ const Comisiones = () => {
             </p>
           )}
         </div>
+      ) : mostrarVistaTabla ? (
+        // Vista de tabla
+        <GlassCard>
+          <ComisionesTable
+            comisiones={filteredAndSortedComisiones}
+            onVer={(com) => {
+              setComisionSeleccionada(com);
+              setDetalleAbierto(true);
+            }}
+            sortConfig={sortConfig}
+            requestSort={requestSort}
+            getSortIcon={getSortIcon}
+            theme={theme}
+          />
+        </GlassCard>
       ) : (
+        // Vista de tarjetas
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {comisiones.map((comision) => (
+          {filteredAndSortedComisiones.map((comision) => (
             <ComisionCard
               key={comision.id}
               comision={comision}
@@ -1115,6 +1789,66 @@ const Comisiones = () => {
             />
           ))}
         </div>
+      )}
+
+      {/* Resumen Ejecutivo - CON NÚMEROS EXACTOS */}
+      {filteredAndSortedComisiones.length > 0 && (
+        <GlassCard>
+          <div className="p-4 sm:p-6">
+            <div className="flex items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4">
+              <div className="p-1.5 sm:p-2 bg-gradient-to-br from-purple-600 to-purple-800 rounded-lg shadow-lg">
+                <RocketLaunchIcon className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+              </div>
+              <h3 className={`text-base sm:text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
+                Resumen Ejecutivo
+              </h3>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+              <div className={`p-3 sm:p-4 rounded-lg border-2 ${
+                theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <p className={`text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Total Comisiones
+                </p>
+                <p className={`text-xl sm:text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
+                  {formatMontoExacto(estadisticas.montoTotal)}
+                </p>
+                <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                  {estadisticas.total} comisiones registradas
+                </p>
+              </div>
+
+              <div className={`p-3 sm:p-4 rounded-lg border-2 ${
+                theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <p className={`text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Comisiones Pagadas
+                </p>
+                <p className={`text-xl sm:text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
+                  {formatMontoExacto(estadisticas.montoPagado)}
+                </p>
+                <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                  {estadisticas.pagadas} de {estadisticas.total} pagadas
+                </p>
+              </div>
+
+              <div className={`p-3 sm:p-4 rounded-lg border-2 ${
+                theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <p className={`text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Eficiencia de Pago
+                </p>
+                <p className={`text-xl sm:text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>
+                  {statsAdicionales.eficienciaPago.toFixed(1)}%
+                </p>
+                <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                  {estadisticas.pagadas} pagadas de {estadisticas.total}
+                </p>
+              </div>
+            </div>
+          </div>
+        </GlassCard>
       )}
 
       {/* Modal de detalle */}

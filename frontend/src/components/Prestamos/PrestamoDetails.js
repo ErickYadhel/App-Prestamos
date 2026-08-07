@@ -13,7 +13,8 @@ import {
   InformationCircleIcon,
   ArrowTrendingUpIcon,
   CheckCircleIcon,
-  GiftIcon
+  GiftIcon,
+  ChartBarIcon
 } from '@heroicons/react/24/outline';
 import api from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
@@ -49,8 +50,112 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
   // 🔥 FUNCIÓN PARA FORMATEAR FECHA CORRECTAMENTE (soporta DD-MM-YYYY)
   const formatearFechaLocal = (fecha) => {
     if (!fecha) return 'No disponible';
-    // Usar firebaseTimestampToLocalString que maneja ambos formatos
     return firebaseTimestampToLocalString(fecha);
+  };
+
+  // 🔥 FUNCIÓN PARA GENERAR MENSAJE DE ESTADO COMPLETO PARA WHATSAPP
+  const generarMensajeEstado = (prestamoData) => {
+    if (!prestamoData) return '';
+    
+    const capitalInicial = prestamoData.montoPrestado || 0;
+    const capitalRestante = prestamoData.capitalRestante || 0;
+    const capitalPagado = capitalInicial - capitalRestante;
+    const porcentajePagado = capitalInicial > 0 ? (capitalPagado / capitalInicial) * 100 : 0;
+    const interesActual = (capitalRestante * (prestamoData.interesPercent || 10)) / 100;
+    
+    // Obtener fecha del próximo pago
+    const fechaProximoPago = prestamoData.fechaProximoPago 
+      ? firebaseTimestampToDate(prestamoData.fechaProximoPago)
+      : null;
+    
+    const fechaProximoFormateada = fechaProximoPago 
+      ? fechaProximoPago.toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : 'Por definir';
+    
+    // Calcular días hasta el próximo pago
+    let diasHastaPago = 'No disponible';
+    if (fechaProximoPago) {
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      const diffTime = fechaProximoPago - hoy;
+      diasHastaPago = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diasHastaPago < 0) diasHastaPago = 'VENCIDO';
+      else if (diasHastaPago === 0) diasHastaPago = 'Hoy';
+      else diasHastaPago = `${diasHastaPago} días`;
+    }
+    
+    // Obtener frecuencia de pago
+    const frecuenciaTexto = getFrecuenciaTexto(prestamoData);
+    
+    // Información de mora
+    let infoMora = '';
+    if (informacionMora && informacionMora.tieneMora) {
+      infoMora = `\n⚠️ *ALERTA DE MORA*\n• Días de atraso: ${informacionMora.diasAtraso} días\n• Mora calculada: RD$ ${informacionMora.moraCalculada.toLocaleString()}`;
+    }
+    
+    // Próximas fechas de pago
+    let proximasFechasTexto = '';
+    if (proximasFechas.length > 0) {
+      const fechasMostrar = proximasFechas.slice(0, 3);
+      proximasFechasTexto = fechasMostrar.map(f => `• ${formatearFechaLocal(f)}`).join('\n');
+    }
+    
+    // Últimos pagos (hasta 3)
+    let ultimosPagosTexto = '';
+    if (pagos.length > 0) {
+      const ultimosPagos = pagos.slice(0, 3);
+      ultimosPagosTexto = ultimosPagos.map(p => {
+        const montoTotal = (p.montoCapital || 0) + (p.montoInteres || 0) + (p.montoMora || 0);
+        const fecha = formatearFechaLocal(p.fechaPago);
+        return `• ${fecha}: RD$ ${montoTotal.toLocaleString()} (${p.tipoPago || 'normal'})`;
+      }).join('\n');
+    }
+    
+    // Estado del préstamo
+    const estadoEmoji = prestamoData.estado === 'activo' ? '🟢' : 
+                        prestamoData.estado === 'completado' ? '✅' : 
+                        prestamoData.estado === 'moroso' ? '🔴' : '🟡';
+    
+    const mensaje = `📋 *ESTADO DE SU PRÉSTAMO* - EYS Inversiones
+
+━━━━━━━━━━━━━━━━━━━━━
+👤 *Datos del Cliente*
+• Nombre: ${prestamoData.clienteNombre || 'No especificado'}
+• Cédula: ${getCedulaCliente(prestamoData)}
+━━━━━━━━━━━━━━━━━━━━━
+💰 *Resumen Financiero*
+• Monto Prestado: RD$ ${capitalInicial.toLocaleString()}
+• Capital Pagado: RD$ ${capitalPagado.toLocaleString()}
+• Capital Restante: RD$ ${capitalRestante.toLocaleString()}
+• Progreso: ${porcentajePagado.toFixed(1)}% pagado
+━━━━━━━━━━━━━━━━━━━━━
+📊 *Intereses*
+• Interés del período: RD$ ${interesActual.toLocaleString()}
+• Interés diario: RD$ ${(interesActual / 30).toLocaleString()}
+• Tasa de interés: ${prestamoData.interesPercent || 10}%
+━━━━━━━━━━━━━━━━━━━━━
+📅 *Calendario de Pagos*
+• Frecuencia: ${frecuenciaTexto}
+• Próximo pago: ${fechaProximoFormateada}
+• Días hasta próximo pago: ${diasHastaPago}
+${proximasFechasTexto ? `\n• Próximas fechas:\n${proximasFechasTexto}` : ''}
+━━━━━━━━━━━━━━━━━━━━━
+${ultimosPagosTexto ? `📋 *Últimos Pagos*
+${ultimosPagosTexto}
+━━━━━━━━━━━━━━━━━━━━━` : ''}
+${informacionMora?.tieneMora ? `⚠️ *ESTADO DEL PRÉSTAMO*
+${infoMora}
+━━━━━━━━━━━━━━━━━━━━━` : ''}
+📌 *Estado General*
+${estadoEmoji} Estado: ${prestamoData.estado?.toUpperCase() || 'ACTIVO'}
+• Total pagos realizados: ${pagos.length}
+• ID Préstamo: ${prestamoData.id || 'N/A'}
+
+━━━━━━━━━━━━━━━━━━━━━
+📱 *EYS Inversiones*
+¡Gracias por confiar en nosotros!`;
+
+    return mensaje;
   };
 
   useEffect(() => {
@@ -90,7 +195,6 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
       const pagosNormalizados = pagosData.map(pago => normalizeFirebaseData(pago));
       
       pagosNormalizados.sort((a, b) => {
-        // 🔥 CORREGIDO: Usar firebaseTimestampToDate para comparar fechas
         const fechaA = firebaseTimestampToDate(a.fechaPago);
         const fechaB = firebaseTimestampToDate(b.fechaPago);
         if (!fechaA || !fechaB) return 0;
@@ -134,7 +238,6 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
     if (!prestamoActual) return;
     
     const hoy = new Date();
-    // 🔥 CORREGIDO: Usar firebaseTimestampToDate para convertir fecha
     const fechaEsperada = prestamoActual.fechaProximoPago 
       ? firebaseTimestampToDate(prestamoActual.fechaProximoPago)
       : null;
@@ -168,6 +271,21 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
     generarProximasFechas();
   };
 
+  // 🔥 FUNCIÓN PARA ENVIAR ESTADO COMPLETO POR WHATSAPP
+  const handleEnviarEstadoWhatsApp = () => {
+    const cliente = clientes.find(c => c.id === prestamoActual?.clienteID);
+    if (!cliente || !cliente.celular) {
+      alert('No se encontró el número de teléfono del cliente');
+      return;
+    }
+
+    const mensaje = generarMensajeEstado(prestamoActual || prestamoNormalizado);
+    const mensajeCodificado = encodeURIComponent(mensaje);
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=1${cliente.celular.replace(/\D/g, '')}&text=${mensajeCodificado}`;
+    
+    window.open(whatsappUrl, '_blank');
+  };
+
   const calcularInteresActual = () => {
     if (!prestamoActual) return 0;
     return (prestamoActual.capitalRestante * prestamoActual.interesPercent) / 100;
@@ -197,6 +315,11 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
     return estados[estado] || estados.activo;
   };
 
+  const getCedulaCliente = (prestamoData) => {
+    const cliente = clientes.find(c => c.id === prestamoData?.clienteID);
+    return cliente?.cedula || 'N/A';
+  };
+
   const estadoInfo = prestamoActual ? getEstadoInfo(prestamoActual.estado) : getEstadoInfo('activo');
   const EstadoIcon = estadoInfo.icon;
   const interesActual = calcularInteresActual();
@@ -217,14 +340,8 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
     </div>
   );
 
-  const getCedulaCliente = () => {
-    const cliente = clientes.find(c => c.id === prestamoNormalizado.clienteID);
-    return cliente?.cedula || 'N/A';
-  };
-
   const formatPagoFecha = (fechaPago) => {
     if (!fechaPago) return 'Fecha no disponible';
-    // 🔥 Usar firebaseTimestampToLocalString que maneja DD-MM-YYYY
     return firebaseTimestampToLocalString(fechaPago);
   };
 
@@ -261,17 +378,24 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
             </p>
           </div>
         </div>
-        <div className="flex space-x-3">
+        <div className="flex space-x-3 flex-wrap gap-2">
           <button
             onClick={() => onEnviarWhatsApp(prestamoData)}
             className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
           >
             <ChatBubbleLeftRightIcon className="h-4 w-4" />
-            <span>Enviar WhatsApp</span>
+            <span>WhatsApp</span>
+          </button>
+          <button
+            onClick={handleEnviarEstadoWhatsApp}
+            className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+          >
+            <ChartBarIcon className="h-4 w-4" />
+            <span>Enviar Estado</span>
           </button>
           <button
             onClick={handleRegistrarPagoClick}
-            className="bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+            className="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
           >
             <CurrencyDollarIcon className="h-4 w-4" />
             <span>Registrar Pago</span>
@@ -356,7 +480,7 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
                 </div>
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                   <div 
-                    className="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                    className="bg-red-600 h-2 rounded-full transition-all duration-300"
                     style={{ width: `${((prestamoData.montoPrestado - prestamoData.capitalRestante) / prestamoData.montoPrestado) * 100}%` }}
                   ></div>
                 </div>
@@ -499,7 +623,7 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Cédula:</span>
-                  <span className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{getCedulaCliente()}</span>
+                  <span className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{getCedulaCliente(prestamoData)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Frecuencia:</span>
@@ -578,7 +702,7 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
             <div className="p-6 space-y-3">
               <button
                 onClick={handleRegistrarPagoClick}
-                className="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2"
+                className="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2"
               >
                 <CurrencyDollarIcon className="h-4 w-4" />
                 <span>Registrar Pago</span>
@@ -589,6 +713,13 @@ const PrestamoDetails = ({ prestamo, clientes, onBack, onEdit, onRegistrarPago, 
               >
                 <ChatBubbleLeftRightIcon className="h-4 w-4" />
                 <span>Enviar WhatsApp</span>
+              </button>
+              <button
+                onClick={handleEnviarEstadoWhatsApp}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2"
+              >
+                <ChartBarIcon className="h-4 w-4" />
+                <span>Enviar Estado Completo</span>
               </button>
             </div>
           </div>

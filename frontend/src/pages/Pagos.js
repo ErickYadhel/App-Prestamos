@@ -607,7 +607,9 @@ const PagosTable = ({ pagos, onVer, sortConfig, requestSort, getSortIcon, theme,
           theme === 'dark' ? 'bg-gray-800/50' : 'bg-white'
         }`}>
           {pagos.map((pago) => {
-            const { montoTotal, montoCapital, montoInteres } = extraerMontoPago(pago);
+            const montoTotal = pago.montoTotal ?? pago.total ?? pago.monto ?? 0;
+            const montoCapital = pago.montoCapital ?? pago.capital ?? pago.distribucion?.capital ?? 0;
+            const montoInteres = pago.montoInteres ?? pago.interes ?? pago.distribucion?.interes ?? 0;
             
             return (
               <motion.tr
@@ -683,17 +685,6 @@ const PagosTable = ({ pagos, onVer, sortConfig, requestSort, getSortIcon, theme,
 };
 
 // ============================================
-// FUNCIÓN PARA EXTRAER MONTOS DE PAGO
-// ============================================
-const extraerMontoPago = (pago) => {
-  const montoTotal = pago.montoTotal ?? pago.total ?? pago.monto ?? 0;
-  const montoCapital = pago.montoCapital ?? pago.capital ?? pago.distribucion?.capital ?? 0;
-  const montoInteres = pago.montoInteres ?? pago.interes ?? pago.distribucion?.interes ?? 0;
-  const montoMora = pago.montoMora ?? pago.mora ?? pago.distribucion?.mora ?? 0;
-  return { montoTotal, montoCapital, montoInteres, montoMora };
-};
-
-// ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
 const Pagos = () => {
@@ -716,7 +707,10 @@ const Pagos = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [showStatsCards, setShowStatsCards] = useState(true);
   const [hoveredRow, setHoveredRow] = useState(null);
-  const [viewDisplayMode, setViewDisplayMode] = useState('table'); // 'table' | 'cards'
+  const [viewDisplayMode, setViewDisplayMode] = useState('table');
+  // Paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
   
   // Estado para ordenamiento de tabla
   const [sortConfig, setSortConfig] = useState({
@@ -735,7 +729,7 @@ const Pagos = () => {
     clienteID: ''
   });
   
-  // Estado para acciones rápidas (evita acumulación)
+  // Estado para acciones rápidas
   const [accionRapidaActiva, setAccionRapidaActiva] = useState(null);
   
   const [stats, setStats] = useState({
@@ -753,10 +747,7 @@ const Pagos = () => {
   const [distribucionTipos, setDistribucionTipos] = useState({ normal: 0, adelantado: 0, mora: 0, abono: 0 });
   const [ultimasComisiones, setUltimasComisiones] = useState([]);
   
-  // ESTADOS PARA CLIENTES
   const [clienteMayorInteres, setClienteMayorInteres] = useState({ nombre: '', totalInteres: 0 });
-  
-  // NUEVAS ESTADÍSTICAS
   const [capitalPagado, setCapitalPagado] = useState(0);
   const [pagadoEsteMes, setPagadoEsteMes] = useState(0);
   const [totalGeneralRecaudado, setTotalGeneralRecaudado] = useState(0);
@@ -764,8 +755,6 @@ const Pagos = () => {
   const [promedioPago, setPromedioPago] = useState(0);
   const [pagoMaximo, setPagoMaximo] = useState(0);
   const [pagoMinimo, setPagoMinimo] = useState(0);
-  
-  // NUEVAS ESTADÍSTICAS PARA TARJETAS ADICIONALES
   const [pagosConMora, setPagosConMora] = useState(0);
   const [montoEnMora, setMontoEnMora] = useState(0);
   const [tasaRecuperacion, setTasaRecuperacion] = useState(0);
@@ -798,8 +787,9 @@ const Pagos = () => {
         setLoading(true);
         setError('');
         
+        // 🔥 IMPORTANTE: Cargar TODOS los pagos sin límite
         const [pagosRes, prestamosRes, comisionesRes, clientesRes] = await Promise.all([
-          api.get('/pagos'),
+          api.get('/pagos?limit=9999'), // Quitar límite de 50
           api.get('/prestamos'),
           api.get('/comisiones').catch(() => ({ success: false, data: [] })),
           api.get('/clientes').catch(() => ({ success: false, data: [] }))
@@ -898,7 +888,11 @@ const Pagos = () => {
     let ultimaFechaPago = null;
 
     pagosData.forEach(pago => {
-      const { montoTotal, montoCapital, montoInteres, montoMora } = extraerMontoPago(pago);
+      const montoTotal = pago.montoTotal ?? pago.total ?? pago.monto ?? 0;
+      const montoCapital = pago.montoCapital ?? pago.capital ?? pago.distribucion?.capital ?? 0;
+      const montoInteres = pago.montoInteres ?? pago.interes ?? pago.distribucion?.interes ?? 0;
+      const montoMora = pago.montoMora ?? pago.mora ?? pago.distribucion?.mora ?? 0;
+      
       totalRecaudado += montoTotal;
       totalCapital += montoCapital;
       totalInteres += montoInteres;
@@ -1023,7 +1017,7 @@ const Pagos = () => {
       
       const mesKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
       const mesLabel = fecha.toLocaleDateString('es-DO', { year: 'numeric', month: 'short' });
-      const { montoTotal } = extraerMontoPago(pago);
+      const montoTotal = pago.montoTotal ?? pago.total ?? pago.monto ?? 0;
       
       if (!meses[mesKey]) {
         meses[mesKey] = { mes: mesLabel, total: 0, cantidad: 0 };
@@ -1052,9 +1046,9 @@ const Pagos = () => {
       setLoading(true);
       setError('');
       
-      const response = await api.get('/pagos');
+      const response = await api.get('/pagos?limit=9999');
       if (response.success) {
-        const pagosNormalizados = (response.data || []).map(pago => 
+        const pagosNormalizados = (response.data || []).map(pago =>
           normalizeFirebaseData(pago)
         );
         setPagos(pagosNormalizados);
@@ -1139,10 +1133,9 @@ const Pagos = () => {
   };
 
   // ============================================
-  // FUNCIONES PARA ACCIONES RÁPIDAS (CON LIMPIEZA)
+  // FUNCIONES PARA ACCIONES RÁPIDAS
   // ============================================
   const handleAccionRapida = (tipo) => {
-    // Si la misma acción está activa, la desactivamos (toggle)
     if (accionRapidaActiva === tipo) {
       setAccionRapidaActiva(null);
       setFiltroEstado('todos');
@@ -1153,13 +1146,10 @@ const Pagos = () => {
     }
     
     setAccionRapidaActiva(tipo);
-    
-    // Limpiar filtros anteriores
     setFiltroEstado('todos');
     setSearchTerm('');
     setFiltros({ ...filtros, rangoMonto: 'todos', montoMin: '', montoMax: '' });
     
-    // Aplicar el nuevo filtro
     if (tipo === 'todos') {
       // Ya está limpio
     } else if (tipo === 'normal') {
@@ -1176,7 +1166,6 @@ const Pagos = () => {
       setFiltros({ ...filtros, rangoMonto: '30000-50000' });
     }
     
-    // Aplicar filtros después de un breve delay
     setTimeout(() => fetchPagos(), 50);
   };
 
@@ -1277,7 +1266,7 @@ const Pagos = () => {
       return match;
     });
 
-    // ORDENAMIENTO
+    // ORDENAMIENTO - Por defecto los más recientes primero
     result.sort((a, b) => {
       let aVal, bVal;
       
@@ -1318,8 +1307,19 @@ const Pagos = () => {
       return 0;
     });
 
-    return result;
-  }, [pagos, searchTerm, filtroEstado, filtros, sortConfig]);
+    // Paginación
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginatedResult = result.slice(startIndex, endIndex);
+
+    return {
+      items: paginatedResult,
+      totalItems: result.length,
+      totalPages: Math.ceil(result.length / itemsPerPage),
+      currentPage: currentPage,
+      itemsPerPage: itemsPerPage
+    };
+  }, [pagos, searchTerm, filtroEstado, filtros, sortConfig, currentPage, itemsPerPage]);
 
   const handleRegistrarPago = () => {
     if (prestamos.length === 0) {
@@ -1364,10 +1364,13 @@ const Pagos = () => {
       setFiltroEstado('todos');
       setSelectedPrestamo('todos');
       setAccionRapidaActiva(null);
+      setCurrentPage(1);
     } else if (key === 'aplicar') {
       setFiltros(value);
+      setCurrentPage(1);
     } else {
       setFiltros(prev => ({ ...prev, [key]: value }));
+      setCurrentPage(1);
     }
   };
 
@@ -1489,6 +1492,7 @@ const Pagos = () => {
 
   // Determinar qué vista mostrar
   const mostrarVistaTabla = viewDisplayMode === 'table';
+  const paginacion = filteredAndSortedPagos;
 
   return (
     <div className="space-y-6">
@@ -1516,7 +1520,7 @@ const Pagos = () => {
             </div>
             
             <div className="flex items-center space-x-2 w-full sm:w-auto">
-              {/* Toggle de vista - SIEMPRE VISIBLE */}
+              {/* Toggle de vista */}
               <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
                 <button
                   onClick={() => setViewDisplayMode('cards')}
@@ -1677,7 +1681,7 @@ const Pagos = () => {
                 </div>
                 {searchTerm && (
                   <div className="mt-2 text-xs text-gray-500">
-                    {filteredAndSortedPagos.length} resultados encontrados
+                    {paginacion.totalItems} resultados encontrados
                   </div>
                 )}
               </div>
@@ -1756,7 +1760,7 @@ const Pagos = () => {
             icon={PresentationChartLineIcon}
             label="Promedio por Pago"
             value={formatMontoAbreviado(promedioPago)}
-            subValue={`${filteredAndSortedPagos.length} pagos`}
+            subValue={`${paginacion.totalItems} pagos`}
             gradient="indigo"
             tooltip="Promedio de monto por pago"
           />
@@ -1853,7 +1857,7 @@ const Pagos = () => {
         </GlassCard>
       </div>
 
-      {/* Filtros Rápidos con acciones corregidas */}
+      {/* Filtros Rápidos */}
       <GlassCard>
         <div className="p-4">
           <div className="flex flex-wrap gap-2">
@@ -1947,10 +1951,9 @@ const Pagos = () => {
 
       {/* Lista de pagos - Vista responsiva */}
       {mostrarVistaTabla ? (
-        // Vista de tabla
         <GlassCard>
           <PagosTable
-            pagos={filteredAndSortedPagos}
+            pagos={paginacion.items}
             onVer={handleViewDetails}
             sortConfig={sortConfig}
             requestSort={requestSort}
@@ -1959,12 +1962,69 @@ const Pagos = () => {
             getTipoPagoBadge={getTipoPagoBadge}
             formatFecha={formatFecha}
           />
+          
+          {/* Paginación */}
+          {paginacion.totalPages > 1 && (
+            <div className="flex justify-between items-center p-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Mostrando {((paginacion.currentPage - 1) * paginacion.itemsPerPage) + 1} - {Math.min(paginacion.currentPage * paginacion.itemsPerPage, paginacion.totalItems)} de {paginacion.totalItems} pagos
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className={`px-3 py-1 rounded-lg text-sm transition-colors ${
+                    currentPage === 1
+                      ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                      : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  Anterior
+                </button>
+                <span className="px-3 py-1 bg-red-600 text-white rounded-lg text-sm">
+                  {currentPage} / {paginacion.totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(Math.min(paginacion.totalPages, currentPage + 1))}
+                  disabled={currentPage === paginacion.totalPages}
+                  className={`px-3 py-1 rounded-lg text-sm transition-colors ${
+                    currentPage === paginacion.totalPages
+                      ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                      : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  Siguiente
+                </button>
+              </div>
+              <div>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className={`px-2 py-1 rounded-lg border text-sm ${
+                    theme === 'dark'
+                      ? 'bg-gray-800 border-gray-700 text-white'
+                      : 'bg-white border-gray-300 text-gray-900'
+                  } focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none transition-all`}
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+          )}
         </GlassCard>
       ) : (
         // Vista de tarjetas
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredAndSortedPagos.map((pago) => {
-            const { montoTotal, montoCapital, montoInteres } = extraerMontoPago(pago);
+          {paginacion.items.map((pago) => {
+            const montoTotal = pago.montoTotal ?? pago.total ?? pago.monto ?? 0;
+            const montoCapital = pago.montoCapital ?? pago.capital ?? pago.distribucion?.capital ?? 0;
+            const montoInteres = pago.montoInteres ?? pago.interes ?? pago.distribucion?.interes ?? 0;
             return (
               <motion.div
                 key={pago.id}
@@ -2030,7 +2090,7 @@ const Pagos = () => {
         </div>
       )}
 
-      {filteredAndSortedPagos.length === 0 && (
+      {paginacion.items.length === 0 && (
         <div className="text-center py-12">
           <div className={`text-6xl mb-4 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-300'}`}>💰</div>
           <p className={`text-lg font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -2085,8 +2145,8 @@ const Pagos = () => {
         </GlassCard>
       )}
 
-      {/* Resumen Ejecutivo - CON NÚMEROS EXACTOS */}
-      {filteredAndSortedPagos.length > 0 && (
+      {/* Resumen Ejecutivo */}
+      {paginacion.totalItems > 0 && (
         <GlassCard>
           <div className="p-4 sm:p-6">
             <div className="flex items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4">

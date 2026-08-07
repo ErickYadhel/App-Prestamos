@@ -40,7 +40,9 @@ import {
   ChartPieIcon,
   CreditCardIcon,
   ChevronUpIcon,
-  ChevronDownIcon
+  ChevronDownIcon,
+  ArrowTrendingUpIcon as ArrowUpIcon,
+  ArrowTrendingDownIcon as ArrowDownIcon
 } from '@heroicons/react/24/outline';
 import api from '../services/api';
 import { useTheme } from '../context/ThemeContext';
@@ -732,6 +734,13 @@ const Prestamos = () => {
   const [error, setError] = useState('');
   const [hoveredRow, setHoveredRow] = useState(null);
   const [pagos, setPagos] = useState([]);
+  
+  // ============================================
+  // NUEVAS VARIABLES PARA RENDIMIENTO
+  // ============================================
+  const [rendimientoMensual, setRendimientoMensual] = useState(0);
+  const [rendimientoAnual, setRendimientoAnual] = useState(0);
+  
   const [stats, setStats] = useState({
     totalPrestamos: 0,
     totalCapitalPrestado: 0,
@@ -770,32 +779,27 @@ const Prestamos = () => {
         setLoading(true);
         setError('');
         
-        // Cargar préstamos, clientes y pagos en paralelo
         const [prestamosRes, clientesRes, pagosRes] = await Promise.all([
           api.get('/prestamos'),
           api.get('/clientes'),
           api.get('/pagos')
         ]);
         
-        // Procesar clientes
         const clientesNormalizados = (clientesRes.data || []).map(cliente =>
           normalizeFirebaseData(cliente)
         );
         setClientes(clientesNormalizados);
         
-        // Procesar préstamos
         const prestamosNormalizados = (prestamosRes.data || []).map(prestamo => 
           normalizeFirebaseData(prestamo)
         );
         setPrestamos(prestamosNormalizados);
         
-        // Procesar pagos
         const pagosNormalizados = (pagosRes.data || []).map(pago =>
           normalizeFirebaseData(pago)
         );
         setPagos(pagosNormalizados);
         
-        // Calcular estadísticas combinadas
         calcularEstadisticasCompletas(prestamosNormalizados, pagosNormalizados);
         
       } catch (error) {
@@ -813,10 +817,9 @@ const Prestamos = () => {
   }, []);
 
   // ============================================
-  // 🔥 FUNCIÓN PARA CALCULAR ESTADÍSTICAS COMPLETAS
+  // 🔥 FUNCIÓN PARA CALCULAR ESTADÍSTICAS COMPLETAS CON RENDIMIENTO
   // ============================================
   const calcularEstadisticasCompletas = (prestamosData, pagosData) => {
-    // Si no hay datos, usar stats en 0
     if (!prestamosData || prestamosData.length === 0) {
       setStats({
         totalPrestamos: 0,
@@ -843,6 +846,8 @@ const Prestamos = () => {
         totalCapitalPagado: 0,
         totalPagosRegistrados: 0
       });
+      setRendimientoMensual(0);
+      setRendimientoAnual(0);
       return;
     }
 
@@ -863,7 +868,6 @@ const Prestamos = () => {
     let totalInteresPagado = 0;
     let totalCapitalPagado = 0;
     
-    // Calcular estadísticas de préstamos
     prestamosData.forEach(p => {
       const interesTotal = (p.montoPrestado || 0) - (p.capitalRestante || 0);
       totalInteresGenerado += interesTotal;
@@ -901,7 +905,6 @@ const Prestamos = () => {
       }
     });
     
-    // Calcular estadísticas de pagos
     if (pagosData && pagosData.length > 0) {
       pagosData.forEach(pago => {
         totalInteresPagado += parseFloat(pago.montoInteres) || 0;
@@ -910,6 +913,20 @@ const Prestamos = () => {
     }
     
     const totalMensualBruto = interesMensualTotal - comisionMensualTotal;
+    
+    // ============================================
+    // 🔥 CÁLCULO DE RENDIMIENTO MENSUAL Y ANUAL
+    // ============================================
+    // Rendimiento Mensual = (Total Mensual Bruto / Capital Invertido) * 100
+    const rendimientoMensualCalc = totalCapitalPrestado > 0 
+      ? (totalMensualBruto / totalCapitalPrestado) * 100 
+      : 0;
+    
+    // Rendimiento Anual = Rendimiento Mensual * 12
+    const rendimientoAnualCalc = rendimientoMensualCalc * 12;
+    
+    setRendimientoMensual(rendimientoMensualCalc);
+    setRendimientoAnual(rendimientoAnualCalc);
     
     const prestamosActivos = prestamosData.filter(p => p.estado === 'activo').length;
     const prestamosCompletados = prestamosData.filter(p => p.estado === 'completado').length;
@@ -1048,7 +1065,6 @@ const Prestamos = () => {
           normalizeFirebaseData(prestamo)
         );
         setPrestamos(prestamosNormalizados);
-        // Recalcular con los pagos existentes
         calcularEstadisticasCompletas(prestamosNormalizados, pagos);
       }
     } catch (error) {
@@ -1077,7 +1093,6 @@ const Prestamos = () => {
           normalizeFirebaseData(pago)
         );
         setPagos(pagosNormalizados);
-        // Recalcular con los préstamos existentes
         calcularEstadisticasCompletas(prestamos, pagosNormalizados);
       }
     } catch (error) {
@@ -1701,7 +1716,6 @@ const Prestamos = () => {
             gradient="yellow"
             tooltip="Total de intereses que entran diariamente"
           />
-
         </div>
 
         {/* Fila 3 - Comisiones y Pagos */}
@@ -1735,7 +1749,31 @@ const Prestamos = () => {
             badge={{ text: 'PAGADO', color: 'bg-amber-600' }}
             tooltip="Suma de todos los intereses que han pagado los clientes"
           />
+        </div>
 
+        {/* ============================================ */}
+        {/* 🔥 NUEVAS TARJETAS DE RENDIMIENTO */}
+        {/* ============================================ */}
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-3 sm:mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+          <StatsCard
+            icon={ArrowTrendingUpIcon}
+            label="Rendimiento Mensual"
+            value={`${rendimientoMensual.toFixed(2)}%`}
+            subValue={`Ganancia neta mensual sobre capital invertido`}
+            gradient="emerald"
+            badge={{ text: 'MENSUAL', color: 'bg-emerald-600' }}
+            tooltip={`Total Mensual Bruto (RD$ ${stats.totalMensualBruto.toLocaleString()}) / Capital Invertido (RD$ ${stats.totalCapitalPrestado.toLocaleString()}) * 100`}
+          />
+
+          <StatsCard
+            icon={ArrowTrendingUpIcon}
+            label="Rendimiento Anual"
+            value={`${rendimientoAnual.toFixed(2)}%`}
+            subValue={`Proyección anual basada en rendimiento mensual`}
+            gradient="indigo"
+            badge={{ text: 'ANUAL', color: 'bg-indigo-600' }}
+            tooltip={`Rendimiento Mensual (${rendimientoMensual.toFixed(2)}%) * 12 meses`}
+          />
         </div>
       </StatsCardsContainer>
 
@@ -1990,6 +2028,53 @@ const Prestamos = () => {
                 </p>
                 <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
                   {stats.totalPagosRegistrados} pagos registrados
+                </p>
+              </div>
+            </div>
+
+            {/* ============================================ */}
+            {/* 🔥 RESUMEN DE RENDIMIENTO - NÚMEROS EXACTOS */}
+            {/* ============================================ */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+              <div className={`p-3 sm:p-4 rounded-lg border-2 ${
+                theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <p className={`text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Rendimiento Mensual
+                </p>
+                <p className={`text-xl sm:text-2xl font-bold ${
+                  rendimientoMensual > 5 ? 'text-emerald-600 dark:text-emerald-400' :
+                  rendimientoMensual > 2 ? 'text-blue-600 dark:text-blue-400' :
+                  'text-yellow-600 dark:text-yellow-400'
+                }`}>
+                  {rendimientoMensual.toFixed(2)}%
+                </p>
+                <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                  Ganancia neta mensual sobre capital invertido
+                </p>
+                <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                  Total Mensual Neto: {formatMontoExacto(stats.totalMensualBruto)} / Capital: {formatMontoExacto(stats.totalCapitalPrestado)}
+                </p>
+              </div>
+
+              <div className={`p-3 sm:p-4 rounded-lg border-2 ${
+                theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <p className={`text-xs sm:text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Rendimiento Anual (Proyectado)
+                </p>
+                <p className={`text-xl sm:text-2xl font-bold ${
+                  rendimientoAnual > 60 ? 'text-emerald-600 dark:text-emerald-400' :
+                  rendimientoAnual > 30 ? 'text-blue-600 dark:text-blue-400' :
+                  'text-yellow-600 dark:text-yellow-400'
+                }`}>
+                  {rendimientoAnual.toFixed(2)}%
+                </p>
+                <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                  Proyección anual basada en rendimiento mensual
+                </p>
+                <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                  Rendimiento Mensual: {rendimientoMensual.toFixed(2)}% × 12 meses
                 </p>
               </div>
             </div>

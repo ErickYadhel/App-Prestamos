@@ -18,11 +18,9 @@ function fechaToLocalString(fecha) {
   if (fecha instanceof Date) {
     dateObj = fecha;
   } else if (typeof fecha === 'string') {
-    // Si ya es DD-MM-YYYY, validar
     if (/^\d{2}-\d{2}-\d{4}$/.test(fecha)) {
       return fecha;
     }
-    // Si es YYYY-MM-DD, convertir a DD-MM-YYYY
     if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
       const [year, month, day] = fecha.split('-');
       return `${day}-${month}-${year}`;
@@ -63,7 +61,6 @@ function fechaToLocalString(fecha) {
 function parseFechaDDMMYYYY(fechaStr) {
   if (!fechaStr) return null;
   
-  // Si es string en formato DD-MM-YYYY
   if (typeof fechaStr === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(fechaStr)) {
     const [day, month, year] = fechaStr.split('-');
     const fecha = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
@@ -71,7 +68,6 @@ function parseFechaDDMMYYYY(fechaStr) {
     return fecha;
   }
   
-  // Si es string en formato YYYY-MM-DD
   if (typeof fechaStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) {
     const [year, month, day] = fechaStr.split('-');
     const fecha = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
@@ -79,7 +75,6 @@ function parseFechaDDMMYYYY(fechaStr) {
     return fecha;
   }
   
-  // Si ya es Date
   if (fechaStr instanceof Date && !isNaN(fechaStr.getTime())) {
     return new Date(fechaStr.getFullYear(), fechaStr.getMonth(), fechaStr.getDate());
   }
@@ -95,13 +90,11 @@ function stringToDate(fechaStr) {
   if (!fechaStr) return new Date();
   if (fechaStr instanceof Date) return fechaStr;
   
-  // Formato DD-MM-YYYY
   if (typeof fechaStr === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(fechaStr)) {
     const [day, month, year] = fechaStr.split('-');
     return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
   }
   
-  // Formato YYYY-MM-DD (compatibilidad con datos antiguos)
   if (typeof fechaStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) {
     const [year, month, day] = fechaStr.split('-');
     return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
@@ -111,7 +104,7 @@ function stringToDate(fechaStr) {
 }
 
 // ============================================
-// FUNCIÓN PARA NORMALIZAR FECHA LOCAL (mantener para compatibilidad)
+// FUNCIÓN PARA NORMALIZAR FECHA LOCAL
 // ============================================
 function normalizarFechaLocal(fecha) {
   if (!fecha) return new Date();
@@ -163,7 +156,6 @@ const generarIdPago = (clienteNombre, fechaPagoStr) => {
     .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase())
     .join('');
   
-  // fechaPagoStr está en DD-MM-YYYY
   const [day, month, year] = fechaPagoStr.split('-');
   const fechaFormateada = `${parseInt(day)}-${parseInt(month)}-${year.slice(-2)}`;
   
@@ -171,7 +163,7 @@ const generarIdPago = (clienteNombre, fechaPagoStr) => {
 };
 
 // ============================================
-// FUNCIÓN PARA GENERAR ID ÚNICO DE PAGO (con contador si colisión)
+// FUNCIÓN PARA GENERAR ID ÚNICO DE PAGO
 // ============================================
 const generarIdPagoUnico = async (clienteNombre, fechaPagoStr, contador = 0) => {
   let idBase = generarIdPago(clienteNombre, fechaPagoStr);
@@ -348,7 +340,7 @@ async function crearComisionAutomatica(prestamo, pagoId, interesPagado, fechaPag
 }
 
 // ============================================
-// POST /api/pagos - Registrar un pago (CORREGIDO)
+// POST /api/pagos - Registrar un pago
 // ============================================
 router.post('/', async (req, res) => {
   try {
@@ -387,16 +379,12 @@ router.post('/', async (req, res) => {
 
     const prestamo = new Prestamo({ id: prestamoDoc.id, ...prestamoData });
     
-    // ============================================
-    // 🔥 VERSIÓN CORREGIDA para parsear DD-MM-YYYY
-    // ============================================
     let fechaPagoDate;
     let fechaPagoString;
     
     console.log('📥 [PAGOS] fechaPago recibido:', fechaPago);
     console.log('📥 [PAGOS] Tipo:', typeof fechaPago);
     
-    // Usar la nueva función para parsear
     fechaPagoDate = parseFechaDDMMYYYY(fechaPago);
     
     if (!fechaPagoDate) {
@@ -410,7 +398,6 @@ router.post('/', async (req, res) => {
     console.log('✅ [PAGOS] Mes:', fechaPagoDate.getMonth() + 1);
     console.log('✅ [PAGOS] Año:', fechaPagoDate.getFullYear());
     
-    // Convertir a string DD-MM-YYYY para guardar
     fechaPagoString = fechaToLocalString(fechaPagoDate);
     console.log('📅 [PAGOS] fechaPagoString a guardar:', fechaPagoString);
     
@@ -504,11 +491,9 @@ router.post('/', async (req, res) => {
 
     const batch = db.batch();
     
-    // Generar ID personalizado para el pago (usando string DD-MM-YYYY)
     const idPersonalizado = await generarIdPagoUnico(prestamo.clienteNombre, fechaPagoString);
     console.log(`📝 ID de pago generado: ${idPersonalizado}`);
     
-    // Guardar fechaPago como STRING DD-MM-YYYY en Firestore
     const pagoParaFirestore = {
       prestamoID: pago.prestamoID,
       clienteID: pago.clienteID,
@@ -603,7 +588,7 @@ router.post('/', async (req, res) => {
 // ============================================
 router.get('/prestamo/:prestamoID', async (req, res) => {
   try {
-    const { limit = 50 } = req.query;
+    const { limit = 9999 } = req.query;
     const prestamoID = req.params.prestamoID;
     
     console.log('📋 Buscando pagos para préstamo:', prestamoID);
@@ -722,7 +707,7 @@ router.get('/prestamo/:prestamoID', async (req, res) => {
 });
 
 // ============================================
-// GET /api/pagos - Listar todos los pagos
+// 🔥 GET /api/pagos - Listar TODOS los pagos (SIN LÍMITE)
 // ============================================
 router.get('/', async (req, res) => {
   try {
@@ -731,11 +716,13 @@ router.get('/', async (req, res) => {
       clienteID, 
       fechaInicio, 
       fechaFin, 
-      limit = 50, 
+      limit = 9999,
       offset = 0,
       tipoPago,
       modoCalculo
     } = req.query;
+    
+    console.log('📋 Listando pagos con límite:', limit);
     
     let query = db.collection('pagos');
 
@@ -751,19 +738,28 @@ router.get('/', async (req, res) => {
     if (modoCalculo) {
       query = query.where('modoCalculo', '==', modoCalculo);
     }
+    
+    // 🔥 MANEJO CORREGIDO DE FECHAS EN DD-MM-YYYY
     if (fechaInicio && fechaFin) {
-      const inicio = new Date(fechaInicio);
-      const fin = new Date(fechaFin);
-      fin.setHours(23, 59, 59, 999);
+      // Convertir fechas de DD-MM-YYYY a objeto Date
+      const fechaInicioObj = parseFechaDDMMYYYY(fechaInicio);
+      const fechaFinObj = parseFechaDDMMYYYY(fechaFin);
       
-      query = query.where('fechaPago', '>=', inicio)
-                   .where('fechaPago', '<=', fin);
+      if (fechaInicioObj && fechaFinObj) {
+        // Para Firestore, convertimos a timestamp UNIX para comparar con strings DD-MM-YYYY
+        // O mejor: ordenamos por fechaPago y filtramos en memoria
+        console.log('📅 Filtro por fecha:', { fechaInicio, fechaFin });
+        // No aplicamos where en Firestore porque fechaPago es string DD-MM-YYYY
+        // Filtraremos en memoria después
+      }
     }
 
     query = query.orderBy('fechaPago', 'desc')
                  .limit(parseInt(limit));
 
     const pagosSnapshot = await query.get();
+    
+    console.log(`✅ Encontrados ${pagosSnapshot.size} pagos en total`);
     
     const pagos = [];
     let estadisticas = {
@@ -772,11 +768,52 @@ router.get('/', async (req, res) => {
       totalCapital: 0,
       totalMora: 0,
       totalPagosManuales: 0,
-      totalPagosAutomaticos: 0
+      totalPagosAutomaticos: 0,
+      totalPagosNormal: 0,
+      totalPagosAdelantado: 0,
+      totalPagosMora: 0,
+      totalPagosAbono: 0
     };
+
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    
+    // Para filtros de fecha en memoria
+    let fechaInicioObj = null;
+    let fechaFinObj = null;
+    
+    if (fechaInicio) {
+      fechaInicioObj = parseFechaDDMMYYYY(fechaInicio);
+      if (fechaInicioObj) fechaInicioObj.setHours(0, 0, 0, 0);
+    }
+    if (fechaFin) {
+      fechaFinObj = parseFechaDDMMYYYY(fechaFin);
+      if (fechaFinObj) fechaFinObj.setHours(23, 59, 59, 999);
+    }
 
     pagosSnapshot.forEach(doc => {
       const pagoData = doc.data();
+      
+      // 🔥 FILTRAR POR FECHA EN MEMORIA (porque fechaPago es string DD-MM-YYYY)
+      if (fechaInicioObj || fechaFinObj) {
+        let fechaPagoDate = null;
+        if (typeof pagoData.fechaPago === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(pagoData.fechaPago)) {
+          const [d, m, y] = pagoData.fechaPago.split('-');
+          fechaPagoDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+        } else if (pagoData.fechaPago?.toDate) {
+          fechaPagoDate = pagoData.fechaPago.toDate();
+        } else if (pagoData.fechaPago instanceof Date) {
+          fechaPagoDate = pagoData.fechaPago;
+        }
+        
+        if (fechaPagoDate) {
+          if (fechaInicioObj && fechaPagoDate < fechaInicioObj) return;
+          if (fechaFinObj && fechaPagoDate > fechaFinObj) return;
+        } else {
+          // Si no podemos parsear la fecha, la incluimos pero con advertencia
+          console.warn('⚠️ No se pudo parsear fecha para filtro:', pagoData.fechaPago);
+        }
+      }
       
       let fechaPagoFormatted = 'N/A';
       if (pagoData.fechaPago) {
@@ -795,6 +832,8 @@ router.get('/', async (req, res) => {
         }
       }
       
+      const montoTotal = (pagoData.montoCapital || 0) + (pagoData.montoInteres || 0) + (pagoData.montoMora || 0);
+      
       const pagoConFormato = { 
         id: doc.id, 
         ...pagoData,
@@ -804,7 +843,7 @@ router.get('/', async (req, res) => {
       
       pagos.push(pagoConFormato);
       
-      estadisticas.totalMonto += (pagoData.montoCapital || 0) + (pagoData.montoInteres || 0) + (pagoData.montoMora || 0);
+      estadisticas.totalMonto += montoTotal;
       estadisticas.totalInteres += pagoData.montoInteres || 0;
       estadisticas.totalCapital += pagoData.montoCapital || 0;
       estadisticas.totalMora += pagoData.montoMora || 0;
@@ -814,7 +853,15 @@ router.get('/', async (req, res) => {
       } else {
         estadisticas.totalPagosAutomaticos++;
       }
+      
+      const tipo = pagoData.tipoPago || 'normal';
+      if (tipo === 'normal') estadisticas.totalPagosNormal++;
+      else if (tipo === 'adelantado') estadisticas.totalPagosAdelantado++;
+      else if (tipo === 'mora') estadisticas.totalPagosMora++;
+      else if (tipo === 'abono') estadisticas.totalPagosAbono++;
     });
+
+    console.log(`📊 Total pagos devueltos: ${pagos.length}`);
 
     res.json({
       success: true,

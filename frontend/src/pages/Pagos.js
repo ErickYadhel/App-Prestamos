@@ -708,6 +708,10 @@ const Pagos = () => {
   const [showStatsCards, setShowStatsCards] = useState(true);
   const [hoveredRow, setHoveredRow] = useState(null);
   const [viewDisplayMode, setViewDisplayMode] = useState('table');
+  
+  // 🔥 NUEVO ESTADO PARA EL TIPO DE DATO DEL GRÁFICO
+  const [graficoModo, setGraficoModo] = useState('interes'); // 'interes' | 'capital'
+  
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
@@ -746,6 +750,9 @@ const Pagos = () => {
   const [pagosPorMes, setPagosPorMes] = useState([]);
   const [distribucionTipos, setDistribucionTipos] = useState({ normal: 0, adelantado: 0, mora: 0, abono: 0 });
   const [ultimasComisiones, setUltimasComisiones] = useState([]);
+  
+  // 🔥 NUEVO ESTADO PARA DISTRIBUCIÓN POR CLIENTE
+  const [distribucionClientes, setDistribucionClientes] = useState({ labels: [], data: [] });
   
   const [clienteMayorInteres, setClienteMayorInteres] = useState({ nombre: '', totalInteres: 0 });
   const [capitalPagado, setCapitalPagado] = useState(0);
@@ -787,9 +794,8 @@ const Pagos = () => {
         setLoading(true);
         setError('');
         
-        // 🔥 IMPORTANTE: Cargar TODOS los pagos sin límite
         const [pagosRes, prestamosRes, comisionesRes, clientesRes] = await Promise.all([
-          api.get('/pagos?limit=9999'), // Quitar límite de 50
+          api.get('/pagos?limit=9999'),
           api.get('/prestamos'),
           api.get('/comisiones').catch(() => ({ success: false, data: [] })),
           api.get('/clientes').catch(() => ({ success: false, data: [] }))
@@ -830,6 +836,9 @@ const Pagos = () => {
         calcularEstadisticasCompletas(pagosNormalizados);
         procesarDatosGraficos(pagosNormalizados);
         
+        // 🔥 PROCESAR DISTRIBUCIÓN POR CLIENTE
+        procesarDistribucionClientes(pagosNormalizados, prestamosNormalizados);
+        
       } catch (error) {
         console.error('Error cargando datos iniciales:', error);
         setError('Error al cargar los datos');
@@ -843,6 +852,70 @@ const Pagos = () => {
     
     cargarDatosIniciales();
   }, []);
+
+  // ============================================
+  // 🔥 PROCESAR DISTRIBUCIÓN POR CLIENTE (TODOS CON PRÉSTAMOS ACTIVOS)
+  // ============================================
+  const procesarDistribucionClientes = (pagosData, prestamosData) => {
+    // Obtener IDs de clientes con préstamos activos
+    const clientesActivosIds = new Set();
+    prestamosData.forEach(p => {
+      if (p.estado === 'activo' && p.clienteID) {
+        clientesActivosIds.add(p.clienteID);
+      }
+    });
+
+    // Si no hay clientes activos, mostrar ejemplo
+    if (clientesActivosIds.size === 0) {
+      setDistribucionClientes({ labels: ['Sin clientes activos'], data: [1] });
+      return;
+    }
+
+    // Acumular pagos por cliente (solo clientes con préstamos activos)
+    const clientesMap = {};
+    pagosData.forEach(pago => {
+      const clienteId = pago.clienteID;
+      // Solo procesar si el cliente tiene préstamo activo
+      if (!clientesActivosIds.has(clienteId)) return;
+      
+      // Obtener nombre del cliente
+      let nombreCliente = pago.clienteNombre || pago.cliente || clienteId;
+      if ((!pago.clienteNombre && !pago.cliente) && clienteId) {
+        const clienteEncontrado = clientes.find(c => c.id === clienteId);
+        if (clienteEncontrado) {
+          nombreCliente = clienteEncontrado.nombre || clienteEncontrado.clienteNombre || clienteId;
+        }
+      }
+      
+      if (!clientesMap[nombreCliente]) {
+        clientesMap[nombreCliente] = { interes: 0, capital: 0, total: 0 };
+      }
+      
+      const montoCapital = pago.montoCapital ?? pago.capital ?? pago.distribucion?.capital ?? 0;
+      const montoInteres = pago.montoInteres ?? pago.interes ?? pago.distribucion?.interes ?? 0;
+      
+      clientesMap[nombreCliente].interes += montoInteres;
+      clientesMap[nombreCliente].capital += montoCapital;
+      clientesMap[nombreCliente].total += montoCapital + montoInteres;
+    });
+
+    // Convertir a arrays para el gráfico
+    const labels = Object.keys(clientesMap);
+    const dataInteres = labels.map(name => clientesMap[name].interes);
+    const dataCapital = labels.map(name => clientesMap[name].capital);
+    
+    // Si no hay datos, mostrar mensaje
+    if (labels.length === 0) {
+      setDistribucionClientes({ labels: ['Sin pagos'], data: [1] });
+      return;
+    }
+
+    setDistribucionClientes({ 
+      labels, 
+      dataInteres, 
+      dataCapital 
+    });
+  };
 
   // ============================================
   // CALCULAR ESTADÍSTICAS COMPLETAS
@@ -898,13 +971,11 @@ const Pagos = () => {
       totalInteres += montoInteres;
       montos.push(montoTotal);
 
-      // Contar pagos con mora
       if (pago.tipoPago === 'mora' || montoMora > 0) {
         pagosConMoraCount++;
         montoEnMoraTotal += montoTotal;
       }
 
-      // OBTENER NOMBRE DEL CLIENTE
       let nombreCliente = pago.clienteNombre || pago.cliente || 'Cliente';
       
       if ((!pago.clienteNombre && !pago.cliente) && pago.clienteID) {
@@ -927,11 +998,9 @@ const Pagos = () => {
 
       clientesSet.add(nombreCliente);
 
-      // Acumular intereses por cliente
       if (!interesPorCliente[nombreCliente]) interesPorCliente[nombreCliente] = 0;
       interesPorCliente[nombreCliente] += montoInteres;
 
-      // Fecha del pago para estadísticas
       const fechaPago = firebaseTimestampToDate(pago.fechaPago);
       if (fechaPago) {
         if (!ultimaFechaPago || fechaPago > ultimaFechaPago) {
@@ -943,7 +1012,6 @@ const Pagos = () => {
       }
     });
 
-    // CLIENTE CON MAYOR INTERÉS PAGADO
     let topInteres = { nombre: '', totalInteres: 0 };
     for (const [nombre, total] of Object.entries(interesPorCliente)) {
       if (total > topInteres.totalInteres) {
@@ -951,18 +1019,15 @@ const Pagos = () => {
       }
     }
 
-    // CALCULAR DÍAS SIN PAGOS
     let diasSinPagosCount = 0;
     if (ultimaFechaPago) {
       const diffTime = Math.abs(hoy - ultimaFechaPago);
       diasSinPagosCount = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     }
 
-    // CALCULAR TASA DE RECUPERACIÓN
     const totalCapitalPrestado = prestamos.reduce((sum, p) => sum + (p.montoPrestado || 0), 0);
     const tasaRecuperacionCalc = totalCapitalPrestado > 0 ? (totalCapital / totalCapitalPrestado) * 100 : 0;
 
-    // CALCULAR PROMEDIO DIARIO (últimos 7 días)
     const pagosUltimaSemana = pagosData.filter(pago => {
       const fecha = firebaseTimestampToDate(pago.fechaPago);
       return fecha && fecha >= inicioSemana;
@@ -981,7 +1046,6 @@ const Pagos = () => {
     setDiasSinPagos(diasSinPagosCount);
     setPromedioDiario(promedioDiarioCalc);
     
-    // Calcular estadísticas de montos
     if (montos.length > 0) {
       const totalMontos = montos.reduce((a, b) => a + b, 0);
       setPromedioPago(totalMontos / montos.length);
@@ -1017,22 +1081,31 @@ const Pagos = () => {
       
       const mesKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
       const mesLabel = fecha.toLocaleDateString('es-DO', { year: 'numeric', month: 'short' });
-      const montoTotal = pago.montoTotal ?? pago.total ?? pago.monto ?? 0;
+      
+      const montoCapital = pago.montoCapital ?? pago.capital ?? pago.distribucion?.capital ?? 0;
+      const montoInteres = pago.montoInteres ?? pago.interes ?? pago.distribucion?.interes ?? 0;
       
       if (!meses[mesKey]) {
-        meses[mesKey] = { mes: mesLabel, total: 0, cantidad: 0 };
+        meses[mesKey] = { 
+          mes: mesLabel, 
+          total: 0, 
+          capital: 0, 
+          interes: 0,
+          cantidad: 0 
+        };
       }
-      meses[mesKey].total += montoTotal;
+      meses[mesKey].total += montoCapital + montoInteres;
+      meses[mesKey].capital += montoCapital;
+      meses[mesKey].interes += montoInteres;
       meses[mesKey].cantidad++;
       
       const tipo = pago.tipoPago || 'normal';
       if (tipos[tipo] !== undefined) tipos[tipo]++;
     });
     
-    const mesesOrdenados = Object.values(meses).sort((a, b) => {
-      const mesesOrden = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-      return mesesOrden.indexOf(a.mes.substring(0,3)) - mesesOrden.indexOf(b.mes.substring(0,3));
-    });
+    const mesesOrdenados = Object.keys(meses)
+      .sort((a, b) => a.localeCompare(b))
+      .map(key => meses[key]);
     
     setPagosPorMes(mesesOrdenados);
     setDistribucionTipos(tipos);
@@ -1054,6 +1127,7 @@ const Pagos = () => {
         setPagos(pagosNormalizados);
         calcularEstadisticasCompletas(pagosNormalizados);
         procesarDatosGraficos(pagosNormalizados);
+        procesarDistribucionClientes(pagosNormalizados, prestamos);
       }
     } catch (error) {
       console.error('Error fetching payments:', error);
@@ -1175,7 +1249,6 @@ const Pagos = () => {
   const filteredAndSortedPagos = useMemo(() => {
     let result = [...pagos];
 
-    // Búsqueda
     if (searchTerm) {
       result = result.filter(pago => 
         pago.clienteNombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1184,22 +1257,18 @@ const Pagos = () => {
       );
     }
 
-    // Filtro por estado
     if (filtroEstado !== 'todos') {
       result = result.filter(pago => pago.tipoPago === filtroEstado);
     }
 
-    // Filtro por tipo
     if (filtros.tipo !== 'todos') {
       result = result.filter(pago => pago.tipoPago === filtros.tipo);
     }
 
-    // Filtro por cliente
     if (filtros.clienteID) {
       result = result.filter(pago => pago.clienteID === filtros.clienteID);
     }
 
-    // Filtro por fecha
     if (filtros.rangoFecha !== 'todos') {
       const hoy = new Date();
       const fechaPagos = result.map(p => ({
@@ -1239,7 +1308,6 @@ const Pagos = () => {
       }
     }
 
-    // Filtro por rango de monto
     result = result.filter(pago => {
       const monto = pago.montoTotal || 0;
       let match = true;
@@ -1266,7 +1334,6 @@ const Pagos = () => {
       return match;
     });
 
-    // ORDENAMIENTO - Por defecto los más recientes primero
     result.sort((a, b) => {
       let aVal, bVal;
       
@@ -1307,7 +1374,6 @@ const Pagos = () => {
       return 0;
     });
 
-    // Paginación
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const paginatedResult = result.slice(startIndex, endIndex);
@@ -1427,30 +1493,57 @@ const Pagos = () => {
     } : null;
   };
 
-  // Datos para gráficos
+  // ============================================
+  // 🔥 GRÁFICO DE EVOLUCIÓN DE PAGOS
+  // ============================================
   const lineChartData = {
     labels: pagosPorMes.map(p => p.mes),
-    datasets: [{
-      label: 'Monto Recaudado (RD$)',
-      data: pagosPorMes.map(p => p.total),
-      borderColor: '#ef4444',
-      backgroundColor: 'rgba(239, 68, 68, 0.1)',
-      borderWidth: 3,
-      tension: 0.4,
-      fill: true,
-      pointBackgroundColor: '#ef4444',
-      pointBorderColor: '#fff',
-      pointBorderWidth: 2,
-      pointRadius: 4,
-      pointHoverRadius: 6
-    }]
+    datasets: [
+      {
+        label: 'Capital Pagado',
+        data: pagosPorMes.map(p => p.capital),
+        borderColor: '#10b981',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        borderWidth: 3,
+        tension: 0.4,
+        fill: true,
+        pointBackgroundColor: '#10b981',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+      },
+      {
+        label: 'Interés Pagado',
+        data: pagosPorMes.map(p => p.interes),
+        borderColor: '#ef4444',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        borderWidth: 3,
+        tension: 0.4,
+        fill: true,
+        pointBackgroundColor: '#ef4444',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+      }
+    ]
   };
 
-  const doughnutData = {
-    labels: ['Normal', 'Adelantado', 'Mora', 'Abono'],
+  // ============================================
+  // 🔥 GRÁFICO DE DISTRIBUCIÓN POR CLIENTE (NUEVO)
+  // ============================================
+  const doughnutClientesData = {
+    labels: distribucionClientes.labels || ['Sin datos'],
     datasets: [{
-      data: [distribucionTipos.normal, distribucionTipos.adelantado, distribucionTipos.mora, distribucionTipos.abono],
-      backgroundColor: ['#10b981', '#3b82f6', '#ef4444', '#8b5cf6'],
+      data: graficoModo === 'interes' 
+        ? (distribucionClientes.dataInteres || [1]) 
+        : (distribucionClientes.dataCapital || [1]),
+      backgroundColor: [
+        '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444',
+        '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
+        '#14b8a6', '#d946ef', '#0ea5e9', '#8b5cf6', '#eab308'
+      ],
       borderColor: 'transparent',
       borderWidth: 2,
       hoverOffset: 8
@@ -1465,12 +1558,51 @@ const Pagos = () => {
         position: 'bottom',
         labels: {
           color: theme === 'dark' ? '#9ca3af' : '#4b5563',
+          font: { size: 10 },
+          boxWidth: 12,
+          padding: 8
+        }
+      },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+            const percentage = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
+            return `${ctx.label}: RD$ ${ctx.raw.toLocaleString()} (${percentage}%)`;
+          }
+        }
+      }
+    }
+  };
+
+  // ============================================
+  // GRÁFICO DE TIPO DE PAGO (ANTIGUO)
+  // ============================================
+  const doughnutData = {
+    labels: ['Normal', 'Adelantado', 'Mora', 'Abono'],
+    datasets: [{
+      data: [distribucionTipos.normal, distribucionTipos.adelantado, distribucionTipos.mora, distribucionTipos.abono],
+      backgroundColor: ['#10b981', '#3b82f6', '#ef4444', '#8b5cf6'],
+      borderColor: 'transparent',
+      borderWidth: 2,
+      hoverOffset: 8
+    }]
+  };
+
+  const chartOptionsTipo = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: {
+          color: theme === 'dark' ? '#9ca3af' : '#4b5563',
           font: { size: 11 }
         }
       },
       tooltip: {
         callbacks: {
-          label: (ctx) => `RD$ ${ctx.raw.toLocaleString()}`
+          label: (ctx) => `${ctx.label}: ${ctx.raw} pagos`
         }
       }
     }
@@ -1490,7 +1622,6 @@ const Pagos = () => {
     return <PagosSkeleton />;
   }
 
-  // Determinar qué vista mostrar
   const mostrarVistaTabla = viewDisplayMode === 'table';
   const paginacion = filteredAndSortedPagos;
 
@@ -1697,7 +1828,6 @@ const Pagos = () => {
         isOpen={showStatsCards}
         onToggle={() => setShowStatsCards(!showStatsCards)}
       >
-        {/* Fila 1 - Métricas Principales */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mb-3 sm:mb-4">
           <StatsCard
             icon={BanknotesIcon}
@@ -1754,7 +1884,6 @@ const Pagos = () => {
           />
         </div>
 
-        {/* Fila 2 - Métricas Adicionales */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
           <StatsCard
             icon={PresentationChartLineIcon}
@@ -1846,12 +1975,51 @@ const Pagos = () => {
 
         <GlassCard>
           <div className="p-4">
-            <h3 className={`text-lg font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-              <ChartPieIcon className="h-5 w-5 mr-2 text-red-600" />
-              Distribución por Tipo de Pago
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-lg font-semibold flex items-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                <ChartPieIcon className="h-5 w-5 mr-2 text-red-600" />
+                Distribución por Cliente
+              </h3>
+              <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                <button
+                  onClick={() => setGraficoModo('interes')}
+                  className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${
+                    graficoModo === 'interes'
+                      ? 'bg-red-600 text-white shadow-md'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  Interés
+                </button>
+                <button
+                  onClick={() => setGraficoModo('capital')}
+                  className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${
+                    graficoModo === 'capital'
+                      ? 'bg-red-600 text-white shadow-md'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  Capital
+                </button>
+              </div>
+            </div>
             <div className="h-64 flex justify-center">
-              <Doughnut data={doughnutData} options={chartOptions} />
+              {distribucionClientes.labels && distribucionClientes.labels.length > 0 ? (
+                <div className="w-full">
+                  <Doughnut data={doughnutClientesData} options={chartOptions} />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                    No hay datos de clientes
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="mt-2 text-center">
+              <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                Mostrando {distribucionClientes.labels?.length || 0} clientes con préstamos activos
+              </p>
             </div>
           </div>
         </GlassCard>
@@ -1963,7 +2131,6 @@ const Pagos = () => {
             formatFecha={formatFecha}
           />
           
-          {/* Paginación */}
           {paginacion.totalPages > 1 && (
             <div className="flex justify-between items-center p-4 border-t border-gray-200 dark:border-gray-700">
               <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -2019,7 +2186,6 @@ const Pagos = () => {
           )}
         </GlassCard>
       ) : (
-        // Vista de tarjetas
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {paginacion.items.map((pago) => {
             const montoTotal = pago.montoTotal ?? pago.total ?? pago.monto ?? 0;

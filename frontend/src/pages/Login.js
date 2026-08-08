@@ -14,7 +14,10 @@ import {
   InputAdornment,
   Alert,
   useMediaQuery,
-  useTheme
+  useTheme,
+  Modal,
+  Fade,
+  Backdrop
 } from '@mui/material';
 import {
   Email as EmailIcon,
@@ -24,12 +27,17 @@ import {
   AccountBalance as AccountBalanceIcon,
   TrendingUp as TrendingUpIcon,
   AttachMoney as AttachMoneyIcon,
-  ShowChart as ShowChartIcon
+  ShowChart as ShowChartIcon,
+  ArrowBack as ArrowBackIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { getVersionFormatted } from '../config/version';
+import { getAuth, sendPasswordResetEmail, fetchSignInMethodsForEmail } from 'firebase/auth';
+import { app, db } from '../services/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
-// Logo fijo de la empresa
 const CompanyLogo = () => {
   return (
     <Avatar
@@ -47,6 +55,391 @@ const CompanyLogo = () => {
   );
 };
 
+// ============================================
+// COMPONENTE MODAL DE RESTABLECER CONTRASEÑA (CORREGIDO)
+// ============================================
+const RestablecerContrasenaModal = ({ isOpen, onClose, onBack }) => {
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [emailEnviado, setEmailEnviado] = useState('');
+  const [verificando, setVerificando] = useState(false);
+  
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  const handleRestablecer = async (e) => {
+    e.preventDefault();
+    
+    if (!email || !email.includes('@')) {
+      setError('Por favor, ingresa un correo electrónico válido');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setVerificando(true);
+
+    try {
+      // 🔥 Usar getAuth() sin parámetros para usar la app por defecto
+      const auth = getAuth();
+      
+      // Verificar si el email existe en Firebase Auth
+      const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+      
+      if (signInMethods.length === 0) {
+        // También verificar en Firestore
+        try {
+          const usuariosRef = collection(db, 'usuarios');
+          const q = query(usuariosRef, where('email', '==', email));
+          const querySnapshot = await getDocs(q);
+          
+          if (querySnapshot.empty) {
+            setError('No existe una cuenta asociada a este correo electrónico');
+            setVerificando(false);
+            setLoading(false);
+            return;
+          }
+        } catch (firestoreError) {
+          console.warn('Error verificando en Firestore:', firestoreError);
+          // Si hay error en Firestore, continuar con Auth
+        }
+      }
+      
+      setVerificando(false);
+      
+      // 🔥 ENVIAR CORREO DE RESTABLECIMIENTO - CONFIGURACIÓN CORRECTA
+      const actionCodeSettings = {
+        url: window.location.origin + '/login',
+        handleCodeInApp: false,
+      };
+      
+      await sendPasswordResetEmail(auth, email, actionCodeSettings);
+      
+      setSuccess(true);
+      setEmailEnviado(email);
+      setLoading(false);
+      
+    } catch (error) {
+      console.error('Error al enviar correo de restablecimiento:', error);
+      setVerificando(false);
+      setLoading(false);
+      
+      // Manejar errores específicos
+      if (error.code === 'auth/user-not-found') {
+        setError('No existe una cuenta asociada a este correo electrónico');
+      } else if (error.code === 'auth/invalid-email') {
+        setError('El correo electrónico no es válido');
+      } else if (error.code === 'auth/too-many-requests') {
+        setError('Demasiados intentos. Espera unos minutos y vuelve a intentar.');
+      } else if (error.code === 'auth/missing-continue-uri') {
+        setError('Error de configuración. Contacta al administrador.');
+      } else if (error.message?.includes('API key')) {
+        setError('Error de configuración de Firebase. Contacta al administrador.');
+      } else {
+        setError('Error al enviar el correo de restablecimiento. Intenta nuevamente.');
+      }
+    }
+  };
+
+  const handleClose = () => {
+    if (!loading) {
+      setEmail('');
+      setError('');
+      setSuccess(false);
+      setEmailEnviado('');
+      setVerificando(false);
+      onClose();
+    }
+  };
+
+  const handleBack = () => {
+    if (!loading) {
+      setEmail('');
+      setError('');
+      setSuccess(false);
+      setEmailEnviado('');
+      setVerificando(false);
+      onBack();
+    }
+  };
+
+  return (
+    <Modal
+      open={isOpen}
+      onClose={handleClose}
+      closeAfterTransition
+      BackdropComponent={Backdrop}
+      BackdropProps={{
+        timeout: 500,
+      }}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Fade in={isOpen}>
+        <Box
+          sx={{
+            position: 'relative',
+            width: '100%',
+            maxWidth: 420,
+            bgcolor: 'background.paper',
+            borderRadius: 3,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+            p: 4,
+            outline: 'none',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            border: '1px solid rgba(255,0,0,0.2)',
+            mx: 2,
+          }}
+          component={motion.div}
+          initial={{ scale: 0.9, opacity: 0, y: 30 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          exit={{ scale: 0.9, opacity: 0, y: 30 }}
+          transition={{ duration: 0.3 }}
+        >
+          {/* Botón volver */}
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+            <IconButton
+              onClick={handleBack}
+              disabled={loading}
+              sx={{
+                color: '#666666',
+                '&:hover': {
+                  color: '#ff0000',
+                  bgcolor: 'rgba(255,0,0,0.05)',
+                },
+              }}
+            >
+              <ArrowBackIcon />
+            </IconButton>
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 600,
+                color: '#000000',
+                ml: 1,
+              }}
+            >
+              Restablecer Contraseña
+            </Typography>
+          </Box>
+
+          {success ? (
+            // ✅ ÉXITO - Correo enviado
+            <Box sx={{ textAlign: 'center', py: 2 }}>
+              <Box
+                sx={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: '50%',
+                  bgcolor: 'rgba(16, 185, 129, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  mx: 'auto',
+                  mb: 3,
+                }}
+              >
+                <CheckCircleIcon sx={{ fontSize: 48, color: '#10b981' }} />
+              </Box>
+              <Typography
+                variant="h5"
+                sx={{
+                  fontWeight: 700,
+                  color: '#000000',
+                  mb: 1,
+                }}
+              >
+                ¡Correo Enviado!
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: '#666666',
+                  mb: 2,
+                }}
+              >
+                Hemos enviado un enlace de restablecimiento a:
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 600,
+                  color: '#ff0000',
+                  mb: 3,
+                }}
+              >
+                {emailEnviado}
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: '#999999',
+                  fontSize: '0.8rem',
+                  mb: 3,
+                }}
+              >
+                Revisa tu bandeja de entrada y sigue las instrucciones para crear una nueva contraseña.
+                <br />
+                <span style={{ color: '#666666' }}>
+                  Si no recibes el correo en unos minutos, revisa tu carpeta de spam.
+                </span>
+              </Typography>
+              <Button
+                fullWidth
+                variant="contained"
+                onClick={handleClose}
+                sx={{
+                  py: 1.5,
+                  background: 'linear-gradient(135deg, #ff0000, #cc0000)',
+                  color: '#ffffff',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  borderRadius: 2,
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #cc0000, #990000)',
+                  },
+                }}
+              >
+                Volver al inicio de sesión
+              </Button>
+            </Box>
+          ) : (
+            // 📝 FORMULARIO
+            <form onSubmit={handleRestablecer}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: '#666666',
+                  mb: 3,
+                }}
+              >
+                Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.
+              </Typography>
+
+              {error && (
+                <Alert
+                  severity="error"
+                  sx={{
+                    mb: 2,
+                    borderRadius: 2,
+                    border: '1px solid #ff0000',
+                    bgcolor: '#fff5f5',
+                    color: '#000000',
+                    '& .MuiAlert-icon': {
+                      color: '#ff0000',
+                    },
+                  }}
+                >
+                  {error}
+                </Alert>
+              )}
+
+              {verificando && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                  <CircularProgress size={20} sx={{ color: '#ff0000' }} />
+                  <Typography variant="body2" sx={{ color: '#666666' }}>
+                    Verificando correo electrónico...
+                  </Typography>
+                </Box>
+              )}
+
+              <TextField
+                fullWidth
+                label="Correo electrónico"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={loading || verificando}
+                size={isMobile ? "small" : "medium"}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <EmailIcon sx={{ color: '#999999' }} />
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{
+                  mb: 3,
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': {
+                      borderColor: '#e0e0e0',
+                    },
+                    '&:hover fieldset': {
+                      borderColor: '#ff0000',
+                    },
+                    '&.Mui-focused fieldset': {
+                      borderColor: '#ff0000',
+                      borderWidth: '2px',
+                    },
+                  },
+                  '& .MuiInputLabel-root.Mui-focused': {
+                    color: '#ff0000',
+                  },
+                }}
+              />
+
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                disabled={loading || verificando || !email}
+                size={isMobile ? "medium" : "large"}
+                sx={{
+                  py: 1.5,
+                  background: loading || verificando ? '#999999' : 'linear-gradient(135deg, #ff0000, #cc0000)',
+                  color: '#ffffff',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  borderRadius: 2,
+                  '&:hover': {
+                    background: loading || verificando ? '#999999' : 'linear-gradient(135deg, #cc0000, #990000)',
+                  },
+                }}
+              >
+                {loading || verificando ? (
+                  <CircularProgress size={24} sx={{ color: '#ffffff' }} />
+                ) : (
+                  'Enviar enlace de restablecimiento'
+                )}
+              </Button>
+
+              <Box sx={{ mt: 2, textAlign: 'center' }}>
+                <Button
+                  onClick={handleBack}
+                  disabled={loading || verificando}
+                  sx={{
+                    color: '#666666',
+                    textTransform: 'none',
+                    fontSize: '0.85rem',
+                    '&:hover': {
+                      color: '#ff0000',
+                      bgcolor: 'transparent',
+                    },
+                  }}
+                >
+                  ← Volver al inicio de sesión
+                </Button>
+              </Box>
+            </form>
+          )}
+        </Box>
+      </Fade>
+    </Modal>
+  );
+};
+
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -54,6 +447,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [showResetModal, setShowResetModal] = useState(false);
   
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -93,6 +487,18 @@ const Login = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleOpenResetModal = () => {
+    setShowResetModal(true);
+  };
+
+  const handleCloseResetModal = () => {
+    setShowResetModal(false);
+  };
+
+  const handleBackToLogin = () => {
+    setShowResetModal(false);
   };
 
   return (
@@ -346,8 +752,8 @@ const Login = () => {
               sx={{
                 mb: 3,
                 borderRadius: 1,
-                border: '1px solid #ff0000',
-                backgroundColor: '#fff5f5',
+                border: '1px solid rgba(255,0,0,0.3)',
+                bgcolor: '#fff5f5',
                 color: '#000000',
                 '& .MuiAlert-icon': {
                   color: '#ff0000',
@@ -485,7 +891,7 @@ const Login = () => {
                 }}
               >
                 <Button
-                  onClick={() => navigate('/forgot-password')}
+                  onClick={handleOpenResetModal}
                   sx={{
                     color: '#666666',
                     textTransform: 'none',
@@ -533,6 +939,13 @@ const Login = () => {
           </Box>
         </Paper>
       </Container>
+
+      {/* 🔥 MODAL DE RESTABLECER CONTRASEÑA - CENTRALIZADO */}
+      <RestablecerContrasenaModal
+        isOpen={showResetModal}
+        onClose={handleCloseResetModal}
+        onBack={handleBackToLogin}
+      />
     </Box>
   );
 };

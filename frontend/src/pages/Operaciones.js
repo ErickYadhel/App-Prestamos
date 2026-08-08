@@ -13,7 +13,7 @@ import {
   SparklesIcon,
   RocketLaunchIcon,
   CpuChipIcon,
-  UserGroupIcon  // 👈 NUEVO ÍCONO PARA GARANTES
+  UserGroupIcon
 } from '@heroicons/react/24/outline';
 
 // Importar los submódulos
@@ -23,7 +23,7 @@ import Documentos from './Operaciones/Documentos';
 import Calculos from './Operaciones/Calculos';
 import Comisiones from './Operaciones/Comisiones';
 import Calendario from './Operaciones/Calendario';
-import Garantes from './Garantes';  // 👈 NUEVA IMPORTACIÓN
+import Garantes from './Garantes';
 
 // ============================================
 // COMPONENTE DE BORDE LUMINOSO
@@ -278,32 +278,22 @@ const Operaciones = () => {
       componente: <Calculos />
     },
     {
-      id: 'garantes',        // 👈 NUEVO MÓDULO
+      id: 'garantes',
       nombre: 'Garantes',
       descripcion: 'Gestión de garantes y avales',
       icon: UserGroupIcon,
       color: 'from-teal-500 to-teal-700',
       gradientColor: 'from-teal-600 via-teal-500 to-teal-600',
-      items: ['Lista de garantes', 'Registro de garantes', 'Relaciones con clientes', 'Comisiones por garante'],
+      items: ['Lista de garantes', 'Relaciones con clientes', 'Comisiones por garante'],
       componente: <Garantes />
-    },
-    {
-      id: 'comisiones',
-      nombre: 'Comisiones',
-      descripcion: 'Gestión de comisiones',
-      icon: CurrencyDollarIcon,
-      color: 'from-red-500 to-red-700',
-      gradientColor: 'from-red-600 via-red-500 to-red-600',
-      items: ['Comisiones por préstamos', 'Comisiones por cobros', 'Liquidaciones'],
-      componente: <Comisiones />
     },
     {
       id: 'calendario',
       nombre: 'Calendario',
       descripcion: 'Calendario de pagos y eventos',
       icon: CalendarIcon,
-      color: 'from-indigo-500 to-indigo-700',
-      gradientColor: 'from-indigo-600 via-indigo-500 to-indigo-600',
+      color: 'from-red-500 to-red-700',
+      gradientColor: 'from-red-600 via-red-500 to-red-600',
       items: ['Calendario de pagos', 'Vencimientos', 'Recordatorios'],
       componente: <Calendario />
     }

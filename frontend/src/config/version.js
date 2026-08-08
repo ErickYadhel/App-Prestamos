@@ -10,10 +10,10 @@
 
 const VERSION_CONFIG = {
   // Versión actual del sistema (Ej: 1.0.0, 1.1.5, 2.0.0)
-  version: '1.0.4',
+  version: '1.0.5',
   
   // Fecha de la versión en formato DD-MM-YYYY
-  fecha: '07/08/2026'
+  fecha: '08/08/2026'
 };
 // ============================================
 // DATOS DE VERSION DEL SISTEMA
@@ -28,6 +28,8 @@ const VERSION_CONFIG = {
 // - MODULO DE NOTIFICACIONES MEJORAS: Se implementaron mejoras en el sistema de notificaciones, incluyendo la posibilidad de configurar alertas personalizadas y la integración con servicios de mensajería externa para una comunicación más efectiva con los usuarios.
 // - MODULO DE PRESTAMOS MEJORAS: Se agrego nuevas tarjetas y nuevo boton de enviar estado de cuenta, para que los usuarios puedan enviar el estado de cuenta a los clientes de manera más rápida y sencilla.
 // - MODULO DE PAGOS MEJORAS: Se agrego nuevo botones y forma de no limitar cantidad visible de los prestamos.
+// - MODULO DE REPORTES MEJORAS: Se agrego nuevo botones y forma de no limitar cantidad visible de los prestamos.
+// - MODULO DE LOGIN: Se agrego el boton de "Olvidé mi contraseña" para que los usuarios puedan recuperar su acceso de manera más sencilla y rápida.
 // ============================================
 // Función para obtener la versión formateada
 export const getVersionFormatted = () => `v${VERSION_CONFIG.version}`;

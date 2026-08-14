@@ -22,8 +22,15 @@ import Informacion from './pages/Informacion';
 import Operaciones from './pages/Operaciones';
 import Seguridad from './pages/Seguridad';
 import Comisiones from './pages/Operaciones/Comisiones';
+import Calendario from './pages/Operaciones/Calendario';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from './services/firebase';
+
+import { GoogleOAuthProvider } from '@react-oauth/google';
+import { GoogleCalendarProvider } from './context/GoogleCalendarContext';
+
+// 🔥 CLIENT ID DE GOOGLE - CORRECTO
+const GOOGLE_CLIENT_ID = '768056000483-f8d266gdhd7clu67rcenc4ts340q2d9l.apps.googleusercontent.com';
 
 // Componente de carga mejorado
 const LoadingScreen = () => (
@@ -133,7 +140,10 @@ const ProtectedRoute = ({ children, modulo, accion = 'ver' }) => {
   return children;
 };
 
-function App() {
+// ============================================
+// COMPONENTE APP ENVUELTO CON GOOGLE PROVIDERS
+// ============================================
+function AppContent() {
   return (
     <ErrorBoundary>
       <ErrorProvider>
@@ -281,6 +291,15 @@ function App() {
                       </ProtectedRoute>
                     } />
                     
+                    {/* 🔥 CALENDARIO - NUEVA RUTA */}
+                    <Route path="/calendario" element={
+                      <ProtectedRoute modulo="calendario" accion="ver">
+                        <Layout>
+                          <Calendario />
+                        </Layout>
+                      </ProtectedRoute>
+                    } />
+                    
                     {/* Perfil de usuario - Accesible para todos */}
                     <Route path="/perfil" element={
                       <ProtectedRoute>
@@ -331,6 +350,19 @@ function App() {
         </AuthProvider>
       </ErrorProvider>
     </ErrorBoundary>
+  );
+}
+
+// ============================================
+// APP PRINCIPAL CON GOOGLE PROVIDERS
+// ============================================
+function App() {
+  return (
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <GoogleCalendarProvider>
+        <AppContent />
+      </GoogleCalendarProvider>
+    </GoogleOAuthProvider>
   );
 }
 

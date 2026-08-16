@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BellIcon,
@@ -40,8 +40,41 @@ import {
 } from '@heroicons/react/24/outline';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { collection, getDocs, query, orderBy, limit, updateDoc, doc, getDoc, deleteDoc, addDoc, Timestamp, where, setDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, updateDoc, doc, getDoc, deleteDoc, addDoc, Timestamp, where, setDoc, and, or } from 'firebase/firestore';
 import { db } from '../../services/firebase';
+
+// ============================================
+// 🔥 CONTROL DE TASA PARA FIRESTORE
+// ============================================
+class FirestoreRateLimiter {
+  constructor(maxCalls = 5, timeWindow = 1000) {
+    this.maxCalls = maxCalls;
+    this.timeWindow = timeWindow;
+    this.calls = [];
+  }
+
+  async wait() {
+    const now = Date.now();
+    this.calls = this.calls.filter(time => now - time < this.timeWindow);
+    
+    if (this.calls.length >= this.maxCalls) {
+      const oldestCall = this.calls[0];
+      const waitTime = this.timeWindow - (now - oldestCall) + 100;
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      return this.wait();
+    }
+    
+    this.calls.push(now);
+    return true;
+  }
+
+  async execute(fn) {
+    await this.wait();
+    return fn();
+  }
+}
+
+const rateLimiter = new FirestoreRateLimiter(3, 1000);
 
 // ============================================
 // 🔥 FUNCIÓN PARA GENERAR ID PERSONALIZADO DE NOTIFICACIÓN
@@ -215,32 +248,6 @@ const formatFechaRelativa = (fecha) => {
 };
 
 // ============================================
-// FUNCIÓN PARA OBTENER EL SIGUIENTE PERÍODO DE PAGO
-// ============================================
-const obtenerSiguienteFechaPago = (fechaPrestamo, frecuencia, fechasPersonalizadas = null) => {
-  const fecha = new Date(fechaPrestamo);
-  
-  switch(frecuencia) {
-    case 'diario':
-      fecha.setDate(fecha.getDate() + 1);
-      break;
-    case 'semanal':
-      fecha.setDate(fecha.getDate() + 7);
-      break;
-    case 'quincenal':
-      fecha.setDate(fecha.getDate() + 15);
-      break;
-    case 'mensual':
-      fecha.setMonth(fecha.getMonth() + 1);
-      break;
-    default:
-      fecha.setDate(fecha.getDate() + 15);
-  }
-  
-  return fecha;
-};
-
-// ============================================
 // COMPONENTE DE BORDE LUMINOSO
 // ============================================
 const BorderGlow = ({ children, isHovered, color = 'from-green-600 via-green-500 to-green-600' }) => (
@@ -383,7 +390,7 @@ const NotificacionItem = ({ notificacion, onClick, onEliminar, isSelected }) => 
 };
 
 // ============================================
-// 🔥 MODAL PARA ENVIAR WHATSAPP (CON CÁLCULO DE MORA MEJORADO)
+// 🔥 MODAL PARA ENVIAR WHATSAPP
 // ============================================
 const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
   const { theme } = useTheme();
@@ -416,14 +423,12 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
         const data = prestamoSnap.data();
         setPrestamoInfo({ id: prestamoID, ...data });
         
-        // 🔥 Calcular períodos de mora si hay metadata
         if (notificacion.metadata?.diasMora) {
           const { periodos, tipoPeriodo, diasAtraso } = calcularPeriodosMora(
             notificacion.metadata.diasMora,
             data.frecuencia || 'quincenal'
           );
           
-          // Calcular el interés por período
           const interesPorPeriodo = (data.capitalRestante || 0) * (data.interesPercent || 10) / 100;
           const totalMora = periodos * interesPorPeriodo;
           
@@ -438,7 +443,6 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
             interesPercent: data.interesPercent || 10
           });
           
-          // 🔥 Generar mensaje mejorado con cálculos
           if (notificacion.tipo === 'mora' || notificacion.tipo === 'prestamo_vencido') {
             const mensajeMejorado = generarMensajeMoraConCalculos(
               notificacion.destinatario || 'Cliente',
@@ -458,9 +462,6 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
     }
   };
 
-  // ============================================
-  // 🔥 GENERAR MENSAJE DE MORA CON CÁLCULOS DETALLADOS
-  // ============================================
   const generarMensajeMoraConCalculos = (nombre, prestamo, diasAtraso, periodos, tipoPeriodo, interesPorPeriodo, totalMora) => {
     const fechaProximoPago = prestamo.fechaProximoPago 
       ? parseFechaDDMMYYYY(prestamo.fechaProximoPago)?.toLocaleDateString('es-DO') 
@@ -472,8 +473,6 @@ const WhatsAppModal = ({ isOpen, onClose, notificacion, onEnviar }) => {
       'quincenal': 'quincena',
       'mensual': 'mes'
     }[prestamo.frecuencia] || 'período';
-    
-    const frecuenciaCapitalizada = frecuenciaTexto.charAt(0).toUpperCase() + frecuenciaTexto.slice(1);
     
     return `⚠️ *ALERTA DE MORA* - EYS Inversiones
 
@@ -609,7 +608,6 @@ Realice su pago lo antes posible para evitar más cargos. Comuníquese con nosot
         fechaEnvio: new Date().toISOString()
       });
 
-      // 🔥 DISPARAR EVENTO PARA ACTUALIZAR LA LISTA PRINCIPAL
       window.dispatchEvent(new CustomEvent('notificacion-enviada'));
 
       onEnviar && onEnviar(notificacion.id);
@@ -680,7 +678,6 @@ Realice su pago lo antes posible para evitar más cargos. Comuníquese con nosot
               </div>
 
               <div className="p-3 sm:p-6 space-y-3 sm:space-y-6">
-                {/* Información del Destinatario */}
                 <div className={`p-3 sm:p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-100'} border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                   <div className="flex items-center space-x-2 mb-2 sm:mb-3">
                     <div className="p-1.5 bg-green-600 rounded-lg">
@@ -720,7 +717,6 @@ Realice su pago lo antes posible para evitar más cargos. Comuníquese con nosot
                   )}
                 </div>
 
-                {/* 🔥 Cálculo de Mora (si aplica) */}
                 {calculosMora && notificacion?.tipo === 'mora' && (
                   <div className={`p-3 sm:p-4 rounded-xl ${theme === 'dark' ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-200'} border`}>
                     <div className="flex items-center space-x-2 mb-2">
@@ -757,7 +753,6 @@ Realice su pago lo antes posible para evitar más cargos. Comuníquese con nosot
                   </div>
                 )}
 
-                {/* Mensaje */}
                 <div>
                   <label className={`block text-xs sm:text-sm font-medium mb-1 sm:mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                     Mensaje
@@ -870,61 +865,93 @@ const EstadisticasNotificaciones = ({ notificaciones }) => {
 };
 
 // ============================================
-// 🔥 GENERACIÓN AUTOMÁTICA DE NOTIFICACIONES (MEJORADO)
+// 🔥 GENERACIÓN AUTOMÁTICA DE NOTIFICACIONES (CON CONTROL DE TASA)
 // ============================================
+let ultimaGeneracionAutomatica = 0;
+let generandoNotificaciones = false;
+
 const generarNotificacionesAutomaticas = async () => {
-  console.log('🔄 Generando notificaciones automáticas...');
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
+  // Prevenir ejecuciones concurrentes
+  if (generandoNotificaciones) {
+    console.log('⏳ Ya hay una generación de notificaciones en curso...');
+    return [];
+  }
+  
+  // Control de tasa: mínimo 30 segundos entre generaciones
+  const ahora = Date.now();
+  if (ahora - ultimaGeneracionAutomatica < 30000) {
+    console.log('⏳ Esperando 30 segundos entre generaciones...');
+    return [];
+  }
+  
+  generandoNotificaciones = true;
+  ultimaGeneracionAutomatica = ahora;
+  
+  console.log('🔄 Generando notificaciones automáticas (con control de tasa)...');
   const notificacionesCreadas = [];
   let totalPrestamosRevisados = 0;
   let prestamosEnMora = 0;
   let prestamosProximos = 0;
+  let solicitudesPendientes = 0;
 
   try {
-    // Obtener todos los préstamos activos
+    // 🔥 OBTENER PRÉSTAMOS ACTIVOS (limitado a 50 para evitar sobrecarga)
     const prestamosRef = collection(db, 'prestamos');
-    const prestamosQuery = query(prestamosRef, where('estado', '==', 'activo'));
-    const prestamosSnap = await getDocs(prestamosQuery);
+    const prestamosQuery = query(prestamosRef, where('estado', '==', 'activo'), limit(50));
+    const prestamosSnap = await rateLimiter.execute(async () => await getDocs(prestamosQuery));
     
     console.log(`📊 ${prestamosSnap.size} préstamos activos encontrados`);
     
-    for (const docPrestamo of prestamosSnap.docs) {
-      const prestamo = docPrestamo.data();
-      const clienteNombre = prestamo.clienteNombre || 'Cliente';
-      const clienteID = prestamo.clienteID;
-      const capitalRestante = prestamo.capitalRestante || 0;
+    // Procesar en lotes pequeños para no sobrecargar
+    const batchSize = 5;
+    const prestamosArray = [];
+    prestamosSnap.forEach(doc => prestamosArray.push({ id: doc.id, ...doc.data() }));
+    
+    for (let i = 0; i < prestamosArray.length; i += batchSize) {
+      const batch = prestamosArray.slice(i, i + batchSize);
       
-      totalPrestamosRevisados++;
-      
-      let fechaProximoPago = null;
-      if (prestamo.fechaProximoPago) {
-        fechaProximoPago = parseFechaDDMMYYYY(prestamo.fechaProximoPago);
-      }
-      
-      if (!fechaProximoPago) {
-        continue;
-      }
-      
-      const fechaProximoPagoSinHora = new Date(fechaProximoPago);
-      fechaProximoPagoSinHora.setHours(0, 0, 0, 0);
-      
-      const diffTime = fechaProximoPagoSinHora - hoy;
-      const diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
-      // ============================================
-      // 🔥 VERIFICAR MORA CON CÁLCULO DE PERÍODOS
-      // ============================================
-      if (diasRestantes < 0 && capitalRestante > 0) {
-        const diasMora = Math.abs(diasRestantes);
-        prestamosEnMora++;
+      for (const prestamo of batch) {
+        const clienteNombre = prestamo.clienteNombre || 'Cliente';
+        const clienteID = prestamo.clienteID;
+        const capitalRestante = prestamo.capitalRestante || 0;
         
-        // Calcular períodos de mora
-        const { periodos, tipoPeriodo } = calcularPeriodosMora(diasMora, prestamo.frecuencia || 'quincenal');
-        const interesPorPeriodo = capitalRestante * (prestamo.interesPercent || 10) / 100;
-        const totalMora = periodos * interesPorPeriodo;
+        totalPrestamosRevisados++;
         
-        const mensajeMora = `⚠️ *ALERTA DE MORA* - EYS Inversiones
+        let fechaProximoPago = null;
+        if (prestamo.fechaProximoPago) {
+          fechaProximoPago = parseFechaDDMMYYYY(prestamo.fechaProximoPago);
+        }
+        
+        if (!fechaProximoPago) {
+          continue;
+        }
+        
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+        const fechaProximoPagoSinHora = new Date(fechaProximoPago);
+        fechaProximoPagoSinHora.setHours(0, 0, 0, 0);
+        
+        const diffTime = fechaProximoPagoSinHora - hoy;
+        const diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        // ============================================
+        // 🔥 VERIFICAR MORA
+        // ============================================
+        if (diasRestantes < 0 && capitalRestante > 0) {
+          const diasMora = Math.abs(diasRestantes);
+          prestamosEnMora++;
+          
+          const { periodos, tipoPeriodo } = calcularPeriodosMora(diasMora, prestamo.frecuencia || 'quincenal');
+          const interesPorPeriodo = capitalRestante * (prestamo.interesPercent || 10) / 100;
+          const totalMora = periodos * interesPorPeriodo;
+          
+          // Verificar si ya existe notificación de mora para este préstamo (últimas 24 horas)
+          const notificacionIdEsperado = generarIdNotificacion('mora', clienteNombre, new Date());
+          const docRef = doc(db, 'notificaciones', notificacionIdEsperado);
+          const docSnap = await rateLimiter.execute(async () => await getDoc(docRef));
+          
+          if (!docSnap.exists()) {
+            const mensajeMora = `⚠️ *ALERTA DE MORA* - EYS Inversiones
 
 El cliente *${clienteNombre}* tiene un pago VENCIDO desde hace *${diasMora} días* (${periodos} ${tipoPeriodo}).
 
@@ -939,41 +966,47 @@ El cliente *${clienteNombre}* tiene un pago VENCIDO desde hace *${diasMora} día
 💰 *Total adeudado:* ${formatMonto(capitalRestante + totalMora)}
 
 🚨 *ACCION REQUERIDA:* Contactar al cliente de inmediato.`;
-        
-        const notificacionData = {
-          tipo: 'mora',
-          titulo: `🚨 Pago VENCIDO - ${diasMora} días de mora`,
-          mensaje: mensajeMora,
-          destinatario: clienteNombre,
-          clienteID: clienteID,
-          telefono: prestamo.telefonoCliente || '',
-          metadata: {
-            prestamoID: docPrestamo.id,
-            capitalRestante: capitalRestante,
-            diasMora: diasMora,
-            fechaProximoPago: prestamo.fechaProximoPago,
-            frecuencia: prestamo.frecuencia,
-            interesPercent: prestamo.interesPercent || 10,
-            periodosMora: periodos,
-            tipoPeriodo: tipoPeriodo,
-            interesPorPeriodo: interesPorPeriodo,
-            totalMora: totalMora
+            
+            const notificacionData = {
+              tipo: 'mora',
+              titulo: `🚨 Pago VENCIDO - ${diasMora} días de mora`,
+              mensaje: mensajeMora,
+              destinatario: clienteNombre,
+              clienteID: clienteID,
+              telefono: prestamo.telefonoCliente || '',
+              metadata: {
+                prestamoID: prestamo.id,
+                capitalRestante: capitalRestante,
+                diasMora: diasMora,
+                fechaProximoPago: prestamo.fechaProximoPago,
+                frecuencia: prestamo.frecuencia,
+                interesPercent: prestamo.interesPercent || 10,
+                periodosMora: periodos,
+                tipoPeriodo: tipoPeriodo,
+                interesPorPeriodo: interesPorPeriodo,
+                totalMora: totalMora
+              }
+            };
+            
+            const resultado = await crearNotificacionConIdPersonalizado(notificacionData);
+            if (!resultado.yaExiste) {
+              notificacionesCreadas.push(resultado.id);
+            }
           }
-        };
-        
-        const resultado = await crearNotificacionConIdPersonalizado(notificacionData);
-        if (!resultado.yaExiste) {
-          notificacionesCreadas.push(resultado.id);
         }
-      }
-      
-      // ============================================
-      // 🔥 VERIFICAR PAGO PRÓXIMO
-      // ============================================
-      if (diasRestantes >= 0 && diasRestantes <= 3 && capitalRestante > 0) {
-        prestamosProximos++;
         
-        const mensajeRecordatorio = `📋 *RECORDATORIO DE PAGO* - EYS Inversiones
+        // ============================================
+        // 🔥 VERIFICAR PAGO PRÓXIMO (solo si no está en mora)
+        // ============================================
+        if (diasRestantes >= 0 && diasRestantes <= 3 && capitalRestante > 0) {
+          prestamosProximos++;
+          
+          const notificacionIdEsperado = generarIdNotificacion('pago_proximo', clienteNombre, new Date());
+          const docRef = doc(db, 'notificaciones', notificacionIdEsperado);
+          const docSnap = await rateLimiter.execute(async () => await getDoc(docRef));
+          
+          if (!docSnap.exists()) {
+            const mensajeRecordatorio = `📋 *RECORDATORIO DE PAGO* - EYS Inversiones
 
 Estimado(a) *${clienteNombre}*,
 
@@ -987,35 +1020,44 @@ Le recordamos que tiene un pago programado en *${diasRestantes} días*.
 💡 *Recomendación:* Realice su pago a tiempo para evitar cargos por mora.
 
 - EYS Inversiones`;
-        
-        const notificacionData = {
-          tipo: 'pago_proximo',
-          titulo: `⏰ Pago en ${diasRestantes} días`,
-          mensaje: mensajeRecordatorio,
-          destinatario: clienteNombre,
-          clienteID: clienteID,
-          telefono: prestamo.telefonoCliente || '',
-          metadata: {
-            prestamoID: docPrestamo.id,
-            capitalRestante: capitalRestante,
-            diasRestantes: diasRestantes,
-            fechaProximoPago: prestamo.fechaProximoPago,
-            frecuencia: prestamo.frecuencia
+            
+            const notificacionData = {
+              tipo: 'pago_proximo',
+              titulo: `⏰ Pago en ${diasRestantes} días`,
+              mensaje: mensajeRecordatorio,
+              destinatario: clienteNombre,
+              clienteID: clienteID,
+              telefono: prestamo.telefonoCliente || '',
+              metadata: {
+                prestamoID: prestamo.id,
+                capitalRestante: capitalRestante,
+                diasRestantes: diasRestantes,
+                fechaProximoPago: prestamo.fechaProximoPago,
+                frecuencia: prestamo.frecuencia
+              }
+            };
+            
+            const resultado = await crearNotificacionConIdPersonalizado(notificacionData);
+            if (!resultado.yaExiste) {
+              notificacionesCreadas.push(resultado.id);
+            }
           }
-        };
-        
-        const resultado = await crearNotificacionConIdPersonalizado(notificacionData);
-        if (!resultado.yaExiste) {
-          notificacionesCreadas.push(resultado.id);
         }
+      }
+      
+      // Esperar un poco entre lotes para no saturar
+      if (i + batchSize < prestamosArray.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
     
-    // Nuevas solicitudes pendientes
+    // ============================================
+    // 🔥 NUEVAS SOLICITUDES PENDIENTES
+    // ============================================
     try {
       const solicitudesRef = collection(db, 'solicitudes');
-      const solicitudesQuery = query(solicitudesRef, where('estado', '==', 'pendiente'));
-      const solicitudesSnap = await getDocs(solicitudesQuery);
+      const solicitudesQuery = query(solicitudesRef, where('estado', '==', 'pendiente'), limit(20));
+      const solicitudesSnap = await rateLimiter.execute(async () => await getDocs(solicitudesQuery));
       
       for (const docSolicitud of solicitudesSnap.docs) {
         const solicitud = docSolicitud.data();
@@ -1025,9 +1067,11 @@ Le recordamos que tiene un pago programado en *${diasRestantes} días*.
         
         const idEsperado = generarIdNotificacion('nueva_solicitud', clienteNombre, new Date());
         const docRef = doc(db, 'notificaciones', idEsperado);
-        const docSnap = await getDoc(docRef);
+        const docSnap = await rateLimiter.execute(async () => await getDoc(docRef));
         
         if (!docSnap.exists()) {
+          solicitudesPendientes++;
+          
           const mensajeSolicitud = `📋 *NUEVA SOLICITUD DE PRÉSTAMO* - EYS Inversiones
 
 El cliente *${clienteNombre}* ha solicitado un préstamo de *${formatMonto(montoSolicitado)}*.
@@ -1064,12 +1108,14 @@ El cliente *${clienteNombre}* ha solicitado un préstamo de *${formatMonto(monto
       console.error('Error procesando solicitudes:', error);
     }
     
-    console.log(`✅ ${notificacionesCreadas.length} notificaciones generadas`);
+    console.log(`✅ ${notificacionesCreadas.length} notificaciones generadas (Mora: ${prestamosEnMora}, Próximos: ${prestamosProximos}, Solicitudes: ${solicitudesPendientes})`);
     return notificacionesCreadas;
     
   } catch (error) {
     console.error('❌ Error generando notificaciones:', error);
     return notificacionesCreadas;
+  } finally {
+    generandoNotificaciones = false;
   }
 };
 
@@ -1087,13 +1133,22 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
   const [showSearch, setShowSearch] = useState(false);
   const [selectedNotificacion, setSelectedNotificacion] = useState(null);
   const [generando, setGenerando] = useState(false);
+  const [ultimaCarga, setUltimaCarga] = useState(0);
   const panelRef = useRef(null);
 
-  const cargarNotificaciones = async () => {
+  const cargarNotificaciones = useCallback(async () => {
+    // Control de tasa: mínimo 2 segundos entre cargas
+    const ahora = Date.now();
+    if (ahora - ultimaCarga < 2000) {
+      console.log('⏳ Esperando para recargar notificaciones...');
+      return;
+    }
+    setUltimaCarga(ahora);
+    
     try {
       setLoading(true);
       const q = query(collection(db, 'notificaciones'), orderBy('fechaCreacion', 'desc'), limit(50));
-      const snapshot = await getDocs(q);
+      const snapshot = await rateLimiter.execute(async () => await getDocs(q));
       const notis = [];
       snapshot.forEach(doc => {
         const data = doc.data();
@@ -1109,13 +1164,12 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [ultimaCarga]);
 
-  // 🔥 ESCUCHAR EVENTO DE NOTIFICACIÓN ENVIADA
   useEffect(() => {
     const handleNotificacionEnviada = () => {
       console.log('📩 Evento: notificacion-enviada - Recargando lista...');
-      cargarNotificaciones();
+      setTimeout(() => cargarNotificaciones(), 1000);
     };
     
     window.addEventListener('notificacion-enviada', handleNotificacionEnviada);
@@ -1123,33 +1177,46 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
     return () => {
       window.removeEventListener('notificacion-enviada', handleNotificacionEnviada);
     };
-  }, []);
+  }, [cargarNotificaciones]);
 
   useEffect(() => {
+    let intervalId = null;
+    
     if (isOpen) {
-      cargarNotificaciones();
-      
-      const generarYRecargar = async () => {
+      // Cargar inicial
+      const inicial = async () => {
+        await cargarNotificaciones();
+        
+        // Generar notificaciones automáticas (con control de tasa)
         setGenerando(true);
         await generarNotificacionesAutomaticas();
         await cargarNotificaciones();
         setGenerando(false);
       };
       
-      generarYRecargar();
+      inicial();
       
-      const interval = setInterval(async () => {
+      // Intervalo más largo (2 minutos) para no saturar
+      intervalId = setInterval(async () => {
+        setGenerando(true);
         await generarNotificacionesAutomaticas();
         await cargarNotificaciones();
-      }, 60000);
+        setGenerando(false);
+      }, 120000); // 2 minutos
       
-      return () => clearInterval(interval);
+      return () => {
+        if (intervalId) {
+          clearInterval(intervalId);
+        }
+      };
     }
-  }, [isOpen]);
+  }, [isOpen, cargarNotificaciones]);
 
   const marcarComoLeida = async (id) => {
     try {
-      await updateDoc(doc(db, 'notificaciones', id), { leida: true });
+      await rateLimiter.execute(async () => {
+        await updateDoc(doc(db, 'notificaciones', id), { leida: true });
+      });
       setNotificaciones(prev => prev.map(n => n.id === id ? { ...n, leida: true } : n));
     } catch (error) {
       console.error('Error:', error);
@@ -1158,7 +1225,9 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
 
   const eliminarNotificacion = async (id) => {
     try {
-      await deleteDoc(doc(db, 'notificaciones', id));
+      await rateLimiter.execute(async () => {
+        await deleteDoc(doc(db, 'notificaciones', id));
+      });
       setNotificaciones(prev => prev.filter(n => n.id !== id));
       if (selectedNotificacion?.id === id) setSelectedNotificacion(null);
     } catch (error) {
@@ -1170,7 +1239,9 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
     const noLeidas = notificaciones.filter(n => !n.leida);
     for (const notif of noLeidas) {
       try {
-        await updateDoc(doc(db, 'notificaciones', notif.id), { leida: true });
+        await rateLimiter.execute(async () => {
+          await updateDoc(doc(db, 'notificaciones', notif.id), { leida: true });
+        });
       } catch (error) {
         console.error('Error:', error);
       }
@@ -1189,7 +1260,14 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
   };
 
   const handleEnviarWhatsApp = () => {
-    cargarNotificaciones();
+    setTimeout(() => cargarNotificaciones(), 1500);
+  };
+
+  const handleGenerarManual = async () => {
+    setGenerando(true);
+    await generarNotificacionesAutomaticas();
+    await cargarNotificaciones();
+    setGenerando(false);
   };
 
   const notificacionesFiltradas = notificaciones.filter(notif => {
@@ -1298,51 +1376,31 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
               <div className="flex flex-wrap gap-1 bg-black/20 rounded-lg p-0.5 sm:p-1">
                 <button
                   onClick={() => setFilter('todas')}
-                  className={`flex-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${
-                    filter === 'todas'
-                      ? 'bg-red-600 text-white shadow-lg'
-                      : 'text-gray-300 hover:text-white'
-                  }`}
+                  className={`flex-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${filter === 'todas' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-300 hover:text-white'}`}
                 >
                   Todas ({notificaciones.length})
                 </button>
                 <button
                   onClick={() => setFilter('no_leidas')}
-                  className={`flex-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${
-                    filter === 'no_leidas'
-                      ? 'bg-red-600 text-white shadow-lg'
-                      : 'text-gray-300 hover:text-white'
-                  }`}
+                  className={`flex-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${filter === 'no_leidas' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-300 hover:text-white'}`}
                 >
                   No leídas ({notificacionesNoLeidas})
                 </button>
                 <button
                   onClick={() => setFilter('pendientes_whatsapp')}
-                  className={`flex-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${
-                    filter === 'pendientes_whatsapp'
-                      ? 'bg-red-600 text-white shadow-lg'
-                      : 'text-gray-300 hover:text-white'
-                  }`}
+                  className={`flex-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${filter === 'pendientes_whatsapp' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-300 hover:text-white'}`}
                 >
                   Pendientes ({notificacionesSinWhatsApp})
                 </button>
                 <button
                   onClick={() => setFilter('mora')}
-                  className={`flex-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${
-                    filter === 'mora'
-                      ? 'bg-red-600 text-white shadow-lg'
-                      : 'text-gray-300 hover:text-white'
-                  }`}
+                  className={`flex-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${filter === 'mora' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-300 hover:text-white'}`}
                 >
                   ⚠️ Mora ({notificacionesMora})
                 </button>
                 <button
                   onClick={() => setFilter('pago_proximo')}
-                  className={`flex-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${
-                    filter === 'pago_proximo'
-                      ? 'bg-red-600 text-white shadow-lg'
-                      : 'text-gray-300 hover:text-white'
-                  }`}
+                  className={`flex-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${filter === 'pago_proximo' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-300 hover:text-white'}`}
                 >
                   ⏰ Próximo ({notificacionesPagoProximo})
                 </button>
@@ -1371,16 +1429,12 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
                     {searchTerm ? 'Intenta con otra búsqueda' : 'Las notificaciones aparecerán aquí'}
                   </p>
                   <button
-                    onClick={async () => {
-                      setGenerando(true);
-                      await generarNotificacionesAutomaticas();
-                      await cargarNotificaciones();
-                      setGenerando(false);
-                    }}
-                    className="mt-3 px-4 py-1.5 bg-red-600/50 hover:bg-red-600/70 rounded-lg text-xs text-white transition-colors"
+                    onClick={handleGenerarManual}
+                    disabled={generando}
+                    className="mt-3 px-4 py-1.5 bg-red-600/50 hover:bg-red-600/70 rounded-lg text-xs text-white transition-colors disabled:opacity-50"
                   >
-                    <ArrowPathIcon className="h-3 w-3 inline mr-1 animate-spin" />
-                    Generar ahora
+                    <ArrowPathIcon className={`h-3 w-3 inline mr-1 ${generando ? 'animate-spin' : ''}`} />
+                    {generando ? 'Generando...' : 'Generar ahora'}
                   </button>
                 </motion.div>
               ) : (
@@ -1420,12 +1474,10 @@ const NotificacionesPanel = ({ isOpen, onClose }) => {
           setWhatsappModalOpen(false);
           setNotificacionSeleccionada(null);
           setSelectedNotificacion(null);
-          cargarNotificaciones();
+          setTimeout(() => cargarNotificaciones(), 1000);
         }}
         notificacion={notificacionSeleccionada}
-        onEnviar={() => {
-          cargarNotificaciones();
-        }}
+        onEnviar={handleEnviarWhatsApp}
       />
     </>
   );

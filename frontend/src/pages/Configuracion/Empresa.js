@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BuildingStorefrontIcon,
@@ -11,14 +11,14 @@ import {
   DocumentTextIcon,
   ChevronDownIcon,
   SparklesIcon,
-  MagnifyingGlassIcon,
   CheckCircleIcon,
   XMarkIcon,
   ExclamationTriangleIcon,
   ArrowPathIcon,
   ClockIcon,
   ArrowsPointingOutIcon,
-  EyeIcon
+  EyeIcon,
+  PencilIcon
 } from '@heroicons/react/24/outline';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
@@ -28,8 +28,6 @@ import { useAuth } from '../../context/AuthContext';
 // MODAL DE VISTA PREVIA DEL LOGO
 // ============================================
 const LogoPreviewModal = ({ isOpen, onClose, logoUrl, empresaNombre }) => {
-  const { theme } = useAuth();
-
   if (!isOpen) return null;
 
   return (
@@ -98,77 +96,141 @@ const LogoPreviewModal = ({ isOpen, onClose, logoUrl, empresaNombre }) => {
 };
 
 // ============================================
-// MODAL DE MAPA AMPLIADO (CON BOTONES VISIBLES)
+// MODAL DE MAPA AMPLIADO (CORREGIDO)
 // ============================================
 const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
-  const [mapaCargado, setMapaCargado] = useState(false);
-  const [buscando, setBuscando] = useState(false);
-  const [sugerencias, setSugerencias] = useState([]);
   const [busqueda, setBusqueda] = useState(ubicacion || '');
-  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
-  const [map, setMap] = useState(null);
-  const [marker, setMarker] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const mapRef = useRef(null);
+  const containerId = useRef('mapa-ampliado-container');
+  const mapaCargadoRef = useRef(false);
+  const leafletRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
-      cargarMapa();
+      setBusqueda(ubicacion || '');
+      mapaCargadoRef.current = false;
+      setLoading(true);
+      setTimeout(() => cargarMapa(), 400);
+    }
+  }, [isOpen, ubicacion]);
+
+  const cargarMapa = async () => {
+    if (!isOpen) return;
+    
+    try {
+      setLoading(true);
+      setError('');
+
+      const L = await import('leaflet');
+      await import('leaflet/dist/leaflet.css');
+      
+      leafletRef.current = L;
+
+      const container = document.getElementById(containerId.current);
+      if (!container) {
+        setError('No se pudo cargar el mapa');
+        setLoading(false);
+        return;
+      }
+
+      container.innerHTML = '';
+
+      const map = L.map(containerId.current, {
+        center: [18.4861, -69.9312],
+        zoom: 8,
+        zoomControl: true,
+        fadeAnimation: true,
+        zoomAnimation: true,
+        markerZoomAnimation: true
+      });
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 100);
+
+      if (busqueda && busqueda.trim() !== '') {
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(busqueda)}&limit=1`
+          );
+          const data = await response.json();
+          
+          if (data && data[0]) {
+            const { lat, lon } = data[0];
+            map.setView([parseFloat(lat), parseFloat(lon)], 13);
+            L.marker([parseFloat(lat), parseFloat(lon)]).addTo(map)
+              .bindPopup(busqueda)
+              .openPopup();
+          }
+        } catch (searchError) {
+          console.warn('Error buscando ubicación:', searchError);
+        }
+      }
+
+      map.on('click', async (e) => {
+        const { lat, lng } = e.latlng;
+        
+        map.eachLayer((layer) => {
+          if (layer instanceof L.Marker) {
+            map.removeLayer(layer);
+          }
+        });
+        
+        const marker = L.marker([lat, lng]).addTo(map);
+        marker.openPopup();
+
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+          );
+          const data = await response.json();
+          const direccion = data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          marker.bindPopup(direccion).openPopup();
+          setBusqueda(direccion);
+        } catch (error) {
+          console.error('Error obteniendo dirección:', error);
+          const direccion = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          marker.bindPopup(direccion).openPopup();
+          setBusqueda(direccion);
+        }
+      });
+
+      mapRef.current = map;
+      mapaCargadoRef.current = true;
+      setLoading(false);
+
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.invalidateSize();
+        }
+      }, 300);
+
+    } catch (error) {
+      console.error('Error cargando mapa:', error);
+      setError('Error al cargar el mapa. Revisa tu conexión.');
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen && mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
+      mapaCargadoRef.current = false;
+      leafletRef.current = null;
     }
   }, [isOpen]);
 
-  const cargarMapa = async () => {
-    if (!mapaCargado) {
-      setLoading(true);
-      try {
-        const L = await import('leaflet');
-        await import('leaflet/dist/leaflet.css');
-        
-        setTimeout(() => {
-          const container = document.getElementById('mapa-ampliado-container');
-          if (!container) return;
-
-          container.innerHTML = '';
-          
-          const newMap = L.map('mapa-ampliado-container').setView([18.4861, -69.9312], 8);
-          
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-          }).addTo(newMap);
-
-          const newMarker = L.marker([18.4861, -69.9312]).addTo(newMap)
-            .bindPopup('Haz clic para seleccionar')
-            .openPopup();
-
-          newMap.on('click', async (e) => {
-            const { lat, lng } = e.latlng;
-            newMarker.setLatLng([lat, lng]);
-            
-            try {
-              const response = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
-              );
-              const data = await response.json();
-              const direccion = data.display_name;
-              newMarker.bindPopup(direccion).openPopup();
-              setBusqueda(direccion);
-            } catch (error) {
-              console.error('Error obteniendo dirección:', error);
-            }
-          });
-
-          setMap(newMap);
-          setMarker(newMarker);
-          setMapaCargado(true);
-          setLoading(false);
-        }, 100);
-      } catch (error) {
-        console.error('Error cargando mapa:', error);
-        setError('Error al cargar el mapa');
-        setLoading(false);
-      }
-    }
-  };
+  const [sugerencias, setSugerencias] = useState([]);
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+  const [buscando, setBuscando] = useState(false);
 
   const buscarLugares = async (texto) => {
     if (texto.length < 3) {
@@ -196,10 +258,20 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
     setBusqueda(nombreLugar);
     setMostrarSugerencias(false);
     
-    if (map && marker) {
+    if (mapRef.current && leafletRef.current) {
+      const L = leafletRef.current;
+      const map = mapRef.current;
       map.setView([parseFloat(lugar.lat), parseFloat(lugar.lon)], 13);
-      marker.setLatLng([parseFloat(lugar.lat), parseFloat(lugar.lon)]);
-      marker.bindPopup(nombreLugar).openPopup();
+      
+      map.eachLayer((layer) => {
+        if (layer instanceof L.Marker) {
+          map.removeLayer(layer);
+        }
+      });
+      
+      const marker = L.marker([parseFloat(lugar.lat), parseFloat(lugar.lon)]).addTo(map)
+        .bindPopup(nombreLugar)
+        .openPopup();
     }
   };
 
@@ -221,8 +293,6 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
           className="relative w-full max-w-5xl max-h-[90vh] overflow-hidden bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-red-600/30"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-red-600/10 to-red-800/10 pointer-events-none" />
-          
           <div className="relative p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -236,7 +306,6 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
               </button>
             </div>
 
-            {/* Mensajes de error */}
             {error && (
               <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-lg flex items-center space-x-2">
                 <ExclamationTriangleIcon className="h-5 w-5" />
@@ -246,8 +315,8 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
 
             <div className="space-y-4">
               <div className="relative">
-                <div className="relative group">
-                  <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 group-hover:text-red-500 transition-colors" />
+                <div className="relative">
+                  <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <input
                     type="text"
                     value={busqueda}
@@ -294,8 +363,8 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
                 </div>
               ) : (
                 <div 
-                  id="mapa-ampliado-container" 
-                  className="h-96 rounded-xl overflow-hidden shadow-lg border-2 border-red-600/20"
+                  id={containerId.current} 
+                  className="h-96 rounded-xl overflow-hidden shadow-lg border-2 border-red-600/20 bg-gray-100 dark:bg-gray-800"
                 ></div>
               )}
 
@@ -325,239 +394,163 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
 };
 
 // ============================================
-// COMPONENTE DE MAPA INTERACTIVO (MEJORADO)
+// COMPONENTE DE MAPA INTERACTIVO (CORREGIDO)
 // ============================================
-const MapaInteractivo = ({ ubicacion, onUbicacionChange }) => {
-  const [buscando, setBuscando] = useState(false);
-  const [sugerencias, setSugerencias] = useState([]);
-  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+const MapaInteractivo = ({ ubicacion, onUbicacionChange, readOnly }) => {
   const [busqueda, setBusqueda] = useState(ubicacion || '');
   const [mapaAmpliadoAbierto, setMapaAmpliadoAbierto] = useState(false);
-  const [mapaCargado, setMapaCargado] = useState(false);
-  const [mapaError, setMapaError] = useState('');
-  const [buscarEnMapa, setBuscarEnMapa] = useState(false);
-  const [map, setMap] = useState(null);
-  const [marker, setMarker] = useState(null);
+  const [mapaVisible, setMapaVisible] = useState(false);
+  const mapRef = useRef(null);
+  const containerId = useRef(`mapa-mini-${Date.now()}`);
+  const mapaCargadoRef = useRef(false);
+  const leafletRef = useRef(null);
 
-  // Actualizar búsqueda cuando cambia la ubicación
   useEffect(() => {
     if (ubicacion) {
       setBusqueda(ubicacion);
     }
   }, [ubicacion]);
 
-  // Cargar mapa cuando se activa el checkbox
   useEffect(() => {
-    if (buscarEnMapa && busqueda && !mapaCargado) {
-      cargarMapaConRetraso();
-    }
-  }, [buscarEnMapa, busqueda]);
-
-  const cargarMapaConRetraso = () => {
-    setTimeout(() => {
+    if (mapaVisible && busqueda && !mapaCargadoRef.current) {
       cargarMapaMini();
-    }, 500);
-  };
+    }
+  }, [mapaVisible, busqueda]);
 
   const cargarMapaMini = async () => {
-    if (!buscarEnMapa || !busqueda) return;
+    if (!mapaVisible || !busqueda) return;
 
     try {
-      setMapaError('');
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(busqueda)}&limit=1`
       );
       const data = await response.json();
+
+      if (!data || !data[0]) return;
+
+      const { lat, lon } = data[0];
+
+      const L = await import('leaflet');
+      await import('leaflet/dist/leaflet.css');
       
-      if (data && data[0]) {
-        const { lat, lon } = data[0];
-        
-        const L = await import('leaflet');
-        await import('leaflet/dist/leaflet.css');
-        
-        setTimeout(() => {
-          const container = document.getElementById('mapa-mini-container');
-          if (!container) return;
+      leafletRef.current = L;
 
-          container.innerHTML = '';
-          
-          const newMap = L.map('mapa-mini-container').setView([parseFloat(lat), parseFloat(lon)], 13);
-          
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-          }).addTo(newMap);
+      const container = document.getElementById(containerId.current);
+      if (!container) return;
 
-          const newMarker = L.marker([parseFloat(lat), parseFloat(lon)]).addTo(newMap)
-            .bindPopup(busqueda)
-            .openPopup();
+      container.innerHTML = '';
 
-          setMap(newMap);
-          setMarker(newMarker);
-          setMapaCargado(true);
-        }, 100);
-      } else {
-        setMapaError('No se encontró la ubicación en el mapa');
-      }
+      const map = L.map(containerId.current).setView([parseFloat(lat), parseFloat(lon)], 13);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+
+      L.marker([parseFloat(lat), parseFloat(lon)]).addTo(map)
+        .bindPopup(busqueda)
+        .openPopup();
+
+      mapRef.current = map;
+      mapaCargadoRef.current = true;
+
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.invalidateSize();
+        }
+      }, 300);
+
     } catch (error) {
       console.error('Error cargando mapa mini:', error);
-      setMapaError('Error al cargar el mapa');
     }
   };
 
-  const buscarLugares = async (texto) => {
-    if (texto.length < 3) {
-      setSugerencias([]);
-      return;
-    }
-
-    setBuscando(true);
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(texto)}&limit=5&countrycodes=do,us,es,mx`
-      );
-      const data = await response.json();
-      setSugerencias(data);
-      setMostrarSugerencias(true);
-    } catch (error) {
-      console.error('Error buscando lugares:', error);
-    } finally {
-      setBuscando(false);
-    }
-  };
-
-  const seleccionarLugar = (lugar) => {
-    const nombreLugar = lugar.display_name;
-    setBusqueda(nombreLugar);
-    onUbicacionChange(nombreLugar);
-    setMostrarSugerencias(false);
-    
-    if (buscarEnMapa) {
-      setTimeout(() => {
-        cargarMapaMini();
-      }, 100);
+  const toggleMapa = () => {
+    if (readOnly) return;
+    const nuevoEstado = !mapaVisible;
+    setMapaVisible(nuevoEstado);
+    if (nuevoEstado && busqueda) {
+      mapaCargadoRef.current = false;
+      setTimeout(() => cargarMapaMini(), 300);
     }
   };
 
   return (
     <div className="space-y-2">
-      {/* Campo de ubicación con botón de ampliar */}
-      <div className="relative group">
-        <div className="absolute inset-0 bg-gradient-to-r from-red-600 to-red-800 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
-        <div className="relative flex items-center">
-          <MapPinIcon className="absolute left-3 h-5 w-5 text-gray-400 group-hover:text-red-500 transition-colors" />
-          <input
-            type="text"
-            value={busqueda}
-            onChange={(e) => {
+      <div className="relative">
+        <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+        <input
+          type="text"
+          value={busqueda}
+          onChange={(e) => {
+            if (!readOnly) {
               setBusqueda(e.target.value);
-              buscarLugares(e.target.value);
-            }}
-            onFocus={() => busqueda.length >= 3 && setMostrarSugerencias(true)}
-            placeholder="Buscar dirección, ciudad o lugar..."
-            className="w-full pl-10 pr-20 py-3 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none transition-all duration-300 dark:text-white"
-          />
-          <button
-            onClick={() => setMapaAmpliadoAbierto(true)}
-            className="absolute right-2 p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-            title="Ampliar mapa"
-          >
-            <ArrowsPointingOutIcon className="h-5 w-5" />
-          </button>
-          {buscando && (
-            <div className="absolute right-12">
-              <div className="animate-spin h-5 w-5 border-2 border-red-600 border-t-transparent rounded-full"></div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Checkbox para activar búsqueda en mapa (debajo del campo) */}
-      <div className="flex items-center space-x-2 mt-2">
-        <button
-          onClick={() => {
-            setBuscarEnMapa(!buscarEnMapa);
-            if (!buscarEnMapa && busqueda) {
-              setMapaCargado(false);
-              setTimeout(() => {
-                cargarMapaMini();
-              }, 100);
+              onUbicacionChange(e.target.value);
             }
           }}
+          placeholder="Dirección, ciudad o lugar..."
+          readOnly={readOnly}
+          className={`w-full pl-10 pr-20 py-3 bg-white dark:bg-gray-900 border-2 rounded-lg transition-all dark:text-white ${
+            readOnly 
+              ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 cursor-not-allowed text-gray-600 dark:text-gray-400'
+              : 'border-gray-200 dark:border-gray-700 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none'
+          }`}
+        />
+        <button
+          onClick={() => setMapaAmpliadoAbierto(true)}
+          className="absolute right-2 p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+          title="Ampliar mapa"
+        >
+          <ArrowsPointingOutIcon className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className="flex items-center space-x-2 mt-2">
+        <button
+          onClick={toggleMapa}
+          disabled={readOnly}
           className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${
-            buscarEnMapa ? 'bg-red-600' : 'bg-gray-300 dark:bg-gray-600'
+            readOnly ? 'opacity-50 cursor-not-allowed' : ''
+          } ${
+            mapaVisible ? 'bg-red-600' : 'bg-gray-300 dark:bg-gray-600'
           }`}
         >
           <motion.div
-            animate={{ x: buscarEnMapa ? 24 : 0 }}
+            animate={{ x: mapaVisible ? 24 : 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-md"
           />
         </button>
         <span className="text-sm text-gray-700 dark:text-gray-300">
-          Mostrar mapa interactivo
+          {readOnly ? 'Mapa bloqueado' : 'Mostrar mapa interactivo'}
         </span>
       </div>
 
-      {/* Mapa pequeño (solo si está activado) */}
-      {buscarEnMapa && (
+      {mapaVisible && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
           exit={{ opacity: 0, height: 0 }}
           className="mt-2"
         >
-          {mapaError ? (
-            <div className="h-48 rounded-xl bg-red-50 dark:bg-red-900/30 border-2 border-red-200 dark:border-red-700 flex items-center justify-center">
-              <p className="text-red-600 dark:text-red-400 text-sm">{mapaError}</p>
-            </div>
-          ) : !mapaCargado ? (
-            <div className="h-48 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-              <div className="text-center">
-                <div className="animate-spin h-8 w-8 border-4 border-red-600 border-t-transparent rounded-full mx-auto mb-2"></div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Cargando mapa...</p>
-              </div>
-            </div>
-          ) : (
-            <div 
-              id="mapa-mini-container" 
-              className="h-48 rounded-xl overflow-hidden shadow-lg border-2 border-red-600/20"
-            ></div>
-          )}
+          <div 
+            id={containerId.current} 
+            className="h-48 rounded-xl overflow-hidden shadow-lg border-2 border-red-600/20 bg-gray-100 dark:bg-gray-800"
+          ></div>
         </motion.div>
       )}
 
-      {/* Sugerencias de búsqueda */}
-      {mostrarSugerencias && sugerencias.length > 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-red-600/20 max-h-60 overflow-y-auto">
-          {sugerencias.map((lugar, index) => (
-            <button
-              key={index}
-              onClick={() => seleccionarLugar(lugar)}
-              className="w-full text-left px-4 py-3 flex items-start space-x-3 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors border-b last:border-b-0 border-gray-100 dark:border-gray-700"
-            >
-              <MapPinIcon className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">{lugar.display_name.split(',')[0]}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{lugar.display_name}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Modal de mapa ampliado */}
       <MapaAmpliadoModal
         isOpen={mapaAmpliadoAbierto}
         onClose={() => setMapaAmpliadoAbierto(false)}
         ubicacion={busqueda}
-        onSeleccionar={(ubicacion) => {
-          onUbicacionChange(ubicacion);
-          setBusqueda(ubicacion);
-          if (buscarEnMapa) {
-            setMapaCargado(false);
-            setTimeout(() => {
-              cargarMapaMini();
-            }, 100);
+        onSeleccionar={(ubicacionSeleccionada) => {
+          if (!readOnly) {
+            setBusqueda(ubicacionSeleccionada);
+            onUbicacionChange(ubicacionSeleccionada);
+            if (mapaVisible) {
+              mapaCargadoRef.current = false;
+              setTimeout(() => cargarMapaMini(), 300);
+            }
           }
         }}
       />
@@ -580,7 +573,7 @@ const GlassCard = ({ children, className = '' }) => (
 );
 
 // ============================================
-// COMPONENTE DE INPUT TECNOLÓGICO
+// COMPONENTE DE INPUT TECNOLÓGICO (CON MODO EDICIÓN)
 // ============================================
 const TechInput = ({ icon: Icon, label, error, value, onChange, readOnly, ...props }) => {
   const [localValue, setLocalValue] = useState(value || '');
@@ -608,34 +601,27 @@ const TechInput = ({ icon: Icon, label, error, value, onChange, readOnly, ...pro
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
       {label && (
-        <motion.label 
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-          animate={{ color: isFocused ? '#DC2626' : undefined }}
-        >
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
           {label}
-        </motion.label>
+        </label>
       )}
       <div className="relative group">
-        <motion.div 
-          className="absolute inset-0 bg-gradient-to-r from-red-600 to-red-800 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"
-          animate={{ opacity: isFocused ? 0.5 : 0 }}
-        />
         <div className="relative">
           {Icon && (
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Icon className={`h-5 w-5 transition-colors duration-300 ${
-                isFocused ? 'text-red-500' : 'text-gray-400'
+                isFocused && !readOnly ? 'text-red-500' : 'text-gray-400'
               }`} />
             </div>
           )}
           <input
-            className={`w-full ${Icon ? 'pl-10' : 'pl-4'} pr-4 py-2.5 bg-white dark:bg-gray-900 border-2 ${
-              isFocused 
+            className={`w-full ${Icon ? 'pl-10' : 'pl-4'} pr-4 py-2.5 border-2 rounded-lg outline-none transition-all duration-300 dark:text-white ${
+              isFocused && !readOnly
                 ? 'border-red-500 ring-2 ring-red-500/20' 
                 : readOnly
-                  ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                  : 'border-gray-200 dark:border-gray-700'
-            } rounded-lg outline-none transition-all duration-300 dark:text-white`}
+                  ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 cursor-not-allowed'
+                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'
+            }`}
             value={localValue}
             onChange={handleChange}
             onFocus={() => !readOnly && setIsFocused(true)}
@@ -643,27 +629,59 @@ const TechInput = ({ icon: Icon, label, error, value, onChange, readOnly, ...pro
             readOnly={readOnly}
             {...props}
           />
-          <motion.div 
-            className="absolute inset-0 border-2 border-transparent group-hover:border-red-500/50 rounded-lg pointer-events-none transition-colors"
-            animate={{ borderColor: isFocused ? '#DC262680' : 'transparent' }}
-          />
         </div>
       </div>
       {error && (
-        <motion.p
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-sm text-red-600 dark:text-red-400 mt-1"
-        >
+        <p className="text-sm text-red-600 dark:text-red-400 mt-1">
           {error}
-        </motion.p>
+        </p>
       )}
     </motion.div>
   );
 };
 
 // ============================================
-// COMPONENTE DE LOGO PREVIEW CON BOTÓN DE AMPLIAR
+// COMPONENTE DE SELECT TECNOLÓGICO (CON MODO EDICIÓN)
+// ============================================
+const TechSelect = ({ icon: Icon, label, value, onChange, options, readOnly, placeholder }) => {
+  return (
+    <div className="space-y-1">
+      {label && (
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          {label}
+        </label>
+      )}
+      <div className="relative">
+        {Icon && (
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Icon className="h-5 w-5 text-gray-400" />
+          </div>
+        )}
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={readOnly}
+          className={`w-full ${Icon ? 'pl-10' : 'pl-4'} pr-10 py-2.5 border-2 rounded-lg outline-none transition-all appearance-none dark:text-white ${
+            readOnly
+              ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 cursor-not-allowed'
+              : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:border-red-500 focus:ring-2 focus:ring-red-500/20'
+          }`}
+        >
+          <option value="">{placeholder || 'Seleccionar...'}</option>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDownIcon className="absolute inset-y-0 right-0 pr-3 flex items-center h-5 w-5 text-gray-400 pointer-events-none" />
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// COMPONENTE DE LOGO PREVIEW
 // ============================================
 const LogoPreview = ({ logoUrl, empresaNombre, onAmpliar }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -677,10 +695,8 @@ const LogoPreview = ({ logoUrl, empresaNombre, onAmpliar }) => {
       whileHover={{ scale: 1.02 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
-      <div className="absolute inset-0 bg-gradient-to-r from-red-600 to-red-800 rounded-2xl opacity-0 group-hover:opacity-20 transition-opacity blur-xl"></div>
       <div className="relative bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-2xl p-8 border-2 border-red-600/20 hover:border-red-600/40 transition-all shadow-xl h-full flex flex-col items-center justify-center min-h-[300px]">
         <div className="relative mb-6">
-          <div className="absolute inset-0 bg-gradient-to-r from-red-600 to-red-800 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity blur-md"></div>
           <div className="relative w-44 h-44 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl flex items-center justify-center overflow-hidden border-2 border-red-600/20 group-hover:border-red-600/40 transition-all">
             {logoUrl ? (
               <img 
@@ -699,7 +715,6 @@ const LogoPreview = ({ logoUrl, empresaNombre, onAmpliar }) => {
             )}
           </div>
           
-          {/* Botón de ampliar (visible al hacer hover) */}
           {isHovered && logoUrl && (
             <motion.div
               initial={{ scale: 0 }}
@@ -716,26 +731,12 @@ const LogoPreview = ({ logoUrl, empresaNombre, onAmpliar }) => {
             {logoUrl ? 'Logo personalizado' : 'Logo por defecto'}
           </p>
           {logoUrl && (
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="mt-3 text-green-600 dark:text-green-400 text-sm font-medium flex items-center justify-center"
-            >
+            <div className="mt-3 text-green-600 dark:text-green-400 text-sm font-medium flex items-center justify-center">
               <CheckCircleIcon className="h-4 w-4 mr-1" />
               Logo cargado correctamente
-            </motion.div>
+            </div>
           )}
         </div>
-
-        {isHovered && (
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="absolute -top-2 -left-2 w-10 h-10 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-full flex items-center justify-center text-white shadow-xl"
-          >
-            <SparklesIcon className="h-5 w-5" />
-          </motion.div>
-        )}
       </div>
     </motion.div>
   );
@@ -770,8 +771,7 @@ const paisesData = {
       'New Hampshire', 'New Jersey', 'New Mexico', 'New York',
       'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon',
       'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota',
-      'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington',
-      'West Virginia', 'Wisconsin', 'Wyoming'
+      'Tennessee', 'Texas', 'Utah', 'Vermont'
     ]
   },
   'España': {
@@ -781,9 +781,7 @@ const paisesData = {
       'Madrid', 'Barcelona', 'Valencia', 'Sevilla', 'Zaragoza', 'Málaga',
       'Murcia', 'Palma de Mallorca', 'Las Palmas', 'Bilbao', 'Alicante',
       'Córdoba', 'Valladolid', 'Vigo', 'Gijón', 'Hospitalet de Llobregat',
-      'Vitoria', 'La Coruña', 'Granada', 'Elche', 'Oviedo', 'Badalona',
-      'Cartagena', 'Terrassa', 'Jerez de la Frontera', 'Sabadell',
-      'Santa Cruz de Tenerife', 'Móstoles', 'Alcalá de Henares', 'Pamplona'
+      'Vitoria', 'La Coruña', 'Granada', 'Elche', 'Oviedo', 'Badalona', 'Pamplona'
     ]
   },
   'México': {
@@ -792,16 +790,13 @@ const paisesData = {
     provincias: [
       'Ciudad de México', 'Jalisco', 'Nuevo León', 'Puebla', 'Estado de México',
       'Guanajuato', 'Veracruz', 'Baja California', 'Coahuila', 'Chihuahua',
-      'Sinaloa', 'Sonora', 'Michoacán', 'Tamaulipas', 'Oaxaca', 'Chiapas',
-      'Guerrero', 'Querétaro', 'Yucatán', 'Morelos', 'Durango', 'Zacatecas',
-      'Aguascalientes', 'Colima', 'Campeche', 'Baja California Sur',
-      'Nayarit', 'Tabasco', 'San Luis Potosí', 'Hidalgo', 'Quintana Roo'
+      'Sinaloa'
     ]
   }
 };
 
 // ============================================
-// COMPONENTE PRINCIPAL: EMPRESA
+// COMPONENTE PRINCIPAL: EMPRESA (CORREGIDO CON UN SOLO BOTÓN)
 // ============================================
 const Empresa = ({ configuracion, handleInputChange }) => {
   const { user } = useAuth();
@@ -812,49 +807,66 @@ const Empresa = ({ configuracion, handleInputChange }) => {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [exito, setExito] = useState('');
-  const [cambiosPendientes, setCambiosPendientes] = useState(false);
-  const [configOriginal, setConfigOriginal] = useState(null);
   const [logoModalAbierto, setLogoModalAbierto] = useState(false);
+  const [cargando, setCargando] = useState(true);
+  const [valoresIniciales, setValoresIniciales] = useState({});
+  const [cambiosPendientes, setCambiosPendientes] = useState(false);
+  const [modoEdicion, setModoEdicion] = useState(false);
+  const [valoresEditados, setValoresEditados] = useState({});
+  const [campos, setCampos] = useState({
+    empresaNombre: '',
+    rnc: '',
+    numero: '',
+    dueno: '',
+    correo: '',
+    sitioWeb: '',
+    ubicacion: '',
+    logoUrl: ''
+  });
 
-  // Cargar configuración desde Firebase al iniciar
+  // Cargar configuración inicial
   useEffect(() => {
     const cargarConfiguracion = async () => {
       try {
+        setCargando(true);
         const empresaRef = doc(db, 'Configuracion', 'empresa');
         const empresaSnap = await getDoc(empresaRef);
         
+        const camposList = ['empresaNombre', 'rnc', 'numero', 'dueno', 'correo', 'sitioWeb', 'ubicacion', 'logoUrl'];
+        const inicial = {};
+        const valores = {};
+        
         if (empresaSnap.exists()) {
           const data = empresaSnap.data();
-          // Actualizar cada campo en la configuración
-          Object.keys(data).forEach(key => {
-            if (key !== 'actualizadoPor' && key !== 'fechaActualizacion') {
-              handleInputChange(null, key, data[key]);
-            }
+          
+          camposList.forEach(campo => {
+            const valor = data[campo] || '';
+            inicial[campo] = valor;
+            valores[campo] = valor;
+            handleInputChange(null, campo, valor);
+          });
+        } else {
+          camposList.forEach(campo => {
+            inicial[campo] = '';
+            valores[campo] = '';
+            handleInputChange(null, campo, '');
           });
         }
+        
+        setValoresIniciales(inicial);
+        setValoresEditados(valores);
+        setCampos(valores);
+        setCargando(false);
       } catch (error) {
         console.error('Error cargando configuración:', error);
+        setCargando(false);
       }
     };
 
     cargarConfiguracion();
   }, []);
 
-  // Guardar configuración original para detectar cambios
-  useEffect(() => {
-    if (configuracion && !configOriginal) {
-      setConfigOriginal(JSON.parse(JSON.stringify(configuracion)));
-    }
-  }, [configuracion]);
-
-  // Detectar cambios
-  useEffect(() => {
-    if (configOriginal && configuracion) {
-      const hayCambios = JSON.stringify(configOriginal) !== JSON.stringify(configuracion);
-      setCambiosPendientes(hayCambios);
-    }
-  }, [configuracion, configOriginal]);
-
+  // Sincronizar nombre completo
   useEffect(() => {
     if (configuracion?.dueno) {
       const partes = configuracion.dueno.split(' ');
@@ -863,17 +875,105 @@ const Empresa = ({ configuracion, handleInputChange }) => {
     }
   }, [configuracion?.dueno]);
 
+  // Inicializar provincia y país desde ubicación
+  useEffect(() => {
+    if (configuracion?.ubicacion && !provinciaSeleccionada) {
+      const parts = configuracion.ubicacion.split(', ');
+      if (parts.length === 2) {
+        setProvinciaSeleccionada(parts[0]);
+        setPaisSeleccionado(parts[1]);
+      }
+    }
+  }, [configuracion?.ubicacion]);
+
+  // Actualizar campos cuando cambia la configuración
+  useEffect(() => {
+    if (configuracion) {
+      setCampos({
+        empresaNombre: configuracion.empresaNombre || '',
+        rnc: configuracion.rnc || '',
+        numero: configuracion.numero || '',
+        dueno: configuracion.dueno || '',
+        correo: configuracion.correo || '',
+        sitioWeb: configuracion.sitioWeb || '',
+        ubicacion: configuracion.ubicacion || '',
+        logoUrl: configuracion.logoUrl || ''
+      });
+    }
+  }, [configuracion]);
+
   const actualizarNombreCompleto = (nombre, apellido) => {
     const nombreCompleto = `${nombre} ${apellido}`.trim();
+    setCampos(prev => ({ ...prev, dueno: nombreCompleto }));
+    setValoresEditados(prev => ({ ...prev, dueno: nombreCompleto }));
     handleInputChange(null, 'dueno', nombreCompleto);
   };
 
+  // Actualizar ubicación cuando cambia provincia o país
   useEffect(() => {
     if (provinciaSeleccionada && paisSeleccionado) {
       const nuevaUbicacion = `${provinciaSeleccionada}, ${paisSeleccionado}`;
+      setCampos(prev => ({ ...prev, ubicacion: nuevaUbicacion }));
+      setValoresEditados(prev => ({ ...prev, ubicacion: nuevaUbicacion }));
       handleInputChange(null, 'ubicacion', nuevaUbicacion);
     }
   }, [provinciaSeleccionada, paisSeleccionado]);
+
+  const handleCampoChange = (campo, valor) => {
+    setCampos(prev => ({ ...prev, [campo]: valor }));
+    setValoresEditados(prev => ({ ...prev, [campo]: valor }));
+    handleInputChange(null, campo, valor);
+    
+    if (valoresIniciales[campo] !== valor) {
+      setCambiosPendientes(true);
+    } else {
+      const todosIguales = Object.keys(valoresIniciales).every(key => 
+        valoresEditados[key] === valoresIniciales[key]
+      );
+      setCambiosPendientes(!todosIguales);
+    }
+  };
+
+  // Activar modo edición
+  const activarEdicion = () => {
+    const estadoActual = {};
+    Object.keys(campos).forEach(key => {
+      estadoActual[key] = campos[key];
+    });
+    setValoresIniciales(estadoActual);
+    setValoresEditados(estadoActual);
+    setModoEdicion(true);
+    setCambiosPendientes(false);
+  };
+
+  // Cancelar edición sin guardar
+  const cancelarEdicion = () => {
+    Object.keys(valoresIniciales).forEach(key => {
+      const valor = valoresIniciales[key] || '';
+      setCampos(prev => ({ ...prev, [key]: valor }));
+      setValoresEditados(prev => ({ ...prev, [key]: valor }));
+      handleInputChange(null, key, valor);
+    });
+    
+    if (valoresIniciales.dueno) {
+      const partes = valoresIniciales.dueno.split(' ');
+      setNombrePropietario(partes[0] || '');
+      setApellidoPropietario(partes.slice(1).join(' ') || '');
+    }
+    
+    if (valoresIniciales.ubicacion) {
+      const parts = valoresIniciales.ubicacion.split(', ');
+      if (parts.length === 2) {
+        setProvinciaSeleccionada(parts[0]);
+        setPaisSeleccionado(parts[1]);
+      }
+    }
+    
+    setCambiosPendientes(false);
+    setModoEdicion(false);
+    setExito('Edición cancelada');
+    setTimeout(() => setExito(''), 3000);
+  };
 
   // Guardar en Firebase
   const guardarEnFirebase = async () => {
@@ -881,61 +981,79 @@ const Empresa = ({ configuracion, handleInputChange }) => {
       setGuardando(true);
       setError('');
       
-      if (!configuracion?.empresaNombre?.trim()) {
+      if (!campos.empresaNombre?.trim()) {
         setError('El nombre de la empresa es requerido');
+        setGuardando(false);
         return;
       }
 
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
       const empresaRef = doc(db, 'Configuracion', 'empresa');
-      await setDoc(empresaRef, {
-        ...configuracion,
-        actualizadoPor: user?.email,
+      
+      const datosAGuardar = {
+        empresaNombre: campos.empresaNombre || '',
+        rnc: campos.rnc || '',
+        numero: campos.numero || '',
+        dueno: campos.dueno || '',
+        correo: campos.correo || '',
+        sitioWeb: campos.sitioWeb || '',
+        ubicacion: campos.ubicacion || '',
+        logoUrl: campos.logoUrl || '',
+        actualizadoPor: user?.email || 'sistema',
         fechaActualizacion: new Date().toISOString()
-      }, { merge: true });
+      };
 
-      localStorage.setItem('empresaConfig', JSON.stringify(configuracion));
-      
-      if (configuracion?.logoUrl) {
-        localStorage.setItem('empresaLogo', configuracion.logoUrl);
-        window.dispatchEvent(new CustomEvent('logoActualizado', { detail: configuracion.logoUrl }));
+      await setDoc(empresaRef, datosAGuardar, { merge: true });
+
+      const nuevosIniciales = { ...valoresIniciales };
+      Object.keys(datosAGuardar).forEach(key => {
+        if (key in nuevosIniciales) {
+          nuevosIniciales[key] = datosAGuardar[key];
+        }
+      });
+      setValoresIniciales(nuevosIniciales);
+      setValoresEditados(nuevosIniciales);
+      setCambiosPendientes(false);
+      setModoEdicion(false);
+
+      if (campos.logoUrl) {
+        localStorage.setItem('empresaLogo', campos.logoUrl);
+        window.dispatchEvent(new CustomEvent('logoActualizado', { detail: campos.logoUrl }));
       }
-      
-      if (configuracion?.empresaNombre) {
-        localStorage.setItem('empresaNombre', configuracion.empresaNombre);
-        window.dispatchEvent(new CustomEvent('empresaNombreActualizado', { detail: configuracion.empresaNombre }));
+      if (campos.empresaNombre) {
+        localStorage.setItem('empresaNombre', campos.empresaNombre);
+        window.dispatchEvent(new CustomEvent('empresaNombreActualizado', { detail: campos.empresaNombre }));
       }
 
-      setConfigOriginal(JSON.parse(JSON.stringify(configuracion)));
       setExito('Configuración guardada exitosamente');
       setTimeout(() => setExito(''), 3000);
     } catch (error) {
-      console.error('Error guardando en Firestore:', error);
-      setError('Error al guardar en Firestore');
+      console.error('Error guardando:', error);
+      setError('Error al guardar la configuración');
     } finally {
       setGuardando(false);
     }
   };
 
-  // Cancelar cambios
-  const cancelarCambios = () => {
-    if (configOriginal) {
-      Object.keys(configOriginal).forEach(key => {
-        handleInputChange(null, key, configOriginal[key]);
-      });
-      
-      if (configOriginal.dueno) {
-        const partes = configOriginal.dueno.split(' ');
-        setNombrePropietario(partes[0] || '');
-        setApellidoPropietario(partes.slice(1).join(' ') || '');
-      }
-      
-      setCambiosPendientes(false);
-      setExito('Cambios descartados');
-      setTimeout(() => setExito(''), 3000);
-    }
-  };
+  const paisesOptions = Object.keys(paisesData).map(pais => ({
+    value: pais,
+    label: `${paisesData[pais].bandera} ${pais}`
+  }));
+
+  const provinciasOptions = (paisesData[paisSeleccionado]?.provincias || []).map(provincia => ({
+    value: provincia,
+    label: provincia
+  }));
+
+  if (cargando) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin h-10 w-10 border-4 border-red-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Cargando configuración...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -945,21 +1063,20 @@ const Empresa = ({ configuracion, handleInputChange }) => {
       exit={{ opacity: 0, x: -20 }}
       className="space-y-6"
     >
-      {/* Modal de vista previa del logo */}
       <LogoPreviewModal
         isOpen={logoModalAbierto}
         onClose={() => setLogoModalAbierto(false)}
-        logoUrl={configuracion?.logoUrl}
-        empresaNombre={configuracion?.empresaNombre}
+        logoUrl={campos.logoUrl}
+        empresaNombre={campos.empresaNombre}
       />
 
       <AnimatePresence>
         {error && (
           <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="p-4 bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/30 dark:to-red-800/30 border-2 border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-xl shadow-lg flex items-center space-x-3"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="p-4 bg-red-50 dark:bg-red-900/30 border-2 border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-xl flex items-center space-x-3"
           >
             <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
             <span>{error}</span>
@@ -968,10 +1085,10 @@ const Empresa = ({ configuracion, handleInputChange }) => {
 
         {exito && (
           <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="p-4 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 border-2 border-green-200 dark:border-green-700 text-green-700 dark:text-green-400 rounded-xl shadow-lg flex items-center space-x-3"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="p-4 bg-green-50 dark:bg-green-900/30 border-2 border-green-200 dark:border-green-700 text-green-700 dark:text-green-400 rounded-xl flex items-center space-x-3"
           >
             <CheckCircleIcon className="h-5 w-5 flex-shrink-0" />
             <span>{exito}</span>
@@ -981,13 +1098,63 @@ const Empresa = ({ configuracion, handleInputChange }) => {
 
       <GlassCard>
         <div className="p-6">
-          <div className="flex items-center space-x-3 mb-6">
-            <div className="p-3 bg-gradient-to-br from-red-600 to-red-800 rounded-xl shadow-lg">
-              <BuildingStorefrontIcon className="h-6 w-6 text-white" />
+          {/* Header con botones */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center space-x-3">
+              <div className="p-3 bg-gradient-to-br from-red-600 to-red-800 rounded-xl shadow-lg">
+                <BuildingStorefrontIcon className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Información de la Empresa</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {modoEdicion ? '✏️ Editando los datos de tu negocio' : '🔒 Datos principales de tu negocio'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Información de la Empresa</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Datos principales de tu negocio</p>
+            
+            {/* Botones de acción */}
+            <div className="flex flex-wrap items-center gap-3">
+              {modoEdicion && (
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={cancelarEdicion}
+                  disabled={guardando}
+                  className="px-5 py-2.5 bg-gray-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center space-x-2 disabled:opacity-50"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                  <span>Cancelar</span>
+                </motion.button>
+              )}
+              
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={modoEdicion ? guardarEnFirebase : activarEdicion}
+                disabled={guardando}
+                className={`px-6 py-2.5 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center space-x-2 ${
+                  modoEdicion
+                    ? 'bg-gradient-to-r from-green-600 to-green-800 text-white'
+                    : 'bg-gradient-to-r from-red-600 to-red-800 text-white'
+                } disabled:opacity-50`}
+              >
+                {guardando ? (
+                  <>
+                    <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                    <span>Guardando...</span>
+                  </>
+                ) : modoEdicion ? (
+                  <>
+                    <CheckCircleIcon className="h-5 w-5" />
+                    <span>Guardar Cambios</span>
+                  </>
+                ) : (
+                  <>
+                    <PencilIcon className="h-5 w-5" />
+                    <span>Editar</span>
+                  </>
+                )}
+              </motion.button>
             </div>
           </div>
 
@@ -996,35 +1163,37 @@ const Empresa = ({ configuracion, handleInputChange }) => {
             <TechInput
               icon={BuildingStorefrontIcon}
               label="Nombre de la Empresa *"
-              value={configuracion?.empresaNombre || ''}
-              onChange={(value) => handleInputChange(null, 'empresaNombre', value)}
+              value={campos.empresaNombre || ''}
+              onChange={(value) => handleCampoChange('empresaNombre', value)}
               placeholder="EYS Inversiones"
+              readOnly={!modoEdicion}
             />
 
             <TechInput
               icon={DocumentTextIcon}
               label="RFC/RNC"
-              value={configuracion?.rnc || ''}
-              onChange={(value) => handleInputChange(null, 'rnc', value)}
+              value={campos.rnc || ''}
+              onChange={(value) => handleCampoChange('rnc', value)}
               placeholder="123-456789-0"
+              readOnly={!modoEdicion}
             />
 
             {/* Fila 2 */}
             <TechInput
               icon={PhoneIcon}
               label="Teléfono"
-              value={configuracion?.numero || ''}
-              onChange={(value) => handleInputChange(null, 'numero', value)}
+              value={campos.numero || ''}
+              onChange={(value) => handleCampoChange('numero', value)}
               placeholder="809-123-4567"
+              readOnly={!modoEdicion}
             />
 
             <TechInput
               icon={UserIcon}
               label="Nombre Completo"
-              value={configuracion?.dueno || ''}
+              value={campos.dueno || ''}
               onChange={() => {}}
-              placeholder="Se genera automáticamente"
-              readOnly
+              readOnly={true}
             />
 
             {/* Fila 3 */}
@@ -1037,6 +1206,7 @@ const Empresa = ({ configuracion, handleInputChange }) => {
                 actualizarNombreCompleto(value, apellidoPropietario);
               }}
               placeholder="Nombre"
+              readOnly={!modoEdicion}
             />
 
             <TechInput
@@ -1048,6 +1218,7 @@ const Empresa = ({ configuracion, handleInputChange }) => {
                 actualizarNombreCompleto(nombrePropietario, value);
               }}
               placeholder="Apellido"
+              readOnly={!modoEdicion}
             />
 
             {/* Fila 4 */}
@@ -1055,47 +1226,27 @@ const Empresa = ({ configuracion, handleInputChange }) => {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 País
               </label>
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-red-600 to-red-800 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
-                <div className="relative">
-                  <GlobeAltIcon className="absolute inset-y-0 left-0 pl-3 flex items-center h-5 w-5 text-gray-400 group-hover:text-red-500 transition-colors" />
-                  <select
-                    value={paisSeleccionado}
-                    onChange={(e) => setPaisSeleccionado(e.target.value)}
-                    className="w-full pl-10 pr-10 py-2.5 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none transition-all duration-300 appearance-none dark:text-white cursor-pointer"
-                  >
-                    {Object.keys(paisesData).map(pais => (
-                      <option key={pais} value={pais}>
-                        {paisesData[pais].bandera} {pais}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDownIcon className="absolute inset-y-0 right-0 pr-3 flex items-center h-5 w-5 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
+              <TechSelect
+                icon={GlobeAltIcon}
+                value={paisSeleccionado}
+                onChange={(value) => setPaisSeleccionado(value)}
+                options={paisesOptions}
+                readOnly={!modoEdicion}
+              />
             </div>
 
             <div className="space-y-1">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Provincia / Ciudad
               </label>
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-red-600 to-red-800 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
-                <div className="relative">
-                  <MapPinIcon className="absolute inset-y-0 left-0 pl-3 flex items-center h-5 w-5 text-gray-400 group-hover:text-red-500 transition-colors" />
-                  <select
-                    value={provinciaSeleccionada}
-                    onChange={(e) => setProvinciaSeleccionada(e.target.value)}
-                    className="w-full pl-10 pr-10 py-2.5 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none transition-all duration-300 appearance-none dark:text-white cursor-pointer"
-                  >
-                    <option value="">Seleccionar provincia</option>
-                    {paisesData[paisSeleccionado]?.provincias.map(provincia => (
-                      <option key={provincia} value={provincia}>{provincia}</option>
-                    ))}
-                  </select>
-                  <ChevronDownIcon className="absolute inset-y-0 right-0 pr-3 flex items-center h-5 w-5 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
+              <TechSelect
+                icon={MapPinIcon}
+                value={provinciaSeleccionada}
+                onChange={(value) => setProvinciaSeleccionada(value)}
+                options={provinciasOptions}
+                readOnly={!modoEdicion}
+                placeholder="Seleccionar provincia"
+              />
             </div>
 
             {/* Fila 5 */}
@@ -1103,35 +1254,37 @@ const Empresa = ({ configuracion, handleInputChange }) => {
               icon={EnvelopeIcon}
               label="Correo Electrónico"
               type="email"
-              value={configuracion?.correo || ''}
-              onChange={(value) => handleInputChange(null, 'correo', value)}
+              value={campos.correo || ''}
+              onChange={(value) => handleCampoChange('correo', value)}
               placeholder="info@empresa.com"
+              readOnly={!modoEdicion}
             />
 
             <TechInput
               icon={GlobeAltIcon}
               label="Sitio Web"
-              value={configuracion?.sitioWeb || ''}
-              onChange={(value) => handleInputChange(null, 'sitioWeb', value)}
+              value={campos.sitioWeb || ''}
+              onChange={(value) => handleCampoChange('sitioWeb', value)}
               placeholder="https://www.eysinversiones.com"
+              readOnly={!modoEdicion}
             />
 
-            {/* Fila 6: Logo (tamaño grande) y Mapa */}
+            {/* Fila 6: Logo y Mapa */}
             <div className="md:col-span-1">
               <TechInput
                 icon={PhotoIcon}
                 label="URL del Logo"
-                value={configuracion?.logoUrl || ''}
-                onChange={(value) => handleInputChange(null, 'logoUrl', value)}
+                value={campos.logoUrl || ''}
+                onChange={(value) => handleCampoChange('logoUrl', value)}
                 placeholder="https://ejemplo.com/logo.png"
+                readOnly={!modoEdicion}
               />
               
-              {/* Vista previa del logo (tamaño grande) con botón de ampliar */}
-              {configuracion?.logoUrl && (
+              {campos.logoUrl && (
                 <div className="mt-4 h-[320px]">
                   <LogoPreview 
-                    logoUrl={configuracion.logoUrl} 
-                    empresaNombre={configuracion.empresaNombre}
+                    logoUrl={campos.logoUrl} 
+                    empresaNombre={campos.empresaNombre}
                     onAmpliar={() => setLogoModalAbierto(true)}
                   />
                 </div>
@@ -1143,76 +1296,26 @@ const Empresa = ({ configuracion, handleInputChange }) => {
                 Ubicación
               </label>
               <MapaInteractivo 
-                ubicacion={configuracion?.ubicacion}
-                onUbicacionChange={(value) => handleInputChange(null, 'ubicacion', value)}
+                ubicacion={campos.ubicacion}
+                onUbicacionChange={(value) => handleCampoChange('ubicacion', value)}
+                readOnly={!modoEdicion}
               />
             </div>
           </div>
 
-          {/* Barra de acciones */}
-          <AnimatePresence>
-            {cambiosPendientes && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                className="mt-8 flex justify-end space-x-4"
-              >
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={cancelarCambios}
-                  disabled={guardando}
-                  className="px-6 py-3 bg-gradient-to-r from-gray-600 to-gray-700 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center space-x-2 disabled:opacity-50 relative overflow-hidden group"
-                >
-                  <motion.div
-                    className="absolute inset-0 bg-white/20"
-                    initial={{ x: '-100%' }}
-                    whileHover={{ x: 0 }}
-                    transition={{ type: "spring", stiffness: 100 }}
-                  />
-                  <XMarkIcon className="h-5 w-5 relative z-10" />
-                  <span className="relative z-10">Cancelar Cambios</span>
-                </motion.button>
-
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={guardarEnFirebase}
-                  disabled={guardando}
-                  className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center space-x-2 disabled:opacity-50 relative overflow-hidden group"
-                >
-                  <motion.div
-                    className="absolute inset-0 bg-white/20"
-                    initial={{ x: '-100%' }}
-                    whileHover={{ x: 0 }}
-                    transition={{ type: "spring", stiffness: 100 }}
-                  />
-                  {guardando ? (
-                    <>
-                      <ArrowPathIcon className="h-5 w-5 animate-spin relative z-10" />
-                      <span className="relative z-10">Guardando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircleIcon className="h-5 w-5 relative z-10" />
-                      <span className="relative z-10">Guardar Cambios</span>
-                    </>
-                  )}
-                </motion.button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {cambiosPendientes && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="mt-4 flex items-center justify-end space-x-2 text-sm text-yellow-600 dark:text-yellow-400"
-            >
+          {/* Indicador de cambios pendientes */}
+          {modoEdicion && cambiosPendientes && (
+            <div className="mt-6 flex items-center justify-end space-x-2 text-sm text-yellow-600 dark:text-yellow-400">
               <ClockIcon className="h-4 w-4 animate-pulse" />
               <span>Hay cambios sin guardar</span>
-            </motion.div>
+            </div>
+          )}
+
+          {!modoEdicion && (
+            <div className="mt-6 flex items-center justify-end space-x-2 text-sm text-gray-500 dark:text-gray-400">
+              <span>🔒 Modo de solo lectura</span>
+              <span className="text-xs">Haz clic en "Editar" para modificar</span>
+            </div>
           )}
         </div>
       </GlassCard>

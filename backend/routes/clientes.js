@@ -1,4 +1,3 @@
-// E:\prestamos-eys\backend\routes\clientes.js
 const express = require('express');
 const admin = require('firebase-admin');
 const Cliente = require('../models/Cliente');

@@ -29,10 +29,25 @@ import { db } from './services/firebase';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { GoogleCalendarProvider } from './context/GoogleCalendarContext';
 
-// 🔥 CLIENT ID DE GOOGLE - CORRECTO
-const GOOGLE_CLIENT_ID = '768056000483-f8d266gdhd7clu67rcenc4ts340q2d9l.apps.googleusercontent.com';
+// ============================================
+// CONFIGURACIÓN DE GOOGLE (DESDE VARIABLES DE ENTORNO)
+// ============================================
 
-// Componente de carga mejorado
+// 🔥 CLIENT ID DE GOOGLE - AHORA desde variable de entorno
+// Prioridad: 1. Variable de entorno REACT_APP_GOOGLE_CLIENT_ID
+//            2. Fallback con el valor actual (para desarrollo local)
+const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || 
+  '768056000483-f8d266gdhd7clu67rcenc4ts340q2d9l.apps.googleusercontent.com';
+
+// Log para verificar configuración en desarrollo
+if (process.env.NODE_ENV === 'development') {
+  console.log('🔑 Google Client ID configurado:', GOOGLE_CLIENT_ID ? '✅ Sí' : '❌ No');
+}
+
+// ============================================
+// COMPONENTE DE CARGA MEJORADO
+// ============================================
+
 const LoadingScreen = () => (
   <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-600 to-black">
     <div className="text-center">
@@ -47,6 +62,7 @@ const LoadingScreen = () => (
 // ============================================
 // COMPONENTE DE PROTECCIÓN BASADO EN PERMISOS
 // ============================================
+
 const ProtectedRoute = ({ children, modulo, accion = 'ver' }) => {
   const { user, loading } = useAuth();
   const [permisosUsuario, setPermisosUsuario] = useState({});
@@ -143,6 +159,7 @@ const ProtectedRoute = ({ children, modulo, accion = 'ver' }) => {
 // ============================================
 // COMPONENTE APP ENVUELTO CON GOOGLE PROVIDERS
 // ============================================
+
 function AppContent() {
   return (
     <ErrorBoundary>
@@ -356,7 +373,22 @@ function AppContent() {
 // ============================================
 // APP PRINCIPAL CON GOOGLE PROVIDERS
 // ============================================
+
 function App() {
+  // Verificar que el Client ID esté configurado
+  if (!GOOGLE_CLIENT_ID) {
+    console.error('❌ Error: REACT_APP_GOOGLE_CLIENT_ID no está configurado');
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-red-50">
+        <div className="text-center p-8 bg-white rounded-xl shadow-lg">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Error de Configuración</h1>
+          <p className="text-gray-700">Falta configurar el Client ID de Google.</p>
+          <p className="text-sm text-gray-500 mt-2">Contacte al administrador del sistema.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <GoogleCalendarProvider>

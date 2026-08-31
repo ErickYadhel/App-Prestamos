@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
+import { collection, doc, getDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import {
   ShieldCheckIcon,
   KeyIcon,
@@ -39,7 +41,7 @@ const BorderGlow = ({ children, isHovered, color }) => (
 );
 
 // ============================================
-// MODAL PARA CONFIGURACIÓN (MEJORADO)
+// MODAL PARA CONFIGURACIÓN
 // ============================================
 const ConfigModal = ({ isOpen, onClose, titulo, children, color, gradientColor }) => {
   const { theme } = useTheme();
@@ -68,7 +70,6 @@ const ConfigModal = ({ isOpen, onClose, titulo, children, color, gradientColor }
           <div className={`relative rounded-2xl shadow-2xl overflow-hidden border-2 border-red-600/30 ${
             theme === 'dark' ? 'bg-gray-900' : 'bg-white'
           }`}>
-            {/* Cabecera con gradiente animado */}
             <div className="absolute inset-0 pointer-events-none">
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-white to-transparent animate-scan" />
             </div>
@@ -102,7 +103,6 @@ const ConfigModal = ({ isOpen, onClose, titulo, children, color, gradientColor }
               {children}
             </div>
 
-            {/* Footer con efecto de brillo */}
             <div className={`p-4 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} flex justify-end bg-gradient-to-r ${
               theme === 'dark' ? 'from-gray-800 to-gray-900' : 'from-gray-50 to-white'
             }`}>
@@ -121,7 +121,7 @@ const ConfigModal = ({ isOpen, onClose, titulo, children, color, gradientColor }
 };
 
 // ============================================
-// TARJETA DE MÓDULO (REDISEÑADA)
+// TARJETA DE MÓDULO
 // ============================================
 const ModuloCard = ({ modulo, onClick }) => {
   const { theme } = useTheme();
@@ -140,20 +140,16 @@ const ModuloCard = ({ modulo, onClick }) => {
         } border-2 border-transparent hover:border-${modulo.color.split(' ')[0].replace('from-', '')}/30 transition-all duration-300`}
         onClick={onClick}
       >
-        {/* Fondo con efecto tecnológico */}
         <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-black/5 dark:to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
         
-        {/* Círculos decorativos animados */}
         <div className={`absolute -top-20 -right-20 w-40 h-40 bg-gradient-to-br ${modulo.color} rounded-full filter blur-3xl opacity-20 group-hover:opacity-30 transition-opacity duration-500 animate-pulse`} />
         <div className={`absolute -bottom-20 -left-20 w-40 h-40 bg-gradient-to-br ${modulo.color} rounded-full filter blur-3xl opacity-10 group-hover:opacity-20 transition-opacity duration-500 animate-pulse`} style={{ animationDelay: '1s' }} />
         
-        {/* Línea de escaneo tecnológico */}
         <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
           <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white to-transparent animate-scan`} />
         </div>
 
         <div className="relative p-6">
-          {/* Header con icono y título */}
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center space-x-3">
               <motion.div
@@ -173,13 +169,11 @@ const ModuloCard = ({ modulo, onClick }) => {
               </div>
             </div>
             
-            {/* Badge tecnológico */}
             <div className={`px-2 py-1 rounded-full bg-gradient-to-r ${modulo.color} opacity-20 group-hover:opacity-100 transition-opacity`}>
               <CpuChipIcon className="h-3 w-3 text-white" />
             </div>
           </div>
 
-          {/* Items con efecto de brillo */}
           <ul className="space-y-2 mt-4">
             {modulo.items.map((item, i) => (
               <motion.li
@@ -201,7 +195,6 @@ const ModuloCard = ({ modulo, onClick }) => {
             ))}
           </ul>
 
-          {/* Botón de acceso con efecto */}
           <motion.div
             className="mt-6 overflow-hidden rounded-xl"
             whileHover={{ scale: 1.05 }}
@@ -217,7 +210,6 @@ const ModuloCard = ({ modulo, onClick }) => {
             </button>
           </motion.div>
 
-          {/* Efecto de brillo en el borde */}
           <div className={`absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r ${modulo.color} opacity-0 group-hover:opacity-100 transition-opacity`} />
         </div>
       </motion.div>
@@ -231,7 +223,15 @@ const ModuloCard = ({ modulo, onClick }) => {
 const Seguridad = () => {
   const { theme } = useTheme();
   const [modalAbierto, setModalAbierto] = useState(null);
+  
+  // 🔥 ESTADO DE CONFIGURACIÓN CON CARGA DESDE FIREBASE
   const [configuracion, setConfiguracion] = useState({
+    controlAccesos: {
+      bloqueoIP: false,
+      restriccionHorario: false,
+      geolocalizacion: false,
+      dispositivosConfiables: false
+    },
     seguridad: {
       requiereVerificacionEmail: false,
       autenticacionDosFactores: false,
@@ -248,12 +248,6 @@ const Seguridad = () => {
       requiereNumeros: false,
       notificarNuevosDispositivos: false
     },
-    controlAccesos: {
-      bloqueoIP: false,
-      restriccionHorario: false,
-      geolocalizacion: false,
-      dispositivosConfiables: false
-    },
     auditoria: {
       registroAccesos: false,
       registroActividades: false,
@@ -262,6 +256,49 @@ const Seguridad = () => {
       exportacionAutomatica: false
     }
   });
+
+  // ============================================
+  // 🔥 CARGAR CONFIGURACIÓN DESDE FIREBASE
+  // ============================================
+  const cargarConfiguracion = async () => {
+    try {
+      console.log('🔄 [SEGURIDAD] Cargando configuración desde Firebase...');
+      const configRef = doc(db, 'Configuracion', 'controlAccesos');
+      const configSnap = await getDoc(configRef);
+      
+      if (configSnap.exists()) {
+        const data = configSnap.data();
+        console.log('📋 [SEGURIDAD] Configuración cargada:', data);
+        
+        setConfiguracion(prev => ({
+          ...prev,
+          controlAccesos: {
+            bloqueoIP: data.bloqueoIP || false,
+            restriccionHorario: data.restriccionHorario || false,
+            geolocalizacion: data.geolocalizacion || false,
+            dispositivosConfiables: data.dispositivosConfiables || false
+          }
+        }));
+      } else {
+        console.log('⚠️ [SEGURIDAD] No hay configuración en Firebase, usando valores por defecto');
+      }
+    } catch (error) {
+      console.error('❌ [SEGURIDAD] Error cargando configuración:', error);
+    }
+  };
+
+  // Cargar configuración al montar el componente
+  useEffect(() => {
+    cargarConfiguracion();
+  }, []);
+
+  // ============================================
+  // 🔥 ACTUALIZAR CONFIGURACIÓN LOCAL DESPUÉS DE GUARDAR
+  // ============================================
+  const handleGuardarConfiguracion = async () => {
+    console.log('🔄 [SEGURIDAD] Recargando configuración después de guardar...');
+    await cargarConfiguracion();
+  };
 
   const handleInputChange = (categoria, campo, valor) => {
     setConfiguracion(prev => ({
@@ -273,7 +310,7 @@ const Seguridad = () => {
     }));
   };
 
-  // Configuración de los módulos con gradientes mejorados
+  // Configuración de los módulos
   const modulos = [
     {
       id: 'accesos',
@@ -287,6 +324,7 @@ const Seguridad = () => {
         <ControlAccesos 
           configuracion={configuracion}
           handleInputChange={handleInputChange}
+          onGuardar={handleGuardarConfiguracion} // 🔥 PASAR FUNCIÓN PARA RECARGAR
         />
       )
     },
@@ -338,22 +376,19 @@ const Seguridad = () => {
 
   const moduloSeleccionado = modulos.find(m => m.id === modalAbierto);
 
-  // Estadísticas de módulos (para el header)
   const totalModulos = modulos.length;
-  const modulosActivos = modulos.length; // Todos están activos
+  const modulosActivos = modulos.length;
 
   return (
     <div className="space-y-8 p-6">
-      {/* Header principal con efecto tecnológico */}
+      {/* Header principal */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="relative overflow-hidden"
       >
-        {/* Fondo con gradiente animado */}
         <div className="absolute inset-0 bg-gradient-to-r from-red-600/20 via-red-500/20 to-red-600/20 rounded-2xl blur-3xl animate-gradient-xy" />
         
-        {/* Cuadrícula tecnológica */}
         <div className="absolute inset-0 opacity-10" style={{
           backgroundImage: `radial-gradient(circle at 1px 1px, ${
             theme === 'dark' ? '#fff' : '#000'
@@ -362,7 +397,6 @@ const Seguridad = () => {
         }} />
         
         <div className="relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border-2 border-red-600/20">
-          {/* Línea de escaneo */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-red-600 to-transparent animate-scan" />
           
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
@@ -385,7 +419,6 @@ const Seguridad = () => {
               </div>
             </div>
 
-            {/* Estadísticas rápidas */}
             <div className="flex space-x-4">
               <div className="text-right">
                 <p className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
@@ -409,7 +442,7 @@ const Seguridad = () => {
         </div>
       </motion.div>
 
-      {/* Grid de módulos con diseño mejorado */}
+      {/* Grid de módulos */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {modulos.map((modulo, index) => (
           <ModuloCard

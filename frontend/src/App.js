@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ErrorProvider } from './context/ErrorContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { NotificationProvider } from './context/NotificationContext';
+import { AccessControlProvider, useAccessControl } from './context/AccessControlContext';
+import AccessBlocked from './components/AccessBlocked';
 import Login from './pages/Login';
 import Welcome from './pages/Welcome';
 import Dashboard from './pages/Dashboard';
@@ -60,7 +62,7 @@ const LoadingScreen = () => (
 );
 
 // ============================================
-// COMPONENTE DE PROTECCIÓN BASADO EN PERMISOS
+// COMPONENTE DE PROTECCIÓN BASADO EN PERMISOS Y ACCESO
 // ============================================
 
 const ProtectedRoute = ({ children, modulo, accion = 'ver' }) => {
@@ -157,6 +159,27 @@ const ProtectedRoute = ({ children, modulo, accion = 'ver' }) => {
 };
 
 // ============================================
+// COMPONENTE DE PROTECCIÓN CON VERIFICACIÓN DE ACCESO
+// ============================================
+
+const ProtectedRouteWithAccess = ({ children, modulo, accion = 'ver' }) => {
+  const { accesoPermitido, motivoBloqueo, reglaBloqueo, verificando } = useAccessControl();
+  
+  // Si está verificando, mostrar pantalla de carga
+  if (verificando) {
+    return <LoadingScreen />;
+  }
+  
+  // Si el acceso no está permitido, mostrar pantalla de bloqueo
+  if (!accesoPermitido) {
+    return <AccessBlocked motivo={motivoBloqueo} regla={reglaBloqueo} />;
+  }
+  
+  // Si el acceso está permitido, verificar permisos del módulo
+  return <ProtectedRoute modulo={modulo} accion={accion}>{children}</ProtectedRoute>;
+};
+
+// ============================================
 // COMPONENTE APP ENVUELTO CON GOOGLE PROVIDERS
 // ============================================
 
@@ -167,201 +190,203 @@ function AppContent() {
         <AuthProvider>
           <ThemeProvider>
             <NotificationProvider>
-              <Router>
-                <div className="App min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
-                  <Routes>
-                    {/* Ruta pública */}
-                    <Route path="/login" element={<Login />} />
-                    
-                    {/* Ruta de bienvenida */}
-                    <Route path="/" element={
-                      <ProtectedRoute>
-                        <Layout>
-                          <Welcome />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Dashboard */}
-                    <Route path="/dashboard" element={
-                      <ProtectedRoute modulo="dashboard" accion="ver">
-                        <Layout>
-                          <Dashboard />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Clientes */}
-                    <Route path="/clientes" element={
-                      <ProtectedRoute modulo="clientes" accion="ver">
-                        <Layout>
-                          <Clientes />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Préstamos */}
-                    <Route path="/prestamos" element={
-                      <ProtectedRoute modulo="prestamos" accion="ver">
-                        <Layout>
-                          <Prestamos />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Pagos */}
-                    <Route path="/pagos" element={
-                      <ProtectedRoute modulo="pagos" accion="ver">
-                        <Layout>
-                          <Pagos />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Solicitudes */}
-                    <Route path="/solicitudes" element={
-                      <ProtectedRoute modulo="solicitudes" accion="ver">
-                        <Layout>
-                          <Solicitudes />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Garantes */}
-                    <Route path="/garantes" element={
-                      <ProtectedRoute modulo="garantes" accion="ver">
-                        <Layout>
-                          <Garantes />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Usuarios */}
-                    <Route path="/usuarios" element={
-                      <ProtectedRoute modulo="usuarios" accion="ver">
-                        <Layout>
-                          <Usuarios />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Notificaciones */}
-                    <Route path="/notificaciones" element={
-                      <ProtectedRoute modulo="notificaciones" accion="ver">
-                        <Layout>
-                          <Notificaciones />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Comisiones */}
-                    <Route path="/comisiones" element={
-                      <ProtectedRoute modulo="comisiones" accion="ver">
-                        <Layout>
-                          <Comisiones />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Operaciones/comisiones (redirección) */}
-                    <Route path="/operaciones/comisiones" element={
-                      <ProtectedRoute modulo="comisiones" accion="ver">
-                        <Layout>
-                          <Comisiones />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Operaciones */}
-                    <Route path="/operaciones" element={
-                      <ProtectedRoute modulo="operaciones" accion="ver">
-                        <Layout>
-                          <Operaciones />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Seguridad */}
-                    <Route path="/seguridad" element={
-                      <ProtectedRoute modulo="seguridad" accion="ver">
-                        <Layout>
-                          <Seguridad />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Configuración */}
-                    <Route path="/configuracion" element={
-                      <ProtectedRoute modulo="configuracion" accion="ver">
-                        <Layout>
-                          <Configuracion />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Información del Sistema */}
-                    <Route path="/informacion" element={
-                      <ProtectedRoute modulo="informacion" accion="ver">
-                        <Layout>
-                          <Informacion />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* 🔥 CALENDARIO - NUEVA RUTA */}
-                    <Route path="/calendario" element={
-                      <ProtectedRoute modulo="calendario" accion="ver">
-                        <Layout>
-                          <Calendario />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Perfil de usuario - Accesible para todos */}
-                    <Route path="/perfil" element={
-                      <ProtectedRoute>
-                        <Layout>
-                          <Perfil />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Editar perfil */}
-                    <Route path="/perfil/editar" element={
-                      <ProtectedRoute>
-                        <Layout>
-                          <Perfil editMode={true} />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Ruta para editar usuario específico */}
-                    <Route path="/usuarios/editar/:id" element={
-                      <ProtectedRoute modulo="usuarios" accion="editar">
-                        <Layout>
-                          <Usuarios editMode={true} />
-                        </Layout>
-                      </ProtectedRoute>
-                    } />
-                    
-                    {/* Ruta 404 - Página no encontrada */}
-                    <Route path="*" element={
-                      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-600 to-black">
-                        <div className="text-center text-white">
-                          <h1 className="text-9xl font-bold">404</h1>
-                          <p className="text-2xl mt-4 mb-8">Página no encontrada</p>
-                          <a 
-                            href="/" 
-                            className="px-6 py-3 bg-white text-red-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
-                          >
-                            Volver al inicio
-                          </a>
+              <AccessControlProvider>
+                <Router>
+                  <div className="App min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+                    <Routes>
+                      {/* Ruta pública - Sin verificación de acceso */}
+                      <Route path="/login" element={<Login />} />
+                      
+                      {/* Ruta de bienvenida - Con verificación de acceso */}
+                      <Route path="/" element={
+                        <ProtectedRouteWithAccess>
+                          <Layout>
+                            <Welcome />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Dashboard */}
+                      <Route path="/dashboard" element={
+                        <ProtectedRouteWithAccess modulo="dashboard" accion="ver">
+                          <Layout>
+                            <Dashboard />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Clientes */}
+                      <Route path="/clientes" element={
+                        <ProtectedRouteWithAccess modulo="clientes" accion="ver">
+                          <Layout>
+                            <Clientes />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Préstamos */}
+                      <Route path="/prestamos" element={
+                        <ProtectedRouteWithAccess modulo="prestamos" accion="ver">
+                          <Layout>
+                            <Prestamos />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Pagos */}
+                      <Route path="/pagos" element={
+                        <ProtectedRouteWithAccess modulo="pagos" accion="ver">
+                          <Layout>
+                            <Pagos />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Solicitudes */}
+                      <Route path="/solicitudes" element={
+                        <ProtectedRouteWithAccess modulo="solicitudes" accion="ver">
+                          <Layout>
+                            <Solicitudes />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Garantes */}
+                      <Route path="/garantes" element={
+                        <ProtectedRouteWithAccess modulo="garantes" accion="ver">
+                          <Layout>
+                            <Garantes />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Usuarios */}
+                      <Route path="/usuarios" element={
+                        <ProtectedRouteWithAccess modulo="usuarios" accion="ver">
+                          <Layout>
+                            <Usuarios />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Notificaciones */}
+                      <Route path="/notificaciones" element={
+                        <ProtectedRouteWithAccess modulo="notificaciones" accion="ver">
+                          <Layout>
+                            <Notificaciones />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Comisiones */}
+                      <Route path="/comisiones" element={
+                        <ProtectedRouteWithAccess modulo="comisiones" accion="ver">
+                          <Layout>
+                            <Comisiones />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Operaciones/comisiones (redirección) */}
+                      <Route path="/operaciones/comisiones" element={
+                        <ProtectedRouteWithAccess modulo="comisiones" accion="ver">
+                          <Layout>
+                            <Comisiones />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Operaciones */}
+                      <Route path="/operaciones" element={
+                        <ProtectedRouteWithAccess modulo="operaciones" accion="ver">
+                          <Layout>
+                            <Operaciones />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Seguridad */}
+                      <Route path="/seguridad" element={
+                        <ProtectedRouteWithAccess modulo="seguridad" accion="ver">
+                          <Layout>
+                            <Seguridad />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Configuración */}
+                      <Route path="/configuracion" element={
+                        <ProtectedRouteWithAccess modulo="configuracion" accion="ver">
+                          <Layout>
+                            <Configuracion />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Información del Sistema */}
+                      <Route path="/informacion" element={
+                        <ProtectedRouteWithAccess modulo="informacion" accion="ver">
+                          <Layout>
+                            <Informacion />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* 🔥 CALENDARIO - NUEVA RUTA */}
+                      <Route path="/calendario" element={
+                        <ProtectedRouteWithAccess modulo="calendario" accion="ver">
+                          <Layout>
+                            <Calendario />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Perfil de usuario - Accesible para todos */}
+                      <Route path="/perfil" element={
+                        <ProtectedRouteWithAccess>
+                          <Layout>
+                            <Perfil />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Editar perfil */}
+                      <Route path="/perfil/editar" element={
+                        <ProtectedRouteWithAccess>
+                          <Layout>
+                            <Perfil editMode={true} />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Ruta para editar usuario específico */}
+                      <Route path="/usuarios/editar/:id" element={
+                        <ProtectedRouteWithAccess modulo="usuarios" accion="editar">
+                          <Layout>
+                            <Usuarios editMode={true} />
+                          </Layout>
+                        </ProtectedRouteWithAccess>
+                      } />
+                      
+                      {/* Ruta 404 - Página no encontrada */}
+                      <Route path="*" element={
+                        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-600 to-black">
+                          <div className="text-center text-white">
+                            <h1 className="text-9xl font-bold">404</h1>
+                            <p className="text-2xl mt-4 mb-8">Página no encontrada</p>
+                            <a 
+                              href="/" 
+                              className="px-6 py-3 bg-white text-red-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
+                            >
+                              Volver al inicio
+                            </a>
+                          </div>
                         </div>
-                      </div>
-                    } />
-                  </Routes>
-                </div>
-              </Router>
+                      } />
+                    </Routes>
+                  </div>
+                </Router>
+              </AccessControlProvider>
             </NotificationProvider>
           </ThemeProvider>
         </AuthProvider>

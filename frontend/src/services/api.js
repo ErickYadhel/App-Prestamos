@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getAuth } from 'firebase/auth';
 
 // ============================
 // CONFIGURACIÓN DE ENTORNO
@@ -33,11 +34,11 @@ const api = axios.create({
 });
 
 // ============================
-// INTERCEPTOR DE SOLICITUDES (REQUEST)
+// INTERCEPTOR DE SOLICITUDES (REQUEST) - VERSIÓN CON FIREBASE
 // ============================
 
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
     // Agregar timestamp para evitar cache en peticiones GET
     if (config.method === 'get') {
       config.params = {
@@ -46,10 +47,20 @@ api.interceptors.request.use(
       };
     }
 
-    // Agregar token de autenticación si existe
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // 🔥 OBTENER TOKEN DE FIREBASE AUTH
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      
+      if (user) {
+        const token = await user.getIdToken();
+        config.headers.Authorization = `Bearer ${token}`;
+        console.log(`🔑 Token agregado a: ${config.method?.toUpperCase()} ${config.url}`);
+      } else {
+        console.log(`⚠️ No hay usuario autenticado para: ${config.url}`);
+      }
+    } catch (error) {
+      console.error('❌ Error obteniendo token Firebase:', error);
     }
 
     // Log en desarrollo
@@ -102,22 +113,27 @@ api.interceptors.response.use(
     } else if (error.response) {
       // Errores con respuesta del servidor
       const serverError = error.response.data;
-      errorMessage = serverError?.error || serverError?.message || `Error ${error.response.status}`;
+      errorMessage = serverError?.error || serverError?.mensaje || serverError?.message || `Error ${error.response.status}`;
       errorCode = `HTTP_${error.response.status}`;
       
       // Manejo de códigos HTTP específicos
       switch (error.response.status) {
         case 401:
           errorMessage = 'No autorizado. Por favor, inicia sesión nuevamente.';
-          // Limpiar token y redirigir
-          localStorage.removeItem('authToken');
-          localStorage.removeItem('userData');
-          if (!window.location.pathname.includes('/login')) {
-            window.location.href = '/login';
-          }
           break;
         case 403:
           errorMessage = 'No tienes permisos para realizar esta acción.';
+          // Si es un error de control de accesos, disparar evento
+          if (serverError?.codigo === 'ACCESO_DENEGADO' || 
+              serverError?.codigo === 'ACCESO_DENEGADO_HORARIO' || 
+              serverError?.codigo === 'ACCESO_DENEGADO_IP') {
+            window.dispatchEvent(new CustomEvent('acceso-denegado', { 
+              detail: { 
+                mensaje: serverError.mensaje || errorMessage, 
+                regla: serverError.regla || 'Desconocida'
+              }
+            }));
+          }
           break;
         case 404:
           errorMessage = 'Recurso no encontrado.';

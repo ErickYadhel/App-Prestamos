@@ -7,7 +7,6 @@ import {
   ComputerDesktopIcon,
   ShieldCheckIcon,
   CheckCircleIcon,
-  XMarkIcon,
   ArrowPathIcon,
   ExclamationTriangleIcon,
   PlusIcon,
@@ -15,14 +14,11 @@ import {
   PencilIcon,
   ClockIcon
 } from '@heroicons/react/24/outline';
-import { doc, setDoc, collection, getDocs, deleteDoc } from 'firebase/firestore'; // 👈 Agregado deleteDoc
+import { doc, setDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 
-// ============================================
-// COMPONENTE DE TARJETA CON EFECTO GLASSMORPHISM
-// ============================================
 const GlassCard = ({ children, className = '' }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
@@ -34,9 +30,6 @@ const GlassCard = ({ children, className = '' }) => (
   </motion.div>
 );
 
-// ============================================
-// COMPONENTE DE TOGGLE TECNOLÓGICO
-// ============================================
 const TechToggle = ({ label, description, checked, onChange }) => {
   const [isChecked, setIsChecked] = useState(checked || false);
 
@@ -73,44 +66,90 @@ const TechToggle = ({ label, description, checked, onChange }) => {
   );
 };
 
-// ============================================
-// COMPONENTE DE REGLA DE ACCESO
-// ============================================
 const AccessRule = ({ rule, onEdit, onDelete }) => {
   const { theme } = useTheme();
+  const isActive = rule.activo === true;
+
+  const getTipoIcon = (tipo) => {
+    switch(tipo) {
+      case 'ip': return <ComputerDesktopIcon className="h-5 w-5 text-white" />;
+      case 'horario': return <ClockIcon className="h-5 w-5 text-white" />;
+      case 'ubicacion': return <GlobeAltIcon className="h-5 w-5 text-white" />;
+      case 'dispositivo': return <LockClosedIcon className="h-5 w-5 text-white" />;
+      default: return <ShieldCheckIcon className="h-5 w-5 text-white" />;
+    }
+  };
+
+  const getTipoColor = (tipo) => {
+    const colores = {
+      ip: 'bg-blue-600',
+      horario: 'bg-yellow-600',
+      ubicacion: 'bg-green-600',
+      dispositivo: 'bg-purple-600'
+    };
+    return colores[tipo] || 'bg-gray-600';
+  };
 
   return (
     <motion.div
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
-      className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-red-600/20"
+      className={`flex items-center justify-between p-4 rounded-lg border ${
+        isActive 
+          ? 'bg-gray-50 dark:bg-gray-900/50 border-red-600/20' 
+          : 'bg-gray-100 dark:bg-gray-800/30 border-gray-300 dark:border-gray-600 opacity-60'
+      }`}
     >
-      <div className="flex items-center space-x-3">
-        <div className={`p-2 rounded-lg ${
-          rule.tipo === 'ip' ? 'bg-blue-600' :
-          rule.tipo === 'horario' ? 'bg-yellow-600' :
-          rule.tipo === 'ubicacion' ? 'bg-green-600' : 'bg-purple-600'
-        }`}>
-          {rule.tipo === 'ip' && <ComputerDesktopIcon className="h-5 w-5 text-white" />}
-          {rule.tipo === 'horario' && <ClockIcon className="h-5 w-5 text-white" />}
-          {rule.tipo === 'ubicacion' && <GlobeAltIcon className="h-5 w-5 text-white" />}
-          {rule.tipo === 'dispositivo' && <LockClosedIcon className="h-5 w-5 text-white" />}
+      <div className="flex items-center space-x-3 flex-1">
+        <div className={`p-2 rounded-lg ${getTipoColor(rule.tipo)}`}>
+          {getTipoIcon(rule.tipo)}
         </div>
-        <div>
-          <p className="font-medium text-gray-900 dark:text-white">{rule.nombre}</p>
+        <div className="flex-1">
+          <div className="flex items-center space-x-2 flex-wrap gap-1">
+            <p className="font-medium text-gray-900 dark:text-white">{rule.nombre}</p>
+            {!isActive && (
+              <span className="text-xs px-2 py-0.5 bg-gray-400 text-white rounded-full">Inactiva</span>
+            )}
+            {rule.accion === 'denegar' && (
+              <span className="text-xs px-2 py-0.5 bg-red-600 text-white rounded-full">🚫 Bloquear</span>
+            )}
+            {rule.accion === 'permitir' && (
+              <span className="text-xs px-2 py-0.5 bg-green-600 text-white rounded-full">✅ Permitir</span>
+            )}
+          </div>
           <p className="text-sm text-gray-500 dark:text-gray-400">{rule.descripcion}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            {rule.tipo === 'horario' ? '🕐 Horario: ' : '📌 Valor: '}{rule.valor}
+          </p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            Estado: {isActive ? '✅ Activa' : '⏸️ Inactiva'}
+          </p>
         </div>
       </div>
       <div className="flex items-center space-x-2">
         <button
+          onClick={() => onEdit({ ...rule, activo: !isActive })}
+          className={`p-2 rounded-lg transition-colors flex items-center space-x-1 ${
+            isActive 
+              ? 'text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30' 
+              : 'text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+          }`}
+          title={isActive ? 'Desactivar regla' : 'Activar regla'}
+        >
+          <ShieldCheckIcon className="h-5 w-5" />
+          <span className="text-xs font-medium hidden sm:inline">{isActive ? 'Activa' : 'Inactiva'}</span>
+        </button>
+        <button
           onClick={() => onEdit(rule)}
           className="p-2 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+          title="Editar regla"
         >
           <PencilIcon className="h-5 w-5" />
         </button>
         <button
           onClick={() => onDelete(rule.id)}
           className="p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+          title="Eliminar regla"
         >
           <TrashIcon className="h-5 w-5" />
         </button>
@@ -119,29 +158,35 @@ const AccessRule = ({ rule, onEdit, onDelete }) => {
   );
 };
 
-// ============================================
-// MODAL PARA AGREGAR/EDITAR REGLA
-// ============================================
 const RuleModal = ({ isOpen, onClose, rule, onGuardar }) => {
   const { theme } = useTheme();
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
-    tipo: 'ip',
+    tipo: 'horario',
     valor: '',
-    accion: 'permitir'
+    accion: 'denegar',
+    activo: true
   });
 
   useEffect(() => {
     if (rule) {
-      setFormData(rule);
+      setFormData({
+        nombre: rule.nombre || '',
+        descripcion: rule.descripcion || '',
+        tipo: rule.tipo || 'horario',
+        valor: rule.valor || '',
+        accion: rule.accion || 'denegar',
+        activo: rule.activo === true
+      });
     } else {
       setFormData({
         nombre: '',
         descripcion: '',
-        tipo: 'ip',
+        tipo: 'horario',
         valor: '',
-        accion: 'permitir'
+        accion: 'denegar',
+        activo: true
       });
     }
   }, [rule, isOpen]);
@@ -154,6 +199,26 @@ const RuleModal = ({ isOpen, onClose, rule, onGuardar }) => {
     { value: 'ubicacion', label: 'Restricción por Ubicación', icon: GlobeAltIcon },
     { value: 'dispositivo', label: 'Restricción por Dispositivo', icon: LockClosedIcon }
   ];
+
+  const getPlaceholder = (tipo) => {
+    switch(tipo) {
+      case 'ip': return '192.168.1.100 o 192.168.1.0/24';
+      case 'horario': return '08:00-18:00 o 00:00-23:59';
+      case 'ubicacion': return 'Santo Domingo, República Dominicana';
+      case 'dispositivo': return 'Móvil, Escritorio, Tablet';
+      default: return '';
+    }
+  };
+
+  const getHelpText = (tipo) => {
+    switch(tipo) {
+      case 'ip': return 'Ejemplos: 192.168.1.100 (IP exacta), 192.168.1.0/24 (rango CIDR)';
+      case 'horario': return 'Formato: HH:MM-HH:MM. Use 00:00-23:59 para 24/7';
+      case 'ubicacion': return 'Escribe el nombre del país o ciudad a restringir';
+      case 'dispositivo': return 'Tipo de dispositivo a restringir';
+      default: return '';
+    }
+  };
 
   return (
     <motion.div
@@ -177,11 +242,11 @@ const RuleModal = ({ isOpen, onClose, rule, onGuardar }) => {
         }`}>
           <div className={`p-6 border-b ${theme === 'dark' ? 'border-red-600/20' : 'border-gray-200'}`}>
             <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-              {rule ? 'Editar Regla' : 'Nueva Regla de Acceso'}
+              {rule ? '✏️ Editar Regla' : '➕ Nueva Regla de Acceso'}
             </h3>
           </div>
 
-          <div className="p-6 space-y-4">
+          <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
             <div>
               <label className={`block text-sm font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                 Tipo de Restricción
@@ -202,7 +267,7 @@ const RuleModal = ({ isOpen, onClose, rule, onGuardar }) => {
                       }`}
                     >
                       <Icon className="h-5 w-5" />
-                      <span className="text-xs">{tipo.label}</span>
+                      <span className="text-xs text-center">{tipo.label}</span>
                     </button>
                   );
                 })}
@@ -222,7 +287,8 @@ const RuleModal = ({ isOpen, onClose, rule, onGuardar }) => {
                     ? 'bg-gray-800 border-gray-700 text-white'
                     : 'bg-white border-gray-200 text-gray-900'
                 } focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none transition-all`}
-                placeholder="Ej: Bloquear IP sospechosa"
+                placeholder="Ej: Bloquear acceso fuera de horario"
+                required
               />
             </div>
 
@@ -256,10 +322,12 @@ const RuleModal = ({ isOpen, onClose, rule, onGuardar }) => {
                     ? 'bg-gray-800 border-gray-700 text-white'
                     : 'bg-white border-gray-200 text-gray-900'
                 } focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none transition-all`}
-                placeholder={formData.tipo === 'ip' ? '192.168.1.100' : 
-                           formData.tipo === 'horario' ? '08:00-18:00' :
-                           formData.tipo === 'ubicacion' ? 'Santo Domingo' : 'Móvil'}
+                placeholder={getPlaceholder(formData.tipo)}
+                required
               />
+              <p className="text-xs text-gray-400 mt-1">
+                {getHelpText(formData.tipo)}
+              </p>
             </div>
 
             <div>
@@ -277,7 +345,7 @@ const RuleModal = ({ isOpen, onClose, rule, onGuardar }) => {
                         : 'border-gray-200 text-gray-600'
                   }`}
                 >
-                  Permitir
+                  <span className="text-sm">✅ Permitir</span>
                 </button>
                 <button
                   onClick={() => setFormData({ ...formData, accion: 'denegar' })}
@@ -289,8 +357,34 @@ const RuleModal = ({ isOpen, onClose, rule, onGuardar }) => {
                         : 'border-gray-200 text-gray-600'
                   }`}
                 >
-                  Denegar
+                  <span className="text-sm">🚫 Denegar</span>
                 </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                {formData.accion === 'denegar' 
+                  ? '🔴 Denegar: Bloquea cuando se cumple la condición' 
+                  : '🟢 Permitir: Bloquea cuando NO se cumple la condición'}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+              <div>
+                <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Regla Activa
+                </p>
+                <p className="text-xs text-gray-400">La regla se aplicará inmediatamente</p>
+              </div>
+              <div
+                onClick={() => setFormData({ ...formData, activo: !formData.activo })}
+                className={`relative w-14 h-7 rounded-full transition-colors duration-300 cursor-pointer ${
+                  formData.activo ? 'bg-red-600' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+              >
+                <motion.div
+                  animate={{ x: formData.activo ? 28 : 0 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                  className="absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md"
+                />
               </div>
             </div>
           </div>
@@ -324,9 +418,6 @@ const RuleModal = ({ isOpen, onClose, rule, onGuardar }) => {
   );
 };
 
-// ============================================
-// COMPONENTE PRINCIPAL: CONTROL DE ACCESOS
-// ============================================
 const ControlAccesos = ({ configuracion, handleInputChange, onGuardar }) => {
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -337,21 +428,28 @@ const ControlAccesos = ({ configuracion, handleInputChange, onGuardar }) => {
   const [modalAbierto, setModalAbierto] = useState(false);
   const [reglaEditando, setReglaEditando] = useState(null);
 
-  // Cargar reglas desde Firebase
-  useEffect(() => {
-    const cargarReglas = async () => {
-      try {
-        const reglasRef = collection(db, 'ReglasAcceso');
-        const reglasSnap = await getDocs(reglasRef);
-        const reglasList = [];
-        reglasSnap.forEach(doc => {
-          reglasList.push({ id: doc.id, ...doc.data() });
+  const cargarReglas = async () => {
+    try {
+      console.log('🔄 [CONTROLACCESOS] Cargando reglas desde Firebase...');
+      const reglasRef = collection(db, 'ReglasAcceso');
+      const reglasSnap = await getDocs(reglasRef);
+      const reglasList = [];
+      reglasSnap.forEach(doc => {
+        const data = doc.data();
+        reglasList.push({ 
+          id: doc.id, 
+          ...data,
+          activo: data.activo === true
         });
-        setReglas(reglasList);
-      } catch (error) {
-        console.error('Error cargando reglas:', error);
-      }
-    };
+      });
+      console.log(`📋 [CONTROLACCESOS] ${reglasList.length} reglas cargadas`);
+      setReglas(reglasList);
+    } catch (error) {
+      console.error('❌ [CONTROLACCESOS] Error cargando reglas:', error);
+    }
+  };
+
+  useEffect(() => {
     cargarReglas();
   }, []);
 
@@ -361,47 +459,61 @@ const ControlAccesos = ({ configuracion, handleInputChange, onGuardar }) => {
       setError('');
       
       const configRef = doc(db, 'Configuracion', 'controlAccesos');
-      await setDoc(configRef, {
-        ...configuracion?.controlAccesos,
-        actualizadoPor: user?.email,
+      const datos = {
+        bloqueoIP: configuracion?.controlAccesos?.bloqueoIP || false,
+        restriccionHorario: configuracion?.controlAccesos?.restriccionHorario || false,
+        geolocalizacion: configuracion?.controlAccesos?.geolocalizacion || false,
+        dispositivosConfiables: configuracion?.controlAccesos?.dispositivosConfiables || false,
+        actualizadoPor: user?.email || 'admin',
         fechaActualizacion: new Date().toISOString()
-      }, { merge: true });
+      };
       
-      setExito('Configuración guardada exitosamente');
+      console.log('📝 [CONTROLACCESOS] Guardando configuración:', datos);
+      await setDoc(configRef, datos, { merge: true });
+      
+      if (onGuardar) {
+        console.log('🔄 [CONTROLACCESOS] Notificando al padre para recargar configuración...');
+        await onGuardar();
+      }
+      
+      setExito('✅ Configuración guardada exitosamente');
       setTimeout(() => setExito(''), 3000);
-      
-      if (onGuardar) onGuardar();
     } catch (error) {
-      console.error('Error guardando configuración:', error);
-      setError('Error al guardar la configuración');
+      console.error('❌ [CONTROLACCESOS] Error guardando configuración:', error);
+      setError('❌ Error al guardar la configuración: ' + error.message);
     } finally {
       setGuardando(false);
     }
   };
 
+  // 🔥 CORREGIDO - SIN DUPLICACIÓN
   const handleGuardarRegla = async (regla) => {
     try {
-      const reglaRef = doc(db, 'ReglasAcceso', regla.id || Date.now().toString());
-      await setDoc(reglaRef, {
-        ...regla,
-        creadoPor: user?.email,
-        fechaCreacion: new Date().toISOString()
-      });
+      // Usar el ID existente si es edición, o generar uno nuevo
+      const reglaId = regla.id || Date.now().toString();
+      const reglaRef = doc(db, 'ReglasAcceso', reglaId);
       
-      // Recargar reglas
-      const reglasRef = collection(db, 'ReglasAcceso');
-      const reglasSnap = await getDocs(reglasRef);
-      const reglasList = [];
-      reglasSnap.forEach(doc => {
-        reglasList.push({ id: doc.id, ...doc.data() });
-      });
-      setReglas(reglasList);
+      const datosRegla = {
+        nombre: regla.nombre || 'Regla sin nombre',
+        descripcion: regla.descripcion || '',
+        tipo: regla.tipo || 'horario',
+        valor: regla.valor || '',
+        accion: regla.accion || 'denegar',
+        activo: regla.activo === true,
+        creadoPor: user?.email || 'admin',
+        fechaCreacion: regla.fechaCreacion || new Date().toISOString()
+      };
+
+      console.log('📝 [CONTROLACCESOS] Guardando regla:', datosRegla);
+
+      await setDoc(reglaRef, datosRegla);
+      await cargarReglas();
       
-      setExito('Regla guardada exitosamente');
+      setExito('✅ Regla guardada exitosamente');
       setTimeout(() => setExito(''), 3000);
     } catch (error) {
-      console.error('Error guardando regla:', error);
-      setError('Error al guardar la regla');
+      console.error('❌ [CONTROLACCESOS] Error guardando regla:', error);
+      setError('❌ Error al guardar la regla: ' + error.message);
     }
   };
 
@@ -409,13 +521,44 @@ const ControlAccesos = ({ configuracion, handleInputChange, onGuardar }) => {
     if (!window.confirm('¿Estás seguro de eliminar esta regla?')) return;
     
     try {
+      console.log(`🗑️ [CONTROLACCESOS] Eliminando regla: ${id}`);
       await deleteDoc(doc(db, 'ReglasAcceso', id));
       setReglas(prev => prev.filter(r => r.id !== id));
-      setExito('Regla eliminada');
+      setExito('✅ Regla eliminada');
       setTimeout(() => setExito(''), 3000);
     } catch (error) {
-      console.error('Error eliminando regla:', error);
-      setError('Error al eliminar la regla');
+      console.error('❌ [CONTROLACCESOS] Error eliminando regla:', error);
+      setError('❌ Error al eliminar la regla: ' + error.message);
+    }
+  };
+
+  const handleEditarRegla = (regla) => {
+    console.log('✏️ [CONTROLACCESOS] Editando regla:', regla);
+    if (regla.id && regla.activo !== undefined && Object.keys(regla).length === 2) {
+      handleToggleActivarRegla(regla.id, regla.activo);
+      return;
+    }
+    setReglaEditando(regla);
+    setModalAbierto(true);
+  };
+
+  const handleToggleActivarRegla = async (id, activo) => {
+    try {
+      console.log(`🔄 [CONTROLACCESOS] Toggle regla ${id} -> ${activo}`);
+      const reglaRef = doc(db, 'ReglasAcceso', id);
+      await setDoc(reglaRef, {
+        activo: activo
+      }, { merge: true });
+      
+      setReglas(prev => prev.map(r => 
+        r.id === id ? { ...r, activo: activo } : r
+      ));
+      
+      setExito(activo ? '✅ Regla activada' : '⏸️ Regla desactivada');
+      setTimeout(() => setExito(''), 3000);
+    } catch (error) {
+      console.error('❌ [CONTROLACCESOS] Error togglando regla:', error);
+      setError('❌ Error al cambiar estado de la regla');
     }
   };
 
@@ -426,7 +569,6 @@ const ControlAccesos = ({ configuracion, handleInputChange, onGuardar }) => {
       exit={{ opacity: 0 }}
       className="space-y-6"
     >
-      {/* Mensajes */}
       {error && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -449,7 +591,6 @@ const ControlAccesos = ({ configuracion, handleInputChange, onGuardar }) => {
         </motion.div>
       )}
 
-      {/* Configuración General de Accesos */}
       <GlassCard>
         <div className="p-6">
           <div className="flex items-center space-x-3 mb-6">
@@ -494,7 +635,6 @@ const ControlAccesos = ({ configuracion, handleInputChange, onGuardar }) => {
         </div>
       </GlassCard>
 
-      {/* Reglas de Acceso Personalizadas */}
       <GlassCard>
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
@@ -529,10 +669,7 @@ const ControlAccesos = ({ configuracion, handleInputChange, onGuardar }) => {
                 <AccessRule
                   key={regla.id}
                   rule={regla}
-                  onEdit={(r) => {
-                    setReglaEditando(r);
-                    setModalAbierto(true);
-                  }}
+                  onEdit={handleEditarRegla}
                   onDelete={handleEliminarRegla}
                 />
               ))
@@ -541,7 +678,6 @@ const ControlAccesos = ({ configuracion, handleInputChange, onGuardar }) => {
         </div>
       </GlassCard>
 
-      {/* Botón Guardar */}
       <div className="flex justify-end pt-4">
         <motion.button
           whileHover={{ scale: 1.05 }}
@@ -564,7 +700,6 @@ const ControlAccesos = ({ configuracion, handleInputChange, onGuardar }) => {
         </motion.button>
       </div>
 
-      {/* Modal para reglas */}
       <RuleModal
         isOpen={modalAbierto}
         onClose={() => setModalAbierto(false)}

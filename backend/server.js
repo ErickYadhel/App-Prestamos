@@ -6,6 +6,9 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 require('dotenv').config();
 
+// 👇 IMPORTAR MIDDLEWARE DE CONTROL DE ACCESOS
+const { controlAccesosMiddleware, verificarAcceso } = require('./middleware/controlAccesos');
+
 const app = express();
 const PORT = process.env.PORT || 5001;
 
@@ -13,7 +16,6 @@ const PORT = process.env.PORT || 5001;
 // 🛡️ SEGURIDAD - HELMET
 // ============================================
 
-// Helmet ayuda a proteger la app configurando varios headers HTTP
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -24,7 +26,7 @@ app.use(helmet({
     },
   },
   hsts: {
-    maxAge: 31536000, // 1 año
+    maxAge: 31536000,
     includeSubDomains: true,
     preload: true
   },
@@ -34,13 +36,12 @@ app.use(helmet({
 }));
 
 // ============================================
-// 🚦 RATE LIMITING (Protección contra DDoS/Brute Force)
+// 🚦 RATE LIMITING
 // ============================================
 
-// Limitar peticiones a la API en general
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // 100 peticiones por ventana
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -49,10 +50,9 @@ const globalLimiter = rateLimit({
   }
 });
 
-// Limitar peticiones a rutas de autenticación (más restrictivo)
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 20, // 20 intentos por ventana
+  windowMs: 15 * 60 * 1000,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -61,31 +61,26 @@ const authLimiter = rateLimit({
   }
 });
 
-// Aplicar límites generales a todas las rutas
 app.use('/api/', globalLimiter);
 
 // ============================================
-// 🌐 CONFIGURACIÓN DE CORS MEJORADA
+// 🌐 CONFIGURACIÓN DE CORS
 // ============================================
 
-// Orígenes permitidos
 const allowedOrigins = [
-  'http://localhost:3000',           // Desarrollo local (React)
-  'http://localhost:5173',           // Vite
-  'http://localhost:5000',           // Desarrollo local alternativo
-  'https://eys-frontend.onrender.com', // Frontend en Render
-  'https://eys-backend.onrender.com',  // Backend en Render
-  'https://prestamos-eys.vercel.app',  // Vercel
-  'https://eysinversiones.com',        // Dominio personalizado
-  'https://www.eysinversiones.com'     // Dominio personalizado con www
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:5000',
+  'https://eys-frontend.onrender.com',
+  'https://eys-backend.onrender.com',
+  'https://prestamos-eys.vercel.app',
+  'https://eysinversiones.com',
+  'https://www.eysinversiones.com'
 ];
 
-// Opciones de CORS
 const corsOptions = {
   origin: function(origin, callback) {
-    // Permitir solicitudes sin origen (Postman, apps móviles, etc.)
     if (!origin) return callback(null, true);
-    
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -99,21 +94,19 @@ const corsOptions = {
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
 };
 
-// Aplicar CORS
 app.use(cors(corsOptions));
 
 // ============================================
 // 📦 MIDDLEWARES BÁSICOS
 // ============================================
 
-app.use(express.json({ limit: '10mb' })); // Límite de 10MB para JSON
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ============================================
-// 🔥 INICIALIZAR FIREBASE ADMIN (MEJORADO)
+// 🔥 INICIALIZAR FIREBASE ADMIN
 // ============================================
 
-// Verificar que las variables de entorno necesarias existan
 const requiredEnvVars = [
   'FIREBASE_PRIVATE_KEY',
   'FIREBASE_CLIENT_EMAIL',
@@ -123,12 +116,9 @@ const requiredEnvVars = [
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 if (missingEnvVars.length > 0) {
   console.error(`❌ Variables de entorno faltantes: ${missingEnvVars.join(', ')}`);
-  console.error('⚠️ El servidor no puede iniciar sin estas variables.');
   process.exit(1);
 }
 
-// Construir Service Account desde variables de entorno
-// ⚠️ AHORA TODO desde variables de entorno, nada hardcodeado
 const serviceAccount = {
   type: "service_account",
   project_id: process.env.FIREBASE_PROJECT_ID,
@@ -142,7 +132,6 @@ const serviceAccount = {
   client_x509_cert_url: process.env.FIREBASE_CLIENT_CERT_URL
 };
 
-// Inicializar Firebase Admin
 try {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
@@ -155,6 +144,17 @@ try {
 }
 
 const db = admin.firestore();
+
+// ============================================
+// 🔒 RUTA PARA VERIFICAR ACCESO (NUEVA) 👈 AGREGADA
+// ============================================
+app.get('/api/auth/check-access', verificarAcceso);
+
+// ============================================
+// 🛡️ MIDDLEWARE DE CONTROL DE ACCESOS
+// ============================================
+
+app.use(controlAccesosMiddleware);
 
 // ============================================
 // 📦 IMPORTAR RUTAS
@@ -170,7 +170,6 @@ const dashboardRoutes = require('./routes/dashboard');
 const usuarioRoutes = require('./routes/usuario');
 const comisionesRoutes = require('./routes/comisiones');
 
-// Importar módulo de notificaciones (con try/catch para evitar errores)
 let notificacionesRoutes, generarRecordatoriosAutomaticos;
 try {
   const notificacionesModule = require('./routes/notificaciones');
@@ -186,11 +185,11 @@ try {
 }
 
 // ============================================
-// 🔗 USAR RUTAS (Con rate limiting específico)
+// 🔗 USAR RUTAS
 // ============================================
 
 app.use('/api/notificaciones', notificacionesRoutes);
-app.use('/api/auth', authLimiter, authRoutes); // Protección extra para auth
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/prestamos', prestamosRoutes);
 app.use('/api/pagos', pagosRoutes);
@@ -201,14 +200,13 @@ app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/comisiones', comisionesRoutes);
 
 // ============================================
-// 🔧 CONFIGURACIÓN DE ENVÍO AUTOMÁTICO DE NOTIFICACIONES
+// 🔧 CONFIGURACIÓN DE NOTIFICACIONES
 // ============================================
 
 async function obtenerConfiguracionNotificaciones() {
   try {
     const doc = await db.collection('configuracion').doc('notificaciones').get();
     if (!doc.exists) {
-      console.warn('⚙️ No hay configuración de notificaciones, usando valores por defecto.');
       return {
         habilitado: true,
         diasAntesVencimiento: 1,
@@ -230,34 +228,28 @@ async function obtenerConfiguracionNotificaciones() {
 
 async function iniciarJobNotificaciones() {
   const config = await obtenerConfiguracionNotificaciones();
-
   if (!config.habilitado) {
-    console.log('🔕 Notificaciones automáticas deshabilitadas por configuración.');
+    console.log('🔕 Notificaciones automáticas deshabilitadas.');
     return;
   }
-
   const [hora, minuto] = config.horaEjecucion.split(':').map(Number);
   const cronExpresion = `${minuto} ${hora} * * *`;
-
-  console.log(`📅 Programando job de notificaciones automáticas a las ${config.horaEjecucion} (${config.zonaHoraria})`);
-
+  console.log(`📅 Programando job de notificaciones a las ${config.horaEjecucion}`);
   cron.schedule(cronExpresion, async () => {
-    console.log(`⏰ [${new Date().toISOString()}] Ejecutando verificación automática de notificaciones...`);
+    console.log(`⏰ Ejecutando verificación automática de notificaciones...`);
     try {
       if (generarRecordatoriosAutomaticos) {
         await generarRecordatoriosAutomaticos(config.diasAntesVencimiento);
-        console.log(`✅ Recordatorios automáticos ejecutados a las ${new Date().toISOString()}`);
-      } else {
-        console.log('⚠️ No se pudo ejecutar recordatorios automáticos - función no disponible');
+        console.log(`✅ Recordatorios automáticos ejecutados`);
       }
     } catch (error) {
-      console.error('❌ Error ejecutando recordatorios automáticos:', error.message);
+      console.error('❌ Error ejecutando recordatorios:', error.message);
     }
   }, { timezone: config.zonaHoraria });
 }
 
 // ============================================
-// 🔄 RUTAS BÁSICAS Y ESTADO
+// 🔄 RUTAS BÁSICAS
 // ============================================
 
 app.get('/', (req, res) => {
@@ -275,7 +267,8 @@ app.get('/', (req, res) => {
       garantes: '/api/garantes',
       dashboard: '/api/dashboard',
       notificaciones: '/api/notificaciones',
-      comisiones: '/api/comisiones'
+      comisiones: '/api/comisiones',
+      checkAccess: '/api/auth/check-access' // 👈 NUEVO
     }
   });
 });
@@ -295,7 +288,6 @@ app.get('/health', (req, res) => {
 // ⚠️ MANEJO DE ERRORES GLOBALES
 // ============================================
 
-// Ruta 404
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
@@ -305,17 +297,14 @@ app.use('*', (req, res) => {
   });
 });
 
-// Middleware de errores global
 app.use((error, req, res, next) => {
   console.error('❌ Error global:', {
     message: error.message,
-    stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     path: req.path,
     method: req.method,
     ip: req.ip
   });
 
-  // Manejar errores de CORS específicamente
   if (error.message === 'No permitido por CORS') {
     return res.status(403).json({
       success: false,
@@ -325,7 +314,6 @@ app.use((error, req, res, next) => {
     });
   }
 
-  // Manejar errores de rate limiting
   if (error.status === 429) {
     return res.status(429).json({
       success: false,
@@ -333,7 +321,13 @@ app.use((error, req, res, next) => {
     });
   }
 
-  // Error genérico (no exponer detalles internos en producción)
+  if (error.status === 403) {
+    return res.status(403).json({
+      success: false,
+      error: error.message || 'Acceso denegado por políticas de seguridad'
+    });
+  }
+
   const statusCode = error.status || 500;
   const message = process.env.NODE_ENV === 'production' 
     ? 'Error interno del servidor' 
@@ -360,7 +354,8 @@ app.listen(PORT, () => {
   console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
   console.log('');
   console.log('📋 ENDPOINTS DISPONIBLES:');
-  console.log(`🔐 Auth        → /api/auth (limitado: 20 intentos/15min)`);
+  console.log(`🔐 Auth        → /api/auth`);
+  console.log(`🔒 Check Access → /api/auth/check-access (NUEVO)`);
   console.log(`👥 Clientes    → /api/clientes`);
   console.log(`💰 Préstamos   → /api/prestamos`);
   console.log(`💳 Pagos       → /api/pagos`);
@@ -374,16 +369,17 @@ app.listen(PORT, () => {
   console.log(`✅ CORS: ${allowedOrigins.length} orígenes permitidos`);
   console.log(`✅ Rate Limiting: 100 peticiones/15min (general), 20/15min (auth)`);
   console.log(`✅ Helmet: Headers de seguridad activados`);
+  console.log(`✅ Control de Accesos: Middleware activado`);
+  console.log(`✅ Verificación de Acceso: /api/auth/check-access`);
   console.log('='.repeat(60));
 });
 
-// Iniciar job automático al levantar el servidor
 iniciarJobNotificaciones();
 
 module.exports = { app, admin, db };
 
 // ============================================
-// MANEJO DE SEÑALES DE CIERRE (Graceful Shutdown)
+// MANEJO DE SEÑALES DE CIERRE
 // ============================================
 
 process.on('SIGTERM', () => {
@@ -398,7 +394,6 @@ process.on('SIGINT', () => {
 
 process.on('uncaughtException', (error) => {
   console.error('💥 Excepción no capturada:', error);
-  // En producción, podrías querer reiniciar el servidor
 });
 
 process.on('unhandledRejection', (reason, promise) => {

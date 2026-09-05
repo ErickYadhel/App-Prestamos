@@ -7,6 +7,26 @@ const { notificarComisionGenerada } = require('../services/notificationService')
 const db = admin.firestore();
 
 // ============================================
+// 🔥 CACHÉ EN MEMORIA PARA COMISIONES
+// ============================================
+let comisionesCache = {
+  data: null,
+  estadisticas: null,
+  timestamp: null
+};
+const CACHE_TTL = 60000; // 1 minuto
+
+// ============================================
+// FUNCIÓN PARA INVALIDAR CACHÉ
+// ============================================
+function invalidarCacheComisiones() {
+  comisionesCache.data = null;
+  comisionesCache.estadisticas = null;
+  comisionesCache.timestamp = null;
+  console.log('🗑️ [CACHE] Cache de comisiones invalidado');
+}
+
+// ============================================
 // FUNCIONES AUXILIARES
 // ============================================
 
@@ -31,7 +51,70 @@ async function obtenerGaranteById(garanteID) {
 // GET /api/comisiones - Listar todas las comisiones
 router.get('/', async (req, res) => {
   try {
-    const { garanteID, estado, fechaInicio, fechaFin, limit = 500 } = req.query;
+    const { garanteID, estado, fechaInicio, fechaFin, limit = 500, forceRefresh } = req.query;
+    
+    // 🔥 SI SE SOLICITA ACTUALIZACIÓN FORZADA, INVALIDAR CACHÉ
+    if (forceRefresh === 'true') {
+      console.log('🔄 [CACHE] Actualización forzada de comisiones');
+      invalidarCacheComisiones();
+    }
+    
+    // 🔥 VERIFICAR CACHÉ
+    const ahora = Date.now();
+    if (comisionesCache.data && comisionesCache.timestamp && (ahora - comisionesCache.timestamp) < CACHE_TTL) {
+      console.log(`📦 [CACHE] Sirviendo comisiones desde caché (${Math.round((ahora - comisionesCache.timestamp) / 1000)}s)`);
+      
+      // Aplicar filtros adicionales en memoria si es necesario
+      let data = comisionesCache.data;
+      if (garanteID) {
+        data = data.filter(c => c.garanteID === garanteID);
+      }
+      if (estado && estado !== 'todos') {
+        data = data.filter(c => c.estado === estado);
+      }
+      if (fechaInicio) {
+        const inicio = new Date(fechaInicio);
+        data = data.filter(c => {
+          if (!c.fechaPago) return false;
+          return new Date(c.fechaPago) >= inicio;
+        });
+      }
+      if (fechaFin) {
+        const fin = new Date(fechaFin);
+        fin.setHours(23, 59, 59, 999);
+        data = data.filter(c => {
+          if (!c.fechaPago) return false;
+          return new Date(c.fechaPago) <= fin;
+        });
+      }
+      
+      // Limitar resultados
+      if (data.length > limit) {
+        data = data.slice(0, limit);
+      }
+      
+      // Recalcular estadísticas para los datos filtrados
+      const stats = {
+        total: data.length,
+        pendientes: data.filter(c => c.estado === 'pendiente').length,
+        pagadas: data.filter(c => c.estado === 'pagada').length,
+        canceladas: data.filter(c => c.estado === 'cancelada').length,
+        montoTotal: data.reduce((sum, c) => sum + (c.montoComision || 0), 0),
+        montoPendiente: data.filter(c => c.estado === 'pendiente').reduce((sum, c) => sum + (c.montoComision || 0), 0),
+        montoPagado: data.filter(c => c.estado === 'pagada').reduce((sum, c) => sum + (c.montoComision || 0), 0)
+      };
+      
+      return res.json({
+        success: true,
+        data: data,
+        estadisticas: stats,
+        count: data.length,
+        fromCache: true,
+        cacheAge: Math.round((ahora - comisionesCache.timestamp) / 1000)
+      });
+    }
+    
+    console.log('🔄 [CACHE] Cargando comisiones frescas de Firebase...');
     
     let query = db.collection('comisiones');
     
@@ -91,11 +174,18 @@ router.get('/', async (req, res) => {
     
     console.log(`✅ Encontradas ${comisiones.length} comisiones`);
     
+    // 🔥 GUARDAR EN CACHÉ
+    comisionesCache.data = comisiones;
+    comisionesCache.estadisticas = estadisticas;
+    comisionesCache.timestamp = ahora;
+    console.log(`💾 [CACHE] Comisiones guardadas en caché (${comisiones.length} comisiones)`);
+    
     res.json({
       success: true,
       data: comisiones,
       estadisticas,
-      count: comisiones.length
+      count: comisiones.length,
+      fromCache: false
     });
   } catch (error) {
     console.error('Error fetching comisiones:', error);
@@ -255,9 +345,10 @@ router.post('/', async (req, res) => {
     
     console.log(`✅ Comisión manual creada: ${idPersonalizado}`);
 
-    // ============================================
-    // 🔥 NUEVA NOTIFICACIÓN
-    // ============================================
+    // 🔥 INVALIDAR CACHÉ DESPUÉS DE CREAR
+    invalidarCacheComisiones();
+
+    // Notificación
     if (comisionData.clienteID && garanteInfo) {
       const clienteDoc = await db.collection('clientes').doc(comisionData.clienteID).get();
       if (clienteDoc.exists()) {
@@ -305,6 +396,9 @@ router.put('/:id', async (req, res) => {
     updateData.updatedAt = new Date();
     
     await comisionRef.update(updateData);
+    
+    // 🔥 INVALIDAR CACHÉ DESPUÉS DE ACTUALIZAR
+    invalidarCacheComisiones();
     
     const updatedDoc = await comisionRef.get();
     
@@ -357,6 +451,9 @@ router.put('/:id/pagar', async (req, res) => {
       updatedAt: new Date()
     });
     
+    // 🔥 INVALIDAR CACHÉ DESPUÉS DE PAGAR
+    invalidarCacheComisiones();
+    
     const updatedDoc = await comisionRef.get();
     
     console.log(`✅ Comisión marcada como pagada: ${id}`);
@@ -407,6 +504,9 @@ router.put('/:id/cancelar', async (req, res) => {
       updatedAt: new Date()
     });
     
+    // 🔥 INVALIDAR CACHÉ DESPUÉS DE CANCELAR
+    invalidarCacheComisiones();
+    
     const updatedDoc = await comisionRef.get();
     
     console.log(`✅ Comisión cancelada: ${id}`);
@@ -441,6 +541,9 @@ router.delete('/:id', async (req, res) => {
     }
     
     await comisionRef.delete();
+    
+    // 🔥 INVALIDAR CACHÉ DESPUÉS DE ELIMINAR
+    invalidarCacheComisiones();
     
     console.log(`✅ Comisión eliminada: ${id}`);
     

@@ -9,7 +9,27 @@ const { notificarPagoRegistrado, notificarPrestamoCompletado } = require('../ser
 const db = admin.firestore();
 
 // ============================================
-// 🔥 FUNCIÓN PARA CONVERTIR FECHA A STRING LOCAL DD-MM-YYYY
+// 🔥 CACHÉ EN MEMORIA PARA PAGOS
+// ============================================
+let pagosCache = {
+  data: null,
+  timestamp: null,
+  estadisticas: null
+};
+const CACHE_TTL = 60000; // 1 minuto
+
+// ============================================
+// FUNCIÓN PARA INVALIDAR CACHÉ
+// ============================================
+function invalidarCachePagos() {
+  pagosCache.data = null;
+  pagosCache.timestamp = null;
+  pagosCache.estadisticas = null;
+  console.log('🗑️ [CACHE] Cache de pagos invalidado');
+}
+
+// ============================================
+// FUNCIÓN PARA CONVERTIR FECHA A STRING LOCAL DD-MM-YYYY
 // ============================================
 function fechaToLocalString(fecha) {
   if (!fecha) return null;
@@ -56,7 +76,7 @@ function fechaToLocalString(fecha) {
 }
 
 // ============================================
-// 🔥 FUNCIÓN PARA PARSEAR DD-MM-YYYY CORRECTAMENTE
+// FUNCIÓN PARA PARSEAR DD-MM-YYYY CORRECTAMENTE
 // ============================================
 function parseFechaDDMMYYYY(fechaStr) {
   if (!fechaStr) return null;
@@ -551,6 +571,9 @@ router.post('/', async (req, res) => {
       await crearNotificacionCompletado(prestamo);
     }
 
+    // 🔥 INVALIDAR CACHÉ DESPUÉS DE REGISTRAR PAGO
+    invalidarCachePagos();
+
     const tieneMora = (distribucion.mora || 0) > 0;
     const prestamoCompletado = prestamo.capitalRestante <= 0;
 
@@ -577,6 +600,204 @@ router.post('/', async (req, res) => {
   } catch (error) {
     console.error('Error en registro de pago:', error);
     res.status(400).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================
+// 🔥 GET /api/pagos - Listar TODOS los pagos (CON CACHÉ)
+// ============================================
+router.get('/', async (req, res) => {
+  try {
+    const { forceRefresh } = req.query;
+    
+    // 🔥 SI SE SOLICITA ACTUALIZACIÓN FORZADA, INVALIDAR CACHÉ
+    if (forceRefresh === 'true') {
+      console.log('🔄 [CACHE] Actualización forzada solicitada');
+      invalidarCachePagos();
+    }
+    
+    // 🔥 VERIFICAR CACHÉ
+    const ahora = Date.now();
+    if (pagosCache.data && pagosCache.timestamp && (ahora - pagosCache.timestamp) < CACHE_TTL) {
+      console.log(`📦 [CACHE] Sirviendo datos desde caché (${Math.round((ahora - pagosCache.timestamp) / 1000)}s)`);
+      return res.json({
+        success: true,
+        data: pagosCache.data,
+        estadisticas: pagosCache.estadisticas,
+        count: pagosCache.data.length,
+        fromCache: true,
+        cacheAge: Math.round((ahora - pagosCache.timestamp) / 1000)
+      });
+    }
+    
+    console.log('🔄 [CACHE] Cargando datos frescos de Firebase...');
+    
+    const { 
+      prestamoID, 
+      clienteID, 
+      fechaInicio, 
+      fechaFin, 
+      limit = 9999,
+      offset = 0,
+      tipoPago,
+      modoCalculo
+    } = req.query;
+    
+    let query = db.collection('pagos');
+
+    if (prestamoID) {
+      query = query.where('prestamoID', '==', prestamoID);
+    }
+    if (clienteID) {
+      query = query.where('clienteID', '==', clienteID);
+    }
+    if (tipoPago) {
+      query = query.where('tipoPago', '==', tipoPago);
+    }
+    if (modoCalculo) {
+      query = query.where('modoCalculo', '==', modoCalculo);
+    }
+    
+    // 🔥 MANEJO CORREGIDO DE FECHAS EN DD-MM-YYYY
+    if (fechaInicio && fechaFin) {
+      const fechaInicioObj = parseFechaDDMMYYYY(fechaInicio);
+      const fechaFinObj = parseFechaDDMMYYYY(fechaFin);
+      
+      if (fechaInicioObj && fechaFinObj) {
+        console.log('📅 Filtro por fecha:', { fechaInicio, fechaFin });
+      }
+    }
+
+    query = query.orderBy('fechaPago', 'desc')
+                 .limit(parseInt(limit));
+
+    const pagosSnapshot = await query.get();
+    
+    console.log(`✅ Encontrados ${pagosSnapshot.size} pagos en total`);
+    
+    const pagos = [];
+    let estadisticas = {
+      totalMonto: 0,
+      totalInteres: 0,
+      totalCapital: 0,
+      totalMora: 0,
+      totalPagosManuales: 0,
+      totalPagosAutomaticos: 0,
+      totalPagosNormal: 0,
+      totalPagosAdelantado: 0,
+      totalPagosMora: 0,
+      totalPagosAbono: 0
+    };
+
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    
+    let fechaInicioObj = null;
+    let fechaFinObj = null;
+    
+    if (fechaInicio) {
+      fechaInicioObj = parseFechaDDMMYYYY(fechaInicio);
+      if (fechaInicioObj) fechaInicioObj.setHours(0, 0, 0, 0);
+    }
+    if (fechaFin) {
+      fechaFinObj = parseFechaDDMMYYYY(fechaFin);
+      if (fechaFinObj) fechaFinObj.setHours(23, 59, 59, 999);
+    }
+
+    pagosSnapshot.forEach(doc => {
+      const pagoData = doc.data();
+      
+      // 🔥 FILTRAR POR FECHA EN MEMORIA
+      if (fechaInicioObj || fechaFinObj) {
+        let fechaPagoDate = null;
+        if (typeof pagoData.fechaPago === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(pagoData.fechaPago)) {
+          const [d, m, y] = pagoData.fechaPago.split('-');
+          fechaPagoDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+        } else if (pagoData.fechaPago?.toDate) {
+          fechaPagoDate = pagoData.fechaPago.toDate();
+        } else if (pagoData.fechaPago instanceof Date) {
+          fechaPagoDate = pagoData.fechaPago;
+        }
+        
+        if (fechaPagoDate) {
+          if (fechaInicioObj && fechaPagoDate < fechaInicioObj) return;
+          if (fechaFinObj && fechaPagoDate > fechaFinObj) return;
+        } else {
+          console.warn('⚠️ No se pudo parsear fecha para filtro:', pagoData.fechaPago);
+        }
+      }
+      
+      let fechaPagoFormatted = 'N/A';
+      if (pagoData.fechaPago) {
+        if (typeof pagoData.fechaPago === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(pagoData.fechaPago)) {
+          const [d, m, y] = pagoData.fechaPago.split('-');
+          const fechaDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+          fechaPagoFormatted = fechaDate.toLocaleDateString('es-DO');
+        } else if (typeof pagoData.fechaPago === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(pagoData.fechaPago)) {
+          const [y, m, d] = pagoData.fechaPago.split('-');
+          const fechaDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+          fechaPagoFormatted = fechaDate.toLocaleDateString('es-DO');
+        } else if (pagoData.fechaPago?.toDate) {
+          fechaPagoFormatted = pagoData.fechaPago.toDate().toLocaleDateString('es-DO');
+        } else if (pagoData.fechaPago instanceof Date) {
+          fechaPagoFormatted = pagoData.fechaPago.toLocaleDateString('es-DO');
+        }
+      }
+      
+      const montoTotal = (pagoData.montoCapital || 0) + (pagoData.montoInteres || 0) + (pagoData.montoMora || 0);
+      
+      const pagoConFormato = { 
+        id: doc.id, 
+        ...pagoData,
+        fechaPagoFormatted,
+        fechaPagoISO: typeof pagoData.fechaPago === 'string' ? `${pagoData.fechaPago}T00:00:00.000Z` : pagoData.fechaPago?.toDate?.().toISOString() || null
+      };
+      
+      pagos.push(pagoConFormato);
+      
+      estadisticas.totalMonto += montoTotal;
+      estadisticas.totalInteres += pagoData.montoInteres || 0;
+      estadisticas.totalCapital += pagoData.montoCapital || 0;
+      estadisticas.totalMora += pagoData.montoMora || 0;
+      
+      if (pagoData.modoManual) {
+        estadisticas.totalPagosManuales++;
+      } else {
+        estadisticas.totalPagosAutomaticos++;
+      }
+      
+      const tipo = pagoData.tipoPago || 'normal';
+      if (tipo === 'normal') estadisticas.totalPagosNormal++;
+      else if (tipo === 'adelantado') estadisticas.totalPagosAdelantado++;
+      else if (tipo === 'mora') estadisticas.totalPagosMora++;
+      else if (tipo === 'abono') estadisticas.totalPagosAbono++;
+    });
+
+    console.log(`📊 Total pagos devueltos: ${pagos.length}`);
+
+    // 🔥 GUARDAR EN CACHÉ
+    pagosCache.data = pagos;
+    pagosCache.timestamp = ahora;
+    pagosCache.estadisticas = estadisticas;
+    console.log(`💾 [CACHE] Datos guardados en caché (${pagos.length} pagos)`);
+
+    res.json({
+      success: true,
+      data: pagos,
+      estadisticas: estadisticas,
+      count: pagos.length,
+      fromCache: false,
+      paginacion: {
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching payments:', error);
+    res.status(500).json({
       success: false,
       error: error.message
     });
@@ -707,182 +928,6 @@ router.get('/prestamo/:prestamoID', async (req, res) => {
 });
 
 // ============================================
-// 🔥 GET /api/pagos - Listar TODOS los pagos (SIN LÍMITE)
-// ============================================
-router.get('/', async (req, res) => {
-  try {
-    const { 
-      prestamoID, 
-      clienteID, 
-      fechaInicio, 
-      fechaFin, 
-      limit = 9999,
-      offset = 0,
-      tipoPago,
-      modoCalculo
-    } = req.query;
-    
-    console.log('📋 Listando pagos con límite:', limit);
-    
-    let query = db.collection('pagos');
-
-    if (prestamoID) {
-      query = query.where('prestamoID', '==', prestamoID);
-    }
-    if (clienteID) {
-      query = query.where('clienteID', '==', clienteID);
-    }
-    if (tipoPago) {
-      query = query.where('tipoPago', '==', tipoPago);
-    }
-    if (modoCalculo) {
-      query = query.where('modoCalculo', '==', modoCalculo);
-    }
-    
-    // 🔥 MANEJO CORREGIDO DE FECHAS EN DD-MM-YYYY
-    if (fechaInicio && fechaFin) {
-      // Convertir fechas de DD-MM-YYYY a objeto Date
-      const fechaInicioObj = parseFechaDDMMYYYY(fechaInicio);
-      const fechaFinObj = parseFechaDDMMYYYY(fechaFin);
-      
-      if (fechaInicioObj && fechaFinObj) {
-        // Para Firestore, convertimos a timestamp UNIX para comparar con strings DD-MM-YYYY
-        // O mejor: ordenamos por fechaPago y filtramos en memoria
-        console.log('📅 Filtro por fecha:', { fechaInicio, fechaFin });
-        // No aplicamos where en Firestore porque fechaPago es string DD-MM-YYYY
-        // Filtraremos en memoria después
-      }
-    }
-
-    query = query.orderBy('fechaPago', 'desc')
-                 .limit(parseInt(limit));
-
-    const pagosSnapshot = await query.get();
-    
-    console.log(`✅ Encontrados ${pagosSnapshot.size} pagos en total`);
-    
-    const pagos = [];
-    let estadisticas = {
-      totalMonto: 0,
-      totalInteres: 0,
-      totalCapital: 0,
-      totalMora: 0,
-      totalPagosManuales: 0,
-      totalPagosAutomaticos: 0,
-      totalPagosNormal: 0,
-      totalPagosAdelantado: 0,
-      totalPagosMora: 0,
-      totalPagosAbono: 0
-    };
-
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-    
-    // Para filtros de fecha en memoria
-    let fechaInicioObj = null;
-    let fechaFinObj = null;
-    
-    if (fechaInicio) {
-      fechaInicioObj = parseFechaDDMMYYYY(fechaInicio);
-      if (fechaInicioObj) fechaInicioObj.setHours(0, 0, 0, 0);
-    }
-    if (fechaFin) {
-      fechaFinObj = parseFechaDDMMYYYY(fechaFin);
-      if (fechaFinObj) fechaFinObj.setHours(23, 59, 59, 999);
-    }
-
-    pagosSnapshot.forEach(doc => {
-      const pagoData = doc.data();
-      
-      // 🔥 FILTRAR POR FECHA EN MEMORIA (porque fechaPago es string DD-MM-YYYY)
-      if (fechaInicioObj || fechaFinObj) {
-        let fechaPagoDate = null;
-        if (typeof pagoData.fechaPago === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(pagoData.fechaPago)) {
-          const [d, m, y] = pagoData.fechaPago.split('-');
-          fechaPagoDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
-        } else if (pagoData.fechaPago?.toDate) {
-          fechaPagoDate = pagoData.fechaPago.toDate();
-        } else if (pagoData.fechaPago instanceof Date) {
-          fechaPagoDate = pagoData.fechaPago;
-        }
-        
-        if (fechaPagoDate) {
-          if (fechaInicioObj && fechaPagoDate < fechaInicioObj) return;
-          if (fechaFinObj && fechaPagoDate > fechaFinObj) return;
-        } else {
-          // Si no podemos parsear la fecha, la incluimos pero con advertencia
-          console.warn('⚠️ No se pudo parsear fecha para filtro:', pagoData.fechaPago);
-        }
-      }
-      
-      let fechaPagoFormatted = 'N/A';
-      if (pagoData.fechaPago) {
-        if (typeof pagoData.fechaPago === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(pagoData.fechaPago)) {
-          const [d, m, y] = pagoData.fechaPago.split('-');
-          const fechaDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
-          fechaPagoFormatted = fechaDate.toLocaleDateString('es-DO');
-        } else if (typeof pagoData.fechaPago === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(pagoData.fechaPago)) {
-          const [y, m, d] = pagoData.fechaPago.split('-');
-          const fechaDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
-          fechaPagoFormatted = fechaDate.toLocaleDateString('es-DO');
-        } else if (pagoData.fechaPago?.toDate) {
-          fechaPagoFormatted = pagoData.fechaPago.toDate().toLocaleDateString('es-DO');
-        } else if (pagoData.fechaPago instanceof Date) {
-          fechaPagoFormatted = pagoData.fechaPago.toLocaleDateString('es-DO');
-        }
-      }
-      
-      const montoTotal = (pagoData.montoCapital || 0) + (pagoData.montoInteres || 0) + (pagoData.montoMora || 0);
-      
-      const pagoConFormato = { 
-        id: doc.id, 
-        ...pagoData,
-        fechaPagoFormatted,
-        fechaPagoISO: typeof pagoData.fechaPago === 'string' ? `${pagoData.fechaPago}T00:00:00.000Z` : pagoData.fechaPago?.toDate?.().toISOString() || null
-      };
-      
-      pagos.push(pagoConFormato);
-      
-      estadisticas.totalMonto += montoTotal;
-      estadisticas.totalInteres += pagoData.montoInteres || 0;
-      estadisticas.totalCapital += pagoData.montoCapital || 0;
-      estadisticas.totalMora += pagoData.montoMora || 0;
-      
-      if (pagoData.modoManual) {
-        estadisticas.totalPagosManuales++;
-      } else {
-        estadisticas.totalPagosAutomaticos++;
-      }
-      
-      const tipo = pagoData.tipoPago || 'normal';
-      if (tipo === 'normal') estadisticas.totalPagosNormal++;
-      else if (tipo === 'adelantado') estadisticas.totalPagosAdelantado++;
-      else if (tipo === 'mora') estadisticas.totalPagosMora++;
-      else if (tipo === 'abono') estadisticas.totalPagosAbono++;
-    });
-
-    console.log(`📊 Total pagos devueltos: ${pagos.length}`);
-
-    res.json({
-      success: true,
-      data: pagos,
-      estadisticas: estadisticas,
-      count: pagos.length,
-      paginacion: {
-        limit: parseInt(limit),
-        offset: parseInt(offset)
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching payments:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// ============================================
 // GET /api/pagos/:id - Obtener un pago específico
 // ============================================
 router.get('/:id', async (req, res) => {
@@ -996,6 +1041,9 @@ router.delete('/:id', async (req, res) => {
     }
 
     await pagoDoc.ref.delete();
+
+    // 🔥 INVALIDAR CACHÉ DESPUÉS DE ELIMINAR PAGO
+    invalidarCachePagos();
 
     res.json({
       success: true,

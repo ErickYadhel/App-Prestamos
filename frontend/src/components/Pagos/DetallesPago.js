@@ -106,12 +106,10 @@ const InfoRow = ({ label, value, icon: Icon, color = 'text-gray-600', subValue, 
     }
   };
 
-  // Colores para modo claro/oscuro
   const getColorClass = (baseColor) => {
     if (theme === 'dark') {
       return baseColor;
     }
-    // Modo claro - colores más vivos
     return baseColor.replace('dark:', '');
   };
 
@@ -180,7 +178,6 @@ const ProgressBar = ({ value, max, label, color }) => {
     if (theme === 'dark') {
       return color;
     }
-    // Modo claro - colores más vivos
     switch(color) {
       case 'from-green-500 to-emerald-600': return 'from-green-600 to-emerald-700';
       case 'from-blue-500 to-indigo-600': return 'from-blue-600 to-indigo-700';
@@ -267,11 +264,12 @@ const StatCard = ({ icon: Icon, label, value, color, subValue }) => {
 };
 
 // ============================================
-// COMPONENTE DE BOTÓN PARA WHATSAPP
+// COMPONENTE DE BOTÓN PARA WHATSAPP - CORREGIDO PARA MÓVILES
 // ============================================
 const WhatsAppShareButton = ({ pago, clienteInfo, onShare }) => {
   const { theme } = useTheme();
   const [isHovered, setIsHovered] = useState(false);
+  const [enviando, setEnviando] = useState(false);
 
   const generarMensajeWhatsApp = () => {
     const cliente = pago.clienteNombre || clienteInfo?.nombre || 'Cliente';
@@ -312,21 +310,55 @@ const WhatsAppShareButton = ({ pago, clienteInfo, onShare }) => {
   };
 
   const handleWhatsApp = () => {
-    const mensaje = generarMensajeWhatsApp();
-    const mensajeCodificado = encodeURIComponent(mensaje);
-    
-    const numeroCliente = clienteInfo?.celular || clienteInfo?.telefono || '';
-    let url;
-    
-    if (numeroCliente) {
+    try {
+      setEnviando(true);
+      
+      const mensaje = generarMensajeWhatsApp();
+      const mensajeCodificado = encodeURIComponent(mensaje);
+      
+      // Obtener número de teléfono del cliente
+      const numeroCliente = clienteInfo?.celular || clienteInfo?.telefono || '';
       const numeroLimpio = numeroCliente.replace(/\D/g, '');
-      url = `https://wa.me/${numeroLimpio}?text=${mensajeCodificado}`;
-    } else {
-      url = `https://wa.me/?text=${mensajeCodificado}`;
+      
+      let url;
+      
+      if (numeroLimpio && numeroLimpio.length >= 10) {
+        url = `https://wa.me/${numeroLimpio}?text=${mensajeCodificado}`;
+      } else {
+        url = `https://wa.me/?text=${mensajeCodificado}`;
+      }
+      
+      // 🔥 DETECTAR SI ES DISPOSITIVO MÓVIL
+      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|Opera Mini|IEMobile/i.test(navigator.userAgent);
+      
+      if (isMobile) {
+        // En móvil: intentar abrir la app de WhatsApp
+        const appUrl = `whatsapp://send?text=${mensajeCodificado}`;
+        
+        // Intentar abrir la app primero
+        const appWindow = window.open(appUrl, '_blank');
+        
+        // Si no se puede abrir la app, usar la web
+        setTimeout(() => {
+          if (!appWindow || appWindow.closed) {
+            window.location.href = url;
+          }
+        }, 500);
+      } else {
+        // En escritorio: abrir en nueva pestaña
+        window.open(url, '_blank');
+      }
+      
+      if (onShare) onShare('whatsapp');
+    } catch (error) {
+      console.error('Error al abrir WhatsApp:', error);
+      // Fallback: abrir la URL directamente
+      const mensaje = generarMensajeWhatsApp();
+      const mensajeCodificado = encodeURIComponent(mensaje);
+      window.open(`https://wa.me/?text=${mensajeCodificado}`, '_blank');
+    } finally {
+      setEnviando(false);
     }
-    
-    window.open(url, '_blank');
-    if (onShare) onShare('whatsapp');
   };
 
   return (
@@ -336,21 +368,36 @@ const WhatsAppShareButton = ({ pago, clienteInfo, onShare }) => {
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
       onClick={handleWhatsApp}
+      disabled={enviando}
       className={`relative overflow-hidden px-6 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 flex items-center space-x-2 w-full justify-center ${
+        enviando ? 'opacity-70 cursor-not-allowed' : ''
+      } ${
         theme === 'dark'
           ? 'bg-gradient-to-r from-green-600 to-green-700 text-white'
           : 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-green-500/30'
       }`}
     >
       <div className="absolute inset-0 bg-white opacity-0 hover:opacity-20 transition-opacity" />
-      <ShareIcon className="h-5 w-5" />
-      <span>Enviar por WhatsApp</span>
-      <motion.span
-        animate={{ x: isHovered ? 5 : 0 }}
-        className="text-xs opacity-70"
-      >
-        →
-      </motion.span>
+      {enviando ? (
+        <>
+          <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span>Abriendo WhatsApp...</span>
+        </>
+      ) : (
+        <>
+          <ShareIcon className="h-5 w-5" />
+          <span>Enviar por WhatsApp</span>
+          <motion.span
+            animate={{ x: isHovered ? 5 : 0 }}
+            className="text-xs opacity-70"
+          >
+            →
+          </motion.span>
+        </>
+      )}
     </motion.button>
   );
 };
@@ -544,7 +591,6 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
   const [clienteInfo, setClienteInfo] = useState(null);
   const [loadingCliente, setLoadingCliente] = useState(false);
 
-  // Cargar información del cliente
   useEffect(() => {
     const cargarCliente = async () => {
       if (!pago?.clienteID) return;
@@ -565,13 +611,11 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
     cargarCliente();
   }, [pago?.clienteID]);
 
-  // Formatear montos
   const formatearMonto = (valor) => {
     if (!valor && valor !== 0) return 'RD$ 0';
     return `RD$ ${valor.toLocaleString()}`;
   };
 
-  // Calcular distribución
   const montoTotal = pago.montoTotal || 0;
   const montoCapital = pago.montoCapital || 0;
   const montoInteres = pago.montoInteres || 0;
@@ -581,10 +625,7 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
   const porcentajeInteres = montoTotal > 0 ? (montoInteres / montoTotal) * 100 : 0;
   const porcentajeMora = montoTotal > 0 ? (montoMora / montoTotal) * 100 : 0;
 
-  // Reducción de capital
   const reduccionCapital = (pago.capitalAnterior || 0) - (pago.capitalNuevo || 0);
-
-  // Calcular eficiencia del pago
   const eficienciaPago = pago.capitalAnterior > 0 
     ? (reduccionCapital / pago.capitalAnterior) * 100 
     : 0;
@@ -621,17 +662,11 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
   const TipoPagoIcon = getTipoPagoIcon(pago.tipoPago);
   const tipoColor = getTipoPagoColor(pago.tipoPago);
 
-  // Tabs
   const tabs = [
     { id: 'info', label: 'Información', icon: InformationCircleIcon },
     { id: 'financiero', label: 'Financiero', icon: CurrencyDollarIcon },
     { id: 'impacto', label: 'Impacto', icon: ArrowTrendingUpIcon }
   ];
-
-  // Colores para modo claro/oscuro del header
-  const headerBg = theme === 'dark' 
-    ? 'bg-gray-800/80 border-gray-700/50' 
-    : 'bg-white/90 border-gray-200/80 shadow-gray-200/30';
 
   return (
     <div className="space-y-6">
@@ -745,7 +780,6 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
             transition={{ duration: 0.3 }}
             className="grid grid-cols-1 lg:grid-cols-3 gap-6"
           >
-            {/* Columna Principal */}
             <div className="lg:col-span-2 space-y-6">
               <GlassCard gradient="from-red-600 to-red-800">
                 <div className="p-4 sm:p-6">
@@ -803,7 +837,6 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
                 </div>
               </GlassCard>
 
-              {/* Resumen Rápido */}
               <GlassCard gradient="from-blue-600 to-indigo-800">
                 <div className="p-4 sm:p-6">
                   <h3 className={`text-lg font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
@@ -840,9 +873,7 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
               </GlassCard>
             </div>
 
-            {/* Sidebar - Cliente */}
             <div className="space-y-6">
-              {/* Información del Cliente */}
               {loadingCliente ? (
                 <div className={`p-8 text-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
                   <div className="animate-pulse">Cargando información del cliente...</div>
@@ -851,7 +882,6 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
                 <ClienteInfoCard clienteInfo={clienteInfo} />
               )}
 
-              {/* WhatsApp Share */}
               <div className="flex justify-center">
                 <WhatsAppShareButton pago={pago} clienteInfo={clienteInfo} />
               </div>
@@ -869,7 +899,6 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
             transition={{ duration: 0.3 }}
             className="grid grid-cols-1 lg:grid-cols-3 gap-6"
           >
-            {/* Stats Cards */}
             <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <StatCard
                 icon={BanknotesIcon}
@@ -903,7 +932,6 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
               )}
             </div>
 
-            {/* Detalle Financiero */}
             <GlassCard gradient="from-purple-600 to-pink-800">
               <div className="p-4 sm:p-6">
                 <h3 className={`text-lg font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
@@ -953,7 +981,6 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
             transition={{ duration: 0.3 }}
             className="grid grid-cols-1 lg:grid-cols-3 gap-6"
           >
-            {/* Impacto Principal */}
             <div className="lg:col-span-2 space-y-6">
               <GlassCard gradient="from-blue-600 to-cyan-800">
                 <div className="p-4 sm:p-6">
@@ -990,7 +1017,6 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
                 </div>
               </GlassCard>
 
-              {/* Métricas Adicionales */}
               <GlassCard gradient="from-indigo-600 to-purple-800">
                 <div className="p-4 sm:p-6">
                   <h3 className={`text-lg font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
@@ -1019,9 +1045,7 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
               </GlassCard>
             </div>
 
-            {/* Sidebar Impacto */}
             <div className="space-y-6">
-              {/* Eficiencia */}
               <GlassCard gradient="from-emerald-600 to-teal-800">
                 <div className="p-4 sm:p-6">
                   <h3 className={`text-lg font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
@@ -1043,7 +1067,6 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
                 </div>
               </GlassCard>
 
-              {/* Información del Préstamo */}
               <GlassCard gradient="from-cyan-600 to-blue-800">
                 <div className="p-4 sm:p-6">
                   <h3 className={`text-lg font-semibold mb-4 flex items-center ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
@@ -1067,7 +1090,6 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
                 </div>
               </GlassCard>
 
-              {/* Whatsapp Share en impacto */}
               <div className="flex justify-center">
                 <WhatsAppShareButton pago={pago} clienteInfo={clienteInfo} />
               </div>
@@ -1076,31 +1098,12 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
         )}
       </AnimatePresence>
 
-      {/* Estilos CSS para animaciones */}
       <style jsx>{`
         @keyframes scan {
-          0% {
-            transform: translateX(-100%);
-          }
-          100% {
-            transform: translateX(100%);
-          }
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
         }
-        .animate-scan {
-          animation: scan 3s ease-in-out infinite;
-        }
-        .animate-gradient-xy {
-          animation: gradient-xy 15s ease infinite;
-          background-size: 400% 400%;
-        }
-        @keyframes gradient-xy {
-          0%, 100% {
-            background-position: 0% 0%;
-          }
-          50% {
-            background-position: 100% 100%;
-          }
-        }
+        .animate-scan { animation: scan 3s ease-in-out infinite; }
       `}</style>
     </div>
   );

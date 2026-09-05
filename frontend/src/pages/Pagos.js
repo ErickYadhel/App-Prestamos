@@ -1,4 +1,3 @@
-// src/pages/Pagos.js
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -46,9 +45,6 @@ import RegistrarPagoModal from '../components/Pagos/RegistrarPagoModal';
 import DetallesPago from '../components/Pagos/DetallesPago';
 import { normalizeFirebaseData, firebaseTimestampToLocalString, firebaseTimestampToDate, toLocalDateString, formatFecha } from '../utils/firebaseUtils';
 
-// ============================================
-// IMPORTACIONES PARA GRÁFICOS
-// ============================================
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -708,15 +704,11 @@ const Pagos = () => {
   const [showStatsCards, setShowStatsCards] = useState(true);
   const [hoveredRow, setHoveredRow] = useState(null);
   const [viewDisplayMode, setViewDisplayMode] = useState('table');
+  const [graficoModo, setGraficoModo] = useState('interes');
   
-  // 🔥 NUEVO ESTADO PARA EL TIPO DE DATO DEL GRÁFICO
-  const [graficoModo, setGraficoModo] = useState('interes'); // 'interes' | 'capital'
-  
-  // Paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   
-  // Estado para ordenamiento de tabla
   const [sortConfig, setSortConfig] = useState({
     key: 'fechaPago',
     direction: 'desc'
@@ -733,7 +725,6 @@ const Pagos = () => {
     clienteID: ''
   });
   
-  // Estado para acciones rápidas
   const [accionRapidaActiva, setAccionRapidaActiva] = useState(null);
   
   const [stats, setStats] = useState({
@@ -745,14 +736,11 @@ const Pagos = () => {
     pagosEsteMes: 0
   });
 
-  // Estados adicionales
   const [totalComisiones, setTotalComisiones] = useState(0);
   const [pagosPorMes, setPagosPorMes] = useState([]);
   const [distribucionTipos, setDistribucionTipos] = useState({ normal: 0, adelantado: 0, mora: 0, abono: 0 });
   const [ultimasComisiones, setUltimasComisiones] = useState([]);
-  
-  // 🔥 NUEVO ESTADO PARA DISTRIBUCIÓN POR CLIENTE
-  const [distribucionClientes, setDistribucionClientes] = useState({ labels: [], data: [] });
+  const [distribucionClientes, setDistribucionClientes] = useState({ labels: [], dataInteres: [], dataCapital: [] });
   
   const [clienteMayorInteres, setClienteMayorInteres] = useState({ nombre: '', totalInteres: 0 });
   const [capitalPagado, setCapitalPagado] = useState(0);
@@ -768,7 +756,13 @@ const Pagos = () => {
   const [diasSinPagos, setDiasSinPagos] = useState(0);
   const [promedioDiario, setPromedioDiario] = useState(0);
 
-  // Detectar tamaño de pantalla y establecer vista predeterminada
+  // 🔥 NUEVO: Estado para controlar caché
+  const [cargaInicial, setCargaInicial] = useState(true);
+  const [cargaCompleta, setCargaCompleta] = useState(false);
+
+  // ============================================
+  // DETECCIÓN DE PANTALLA
+  // ============================================
   useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < 1024;
@@ -786,44 +780,74 @@ const Pagos = () => {
   }, []);
 
   // ============================================
-  // CARGA INICIAL - TODOS LOS DATOS JUNTOS
+  // 🔥 CARGA INICIAL - CON CACHÉ
   // ============================================
   useEffect(() => {
     const cargarDatosIniciales = async () => {
       try {
         setLoading(true);
-        setError('');
+        
+        // Verificar caché en localStorage
+        const cached = localStorage.getItem('pagosCache');
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            const edad = Date.now() - parsed.timestamp;
+            if (edad < 300000) { // 5 minutos
+              console.log('📦 [FRONTEND] Usando caché de localStorage');
+              
+              const pagosNormalizados = parsed.pagos || [];
+              const prestamosNormalizados = parsed.prestamos || [];
+              const clientesNormalizados = parsed.clientes || [];
+              
+              setPagos(pagosNormalizados);
+              setPrestamos(prestamosNormalizados.filter(p => p.estado === 'activo'));
+              setClientes(clientesNormalizados);
+              setTotalComisiones(parsed.totalComisiones || 0);
+              
+              calcularEstadisticasCompletas(pagosNormalizados);
+              procesarDatosGraficos(pagosNormalizados);
+              procesarDistribucionClientes(pagosNormalizados, prestamosNormalizados);
+              
+              setCargaInicial(false);
+              setCargaCompleta(true);
+              setLoading(false);
+              return;
+            }
+          } catch (e) {
+            console.log('⚠️ Error leyendo caché:', e);
+          }
+        }
+        
+        console.log('🔄 [FRONTEND] Cargando datos frescos...');
         
         const [pagosRes, prestamosRes, comisionesRes, clientesRes] = await Promise.all([
-          api.get('/pagos?limit=9999'),
+          api.get('/pagos?limit=9999&forceRefresh=false'),
           api.get('/prestamos'),
           api.get('/comisiones').catch(() => ({ success: false, data: [] })),
           api.get('/clientes').catch(() => ({ success: false, data: [] }))
         ]);
         
-        // Procesar clientes
         const clientesNormalizados = (clientesRes.data || []).map(cliente =>
           normalizeFirebaseData(cliente)
         );
         setClientes(clientesNormalizados);
         
-        // Procesar préstamos
         const prestamosNormalizados = (prestamosRes.data || []).map(prestamo =>
           normalizeFirebaseData(prestamo)
         );
         setPrestamos(prestamosNormalizados.filter(p => p.estado === 'activo'));
         
-        // Procesar pagos
         const pagosNormalizados = (pagosRes.data || []).map(pago =>
           normalizeFirebaseData(pago)
         );
         setPagos(pagosNormalizados);
         
-        // Procesar comisiones
+        let totalCom = 0;
         if (comisionesRes.success) {
           const comisiones = comisionesRes.data || [];
-          const total = comisiones.reduce((sum, com) => sum + (com.montoComision || 0), 0);
-          setTotalComisiones(total);
+          totalCom = comisiones.reduce((sum, com) => sum + (com.montoComision || 0), 0);
+          setTotalComisiones(totalCom);
           const ultimas = [...comisiones].sort((a,b) => {
             const fechaA = firebaseTimestampToDate(a.fechaPago);
             const fechaB = firebaseTimestampToDate(b.fechaPago);
@@ -832,11 +856,21 @@ const Pagos = () => {
           setUltimasComisiones(ultimas);
         }
         
-        // Calcular estadísticas
+        try {
+          localStorage.setItem('pagosCache', JSON.stringify({
+            pagos: pagosNormalizados,
+            prestamos: prestamosNormalizados,
+            clientes: clientesNormalizados,
+            totalComisiones: totalCom,
+            timestamp: Date.now()
+          }));
+          console.log('💾 [FRONTEND] Datos guardados en caché local');
+        } catch (e) {
+          console.log('⚠️ Error guardando caché:', e);
+        }
+        
         calcularEstadisticasCompletas(pagosNormalizados);
         procesarDatosGraficos(pagosNormalizados);
-        
-        // 🔥 PROCESAR DISTRIBUCIÓN POR CLIENTE
         procesarDistribucionClientes(pagosNormalizados, prestamosNormalizados);
         
       } catch (error) {
@@ -847,6 +881,8 @@ const Pagos = () => {
         setClientes([]);
       } finally {
         setLoading(false);
+        setCargaInicial(false);
+        setCargaCompleta(true);
       }
     };
     
@@ -854,71 +890,171 @@ const Pagos = () => {
   }, []);
 
   // ============================================
-  // 🔥 PROCESAR DISTRIBUCIÓN POR CLIENTE (TODOS CON PRÉSTAMOS ACTIVOS)
+  // 🔥 ACTUALIZAR DATOS (FORZADO)
   // ============================================
-  const procesarDistribucionClientes = (pagosData, prestamosData) => {
-    // Obtener IDs de clientes con préstamos activos
-    const clientesActivosIds = new Set();
-    prestamosData.forEach(p => {
-      if (p.estado === 'activo' && p.clienteID) {
-        clientesActivosIds.add(p.clienteID);
+  const fetchPagos = async (forceRefresh = true) => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      const response = await api.get(`/pagos?limit=9999&forceRefresh=${forceRefresh ? 'true' : 'false'}`);
+      if (response.success) {
+        const pagosNormalizados = (response.data || []).map(pago =>
+          normalizeFirebaseData(pago)
+        );
+        setPagos(pagosNormalizados);
+        
+        try {
+          const cached = localStorage.getItem('pagosCache');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            localStorage.setItem('pagosCache', JSON.stringify({
+              ...parsed,
+              pagos: pagosNormalizados,
+              timestamp: Date.now()
+            }));
+          }
+        } catch (e) {}
+        
+        calcularEstadisticasCompletas(pagosNormalizados);
+        procesarDatosGraficos(pagosNormalizados);
+        procesarDistribucionClientes(pagosNormalizados, prestamos);
       }
-    });
-
-    // Si no hay clientes activos, mostrar ejemplo
-    if (clientesActivosIds.size === 0) {
-      setDistribucionClientes({ labels: ['Sin clientes activos'], data: [1] });
-      return;
+    } catch (error) {
+      console.error('Error fetching payments:', error);
+      setError('Error al cargar los pagos');
+    } finally {
+      setLoading(false);
     }
+  };
 
-    // Acumular pagos por cliente (solo clientes con préstamos activos)
-    const clientesMap = {};
-    pagosData.forEach(pago => {
-      const clienteId = pago.clienteID;
-      // Solo procesar si el cliente tiene préstamo activo
-      if (!clientesActivosIds.has(clienteId)) return;
-      
-      // Obtener nombre del cliente
-      let nombreCliente = pago.clienteNombre || pago.cliente || clienteId;
-      if ((!pago.clienteNombre && !pago.cliente) && clienteId) {
-        const clienteEncontrado = clientes.find(c => c.id === clienteId);
-        if (clienteEncontrado) {
-          nombreCliente = clienteEncontrado.nombre || clienteEncontrado.clienteNombre || clienteId;
-        }
+  const fetchPrestamosActivos = async () => {
+    try {
+      const response = await api.get('/prestamos');
+      if (response.success) {
+        const prestamosNormalizados = (response.data || []).map(prestamo =>
+          normalizeFirebaseData(prestamo)
+        );
+        setPrestamos(prestamosNormalizados.filter(p => p.estado === 'activo'));
       }
-      
-      if (!clientesMap[nombreCliente]) {
-        clientesMap[nombreCliente] = { interes: 0, capital: 0, total: 0 };
-      }
-      
-      const montoCapital = pago.montoCapital ?? pago.capital ?? pago.distribucion?.capital ?? 0;
-      const montoInteres = pago.montoInteres ?? pago.interes ?? pago.distribucion?.interes ?? 0;
-      
-      clientesMap[nombreCliente].interes += montoInteres;
-      clientesMap[nombreCliente].capital += montoCapital;
-      clientesMap[nombreCliente].total += montoCapital + montoInteres;
-    });
-
-    // Convertir a arrays para el gráfico
-    const labels = Object.keys(clientesMap);
-    const dataInteres = labels.map(name => clientesMap[name].interes);
-    const dataCapital = labels.map(name => clientesMap[name].capital);
-    
-    // Si no hay datos, mostrar mensaje
-    if (labels.length === 0) {
-      setDistribucionClientes({ labels: ['Sin pagos'], data: [1] });
-      return;
+    } catch (error) {
+      console.error('Error fetching loans:', error);
     }
+  };
 
-    setDistribucionClientes({ 
-      labels, 
-      dataInteres, 
-      dataCapital 
-    });
+  const fetchClientes = async () => {
+    try {
+      const response = await api.get('/clientes');
+      if (response.success) {
+        const clientesNormalizados = (response.data || []).map(cliente =>
+          normalizeFirebaseData(cliente)
+        );
+        setClientes(clientesNormalizados);
+      }
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+    }
   };
 
   // ============================================
-  // CALCULAR ESTADÍSTICAS COMPLETAS
+  // 🔥 ACTUALIZAR TODOS LOS DATOS COMPLETOS
+  // ============================================
+  const actualizarDatosCompletos = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      // Forzar actualización de todos los datos
+      await Promise.all([
+        fetchPagos(true),
+        fetchPrestamosActivos(),
+        fetchClientes()
+      ]);
+      
+      setSuccess('✅ Datos actualizados correctamente');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      console.error('Error actualizando datos:', error);
+      setError('❌ Error al actualizar los datos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ============================================
+  // FORMATO DE MONTO
+  // ============================================
+  const formatMontoAbreviado = (valor) => {
+    if (!valor && valor !== 0) return 'RD$ 0';
+    if (valor >= 1000000) return `RD$ ${(valor / 1000000).toFixed(1)}M`;
+    if (valor >= 1000) return `RD$ ${(valor / 1000).toFixed(1)}K`;
+    return `RD$ ${valor.toLocaleString()}`;
+  };
+
+  const formatMontoExacto = (valor) => {
+    if (!valor && valor !== 0) return 'RD$ 0';
+    return `RD$ ${valor.toLocaleString()}`;
+  };
+
+  // ============================================
+  // FUNCIONES DE ORDENAMIENTO
+  // ============================================
+  const requestSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) {
+      return <ArrowsUpDownIcon className="h-3 w-3 inline ml-1" />;
+    }
+    return sortConfig.direction === 'asc' 
+      ? <ArrowUpIcon className="h-3 w-3 inline ml-1" />
+      : <ArrowDownIcon className="h-3 w-3 inline ml-1" />;
+  };
+
+  // ============================================
+  // FUNCIONES PARA ACCIONES RÁPIDAS
+  // ============================================
+  const handleAccionRapida = (tipo) => {
+    if (accionRapidaActiva === tipo) {
+      setAccionRapidaActiva(null);
+      setFiltroEstado('todos');
+      setSearchTerm('');
+      setFiltros({ ...filtros, rangoMonto: 'todos', montoMin: '', montoMax: '' });
+      fetchPagos();
+      return;
+    }
+    
+    setAccionRapidaActiva(tipo);
+    setFiltroEstado('todos');
+    setSearchTerm('');
+    setFiltros({ ...filtros, rangoMonto: 'todos', montoMin: '', montoMax: '' });
+    
+    if (tipo === 'todos') {
+      // Ya está limpio
+    } else if (tipo === 'normal') {
+      setFiltroEstado('normal');
+    } else if (tipo === 'adelantado') {
+      setFiltroEstado('adelantado');
+    } else if (tipo === 'mora') {
+      setFiltroEstado('mora');
+    } else if (tipo === 'abono') {
+      setFiltroEstado('abono');
+    } else if (tipo === '50k-100k') {
+      setFiltros({ ...filtros, rangoMonto: '50000-100000' });
+    } else if (tipo === '30k-50k') {
+      setFiltros({ ...filtros, rangoMonto: '30000-50000' });
+    }
+    
+    setTimeout(() => fetchPagos(), 50);
+  };
+
+  // ============================================
+  // FUNCIONES DE CÁLCULO
   // ============================================
   const calcularEstadisticasCompletas = (pagosData) => {
     if (!pagosData || pagosData.length === 0) {
@@ -1068,9 +1204,6 @@ const Pagos = () => {
     });
   };
 
-  // ============================================
-  // PROCESAR DATOS PARA GRÁFICOS
-  // ============================================
   const procesarDatosGraficos = (pagosData) => {
     const meses = {};
     const tipos = { normal: 0, adelantado: 0, mora: 0, abono: 0 };
@@ -1111,136 +1244,54 @@ const Pagos = () => {
     setDistribucionTipos(tipos);
   };
 
-  // ============================================
-  // FUNCIONES DE CARGA
-  // ============================================
-  const fetchPagos = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      
-      const response = await api.get('/pagos?limit=9999');
-      if (response.success) {
-        const pagosNormalizados = (response.data || []).map(pago =>
-          normalizeFirebaseData(pago)
-        );
-        setPagos(pagosNormalizados);
-        calcularEstadisticasCompletas(pagosNormalizados);
-        procesarDatosGraficos(pagosNormalizados);
-        procesarDistribucionClientes(pagosNormalizados, prestamos);
+  const procesarDistribucionClientes = (pagosData, prestamosData) => {
+    const clientesActivosIds = new Set();
+    prestamosData.forEach(p => {
+      if (p.estado === 'activo' && p.clienteID) {
+        clientesActivosIds.add(p.clienteID);
       }
-    } catch (error) {
-      console.error('Error fetching payments:', error);
-      setError('Error al cargar los pagos');
-      setPagos([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    });
 
-  const fetchPrestamosActivos = async () => {
-    try {
-      const response = await api.get('/prestamos');
-      if (response.success) {
-        const prestamosNormalizados = (response.data || []).map(prestamo =>
-          normalizeFirebaseData(prestamo)
-        );
-        setPrestamos(prestamosNormalizados.filter(p => p.estado === 'activo'));
-      }
-    } catch (error) {
-      console.error('Error fetching loans:', error);
-      setPrestamos([]);
-    }
-  };
-
-  const fetchClientes = async () => {
-    try {
-      const response = await api.get('/clientes');
-      if (response.success) {
-        const clientesNormalizados = (response.data || []).map(cliente =>
-          normalizeFirebaseData(cliente)
-        );
-        setClientes(clientesNormalizados);
-      }
-    } catch (error) {
-      console.error('Error fetching clients:', error);
-      setClientes([]);
-    }
-  };
-
-  // ============================================
-  // FORMATO DE MONTO PARA STATS CARDS (ABREVIADO)
-  // ============================================
-  const formatMontoAbreviado = (valor) => {
-    if (!valor && valor !== 0) return 'RD$ 0';
-    if (valor >= 1000000) return `RD$ ${(valor / 1000000).toFixed(1)}M`;
-    if (valor >= 1000) return `RD$ ${(valor / 1000).toFixed(1)}K`;
-    return `RD$ ${valor.toLocaleString()}`;
-  };
-
-  // ============================================
-  // FORMATO DE MONTO PARA RESUMEN EJECUTIVO (EXACTO)
-  // ============================================
-  const formatMontoExacto = (valor) => {
-    if (!valor && valor !== 0) return 'RD$ 0';
-    return `RD$ ${valor.toLocaleString()}`;
-  };
-
-  // ============================================
-  // FUNCIÓN DE ORDENAMIENTO
-  // ============================================
-  const requestSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
-  };
-
-  const getSortIcon = (key) => {
-    if (sortConfig.key !== key) {
-      return <ArrowsUpDownIcon className="h-3 w-3 inline ml-1" />;
-    }
-    return sortConfig.direction === 'asc' 
-      ? <ArrowUpIcon className="h-3 w-3 inline ml-1" />
-      : <ArrowDownIcon className="h-3 w-3 inline ml-1" />;
-  };
-
-  // ============================================
-  // FUNCIONES PARA ACCIONES RÁPIDAS
-  // ============================================
-  const handleAccionRapida = (tipo) => {
-    if (accionRapidaActiva === tipo) {
-      setAccionRapidaActiva(null);
-      setFiltroEstado('todos');
-      setSearchTerm('');
-      setFiltros({ ...filtros, rangoMonto: 'todos', montoMin: '', montoMax: '' });
-      fetchPagos();
+    if (clientesActivosIds.size === 0) {
+      setDistribucionClientes({ labels: ['Sin clientes activos'], dataInteres: [1], dataCapital: [1] });
       return;
     }
+
+    const clientesMap = {};
+    pagosData.forEach(pago => {
+      const clienteId = pago.clienteID;
+      if (!clientesActivosIds.has(clienteId)) return;
+      
+      let nombreCliente = pago.clienteNombre || pago.cliente || clienteId;
+      if ((!pago.clienteNombre && !pago.cliente) && clienteId) {
+        const clienteEncontrado = clientes.find(c => c.id === clienteId);
+        if (clienteEncontrado) {
+          nombreCliente = clienteEncontrado.nombre || clienteEncontrado.clienteNombre || clienteId;
+        }
+      }
+      
+      if (!clientesMap[nombreCliente]) {
+        clientesMap[nombreCliente] = { interes: 0, capital: 0, total: 0 };
+      }
+      
+      const montoCapital = pago.montoCapital ?? pago.capital ?? pago.distribucion?.capital ?? 0;
+      const montoInteres = pago.montoInteres ?? pago.interes ?? pago.distribucion?.interes ?? 0;
+      
+      clientesMap[nombreCliente].interes += montoInteres;
+      clientesMap[nombreCliente].capital += montoCapital;
+      clientesMap[nombreCliente].total += montoCapital + montoInteres;
+    });
+
+    const labels = Object.keys(clientesMap);
+    const dataInteres = labels.map(name => clientesMap[name].interes);
+    const dataCapital = labels.map(name => clientesMap[name].capital);
     
-    setAccionRapidaActiva(tipo);
-    setFiltroEstado('todos');
-    setSearchTerm('');
-    setFiltros({ ...filtros, rangoMonto: 'todos', montoMin: '', montoMax: '' });
-    
-    if (tipo === 'todos') {
-      // Ya está limpio
-    } else if (tipo === 'normal') {
-      setFiltroEstado('normal');
-    } else if (tipo === 'adelantado') {
-      setFiltroEstado('adelantado');
-    } else if (tipo === 'mora') {
-      setFiltroEstado('mora');
-    } else if (tipo === 'abono') {
-      setFiltroEstado('abono');
-    } else if (tipo === '50k-100k') {
-      setFiltros({ ...filtros, rangoMonto: '50000-100000' });
-    } else if (tipo === '30k-50k') {
-      setFiltros({ ...filtros, rangoMonto: '30000-50000' });
+    if (labels.length === 0) {
+      setDistribucionClientes({ labels: ['Sin pagos'], dataInteres: [1], dataCapital: [1] });
+      return;
     }
-    
-    setTimeout(() => fetchPagos(), 50);
+
+    setDistribucionClientes({ labels, dataInteres, dataCapital });
   };
 
   // ============================================
@@ -1385,7 +1436,7 @@ const Pagos = () => {
       currentPage: currentPage,
       itemsPerPage: itemsPerPage
     };
-  }, [pagos, searchTerm, filtroEstado, filtros, sortConfig, currentPage, itemsPerPage]);
+  }, [pagos, searchTerm, filtroEstado, filtros, sortConfig, currentPage, itemsPerPage, clientes]);
 
   const handleRegistrarPago = () => {
     if (prestamos.length === 0) {
@@ -1399,7 +1450,7 @@ const Pagos = () => {
     setShowModal(false);
     setSuccess('Pago registrado exitosamente');
     setTimeout(() => setSuccess(''), 3000);
-    fetchPagos();
+    fetchPagos(true);
     fetchPrestamosActivos();
     window.dispatchEvent(new CustomEvent('datos-actualizados'));
   };
@@ -1494,7 +1545,7 @@ const Pagos = () => {
   };
 
   // ============================================
-  // 🔥 GRÁFICO DE EVOLUCIÓN DE PAGOS
+  // GRÁFICOS
   // ============================================
   const lineChartData = {
     labels: pagosPorMes.map(p => p.mes),
@@ -1530,9 +1581,6 @@ const Pagos = () => {
     ]
   };
 
-  // ============================================
-  // 🔥 GRÁFICO DE DISTRIBUCIÓN POR CLIENTE (NUEVO)
-  // ============================================
   const doughnutClientesData = {
     labels: distribucionClientes.labels || ['Sin datos'],
     datasets: [{
@@ -1576,38 +1624,8 @@ const Pagos = () => {
   };
 
   // ============================================
-  // GRÁFICO DE TIPO DE PAGO (ANTIGUO)
+  // RENDER
   // ============================================
-  const doughnutData = {
-    labels: ['Normal', 'Adelantado', 'Mora', 'Abono'],
-    datasets: [{
-      data: [distribucionTipos.normal, distribucionTipos.adelantado, distribucionTipos.mora, distribucionTipos.abono],
-      backgroundColor: ['#10b981', '#3b82f6', '#ef4444', '#8b5cf6'],
-      borderColor: 'transparent',
-      borderWidth: 2,
-      hoverOffset: 8
-    }]
-  };
-
-  const chartOptionsTipo = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'bottom',
-        labels: {
-          color: theme === 'dark' ? '#9ca3af' : '#4b5563',
-          font: { size: 11 }
-        }
-      },
-      tooltip: {
-        callbacks: {
-          label: (ctx) => `${ctx.label}: ${ctx.raw} pagos`
-        }
-      }
-    }
-  };
-
   if (viewMode === 'details' && selectedPago) {
     return (
       <DetallesPago
@@ -1651,7 +1669,6 @@ const Pagos = () => {
             </div>
             
             <div className="flex items-center space-x-2 w-full sm:w-auto">
-              {/* Toggle de vista */}
               <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
                 <button
                   onClick={() => setViewDisplayMode('cards')}
@@ -1706,7 +1723,7 @@ const Pagos = () => {
               </button>
 
               <button
-                onClick={fetchPagos}
+                onClick={() => fetchPagos(true)}
                 className={`p-3 rounded-lg transition-all ${
                   theme === 'dark'
                     ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
@@ -2117,7 +2134,7 @@ const Pagos = () => {
         </div>
       </GlassCard>
 
-      {/* Lista de pagos - Vista responsiva */}
+      {/* Lista de pagos */}
       {mostrarVistaTabla ? (
         <GlassCard>
           <PagosTable

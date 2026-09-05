@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../../context/ThemeContext';
@@ -60,7 +60,6 @@ import {
 } from 'chart.js';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 
-// Registrar componentes de Chart.js
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -953,16 +952,13 @@ const Comisiones = () => {
   const [garantes, setGarantes] = useState([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   
-  // 🔥 VISTA: Por defecto en PC = tabla, en móvil = tarjetas
   const [viewMode, setViewMode] = useState('table');
   
-  // Estado para ordenamiento
   const [sortConfig, setSortConfig] = useState({
     key: 'fechaPago',
     direction: 'desc'
   });
   
-  // Estado para acciones rápidas (evita acumulación)
   const [accionRapidaActiva, setAccionRapidaActiva] = useState(null);
   
   const [estadisticas, setEstadisticas] = useState({
@@ -975,15 +971,17 @@ const Comisiones = () => {
     montoPendiente: 0
   });
 
+  // 🔥 CACHÉ EN FRONTEND
+  const [cargaInicial, setCargaInicial] = useState(true);
+  const yaCargado = useRef(false);
+
   const esGarante = user?.rol === 'garante' || user?.rol === 'agente';
   const esAdmin = user?.rol === 'admin';
 
-  // Detectar tamaño de pantalla y establecer vista predeterminada
   useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < 1024;
       setIsMobile(mobile);
-      // Si es móvil, cambiar a tarjetas; si es PC, cambiar a tabla
       if (mobile) {
         setViewMode('cards');
       } else {
@@ -991,14 +989,11 @@ const Comisiones = () => {
       }
     };
     
-    // Ejecutar al montar
     handleResize();
-    
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Leer garanteID de la URL
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
     const garanteIdFromUrl = queryParams.get('garanteID');
@@ -1018,10 +1013,39 @@ const Comisiones = () => {
     }
   };
 
-  const cargarComisiones = async () => {
+  // ============================================
+  // 🔥 CARGAR COMISIONES CON CACHÉ
+  // ============================================
+  const cargarComisiones = async (forceRefresh = false) => {
     try {
       setLoading(true);
       setError('');
+      
+      // Verificar caché en localStorage
+      if (!forceRefresh) {
+        const cached = localStorage.getItem('comisionesCache');
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            const edad = Date.now() - parsed.timestamp;
+            if (edad < 300000) { // 5 minutos
+              console.log('📦 [CACHE] Usando caché de comisiones');
+              setComisiones(parsed.comisiones || []);
+              setEstadisticas(parsed.estadisticas || {
+                total: 0, pagadas: 0, pendientes: 0, canceladas: 0,
+                montoTotal: 0, montoPagado: 0, montoPendiente: 0
+              });
+              setCargaInicial(false);
+              setLoading(false);
+              return;
+            }
+          } catch (e) {
+            console.log('⚠️ Error leyendo caché de comisiones:', e);
+          }
+        }
+      }
+      
+      console.log('🔄 [CACHE] Cargando comisiones frescas...');
       
       let url = '/comisiones';
       const params = new URLSearchParams();
@@ -1065,6 +1089,18 @@ const Comisiones = () => {
         };
         
         setEstadisticas(stats);
+        
+        // Guardar en caché
+        try {
+          localStorage.setItem('comisionesCache', JSON.stringify({
+            comisiones: comisionesData,
+            estadisticas: stats,
+            timestamp: Date.now()
+          }));
+          console.log('💾 [CACHE] Comisiones guardadas en caché');
+        } catch (e) {
+          console.log('⚠️ Error guardando caché de comisiones:', e);
+        }
       } else {
         throw new Error(response.error || 'Error al cargar comisiones');
       }
@@ -1073,16 +1109,20 @@ const Comisiones = () => {
       setError(error.message || 'Error al cargar las comisiones');
     } finally {
       setLoading(false);
+      setCargaInicial(false);
     }
   };
 
   useEffect(() => {
+    if (yaCargado.current) return;
     cargarGarantes();
     cargarComisiones();
-  }, [filtroGarante]);
+    yaCargado.current = true;
+  }, []);
 
+  // Recargar cuando cambian filtros (excepto la primera vez)
   const aplicarFiltros = () => {
-    cargarComisiones();
+    cargarComisiones(true);
   };
 
   const limpiarFiltros = () => {
@@ -1094,12 +1134,9 @@ const Comisiones = () => {
     setMontoMin('');
     setMontoMax('');
     setAccionRapidaActiva(null);
-    cargarComisiones();
+    cargarComisiones(true);
   };
 
-  // ============================================
-  // FORMATO DE MONTO PARA STATS CARDS (ABREVIADO)
-  // ============================================
   const formatMontoAbreviado = (valor) => {
     if (!valor && valor !== 0) return 'RD$ 0';
     if (valor >= 1000000) return `RD$ ${(valor / 1000000).toFixed(1)}M`;
@@ -1107,17 +1144,11 @@ const Comisiones = () => {
     return `RD$ ${valor.toLocaleString()}`;
   };
 
-  // ============================================
-  // FORMATO DE MONTO PARA RESUMEN EJECUTIVO (EXACTO)
-  // ============================================
   const formatMontoExacto = (valor) => {
     if (!valor && valor !== 0) return 'RD$ 0';
     return `RD$ ${valor.toLocaleString()}`;
   };
 
-  // ============================================
-  // FUNCIÓN DE ORDENAMIENTO
-  // ============================================
   const requestSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -1135,30 +1166,23 @@ const Comisiones = () => {
       : <ArrowDownIcon className="h-3 w-3 inline ml-1" />;
   };
 
-  // ============================================
-  // FILTROS Y ORDENAMIENTO
-  // ============================================
   const filteredAndSortedComisiones = useMemo(() => {
     let result = [...comisiones];
 
-    // Búsqueda por cliente
     if (filtroCliente) {
       result = result.filter(c => 
         c.clienteNombre?.toLowerCase().includes(filtroCliente.toLowerCase())
       );
     }
 
-    // Filtro por estado
     if (filtroEstado !== 'todos') {
       result = result.filter(c => c.estado === filtroEstado);
     }
 
-    // Filtro por garante
     if (filtroGarante) {
       result = result.filter(c => c.garanteID === filtroGarante);
     }
 
-    // Filtro por fecha
     if (fechaInicio) {
       const fechaInicioObj = new Date(fechaInicio);
       result = result.filter(c => {
@@ -1175,7 +1199,6 @@ const Comisiones = () => {
       });
     }
 
-    // Filtro por monto
     if (montoMin) {
       result = result.filter(c => (c.montoComision || 0) >= parseFloat(montoMin));
     }
@@ -1183,7 +1206,6 @@ const Comisiones = () => {
       result = result.filter(c => (c.montoComision || 0) <= parseFloat(montoMax));
     }
 
-    // ORDENAMIENTO
     result.sort((a, b) => {
       let aVal, bVal;
       
@@ -1223,9 +1245,6 @@ const Comisiones = () => {
     return result;
   }, [comisiones, filtroCliente, filtroEstado, filtroGarante, fechaInicio, fechaFin, montoMin, montoMax, sortConfig]);
 
-  // ============================================
-  // CALCULAR ESTADÍSTICAS ADICIONALES
-  // ============================================
   const statsAdicionales = useMemo(() => {
     if (comisiones.length === 0) {
       return {
@@ -1272,11 +1291,7 @@ const Comisiones = () => {
     };
   }, [comisiones]);
 
-  // ============================================
-  // FUNCIONES PARA ACCIONES RÁPIDAS (CON LIMPIEZA)
-  // ============================================
   const handleAccionRapida = (tipo, valor) => {
-    // Si la misma acción está activa, la desactivamos (toggle)
     if (accionRapidaActiva === tipo) {
       setAccionRapidaActiva(null);
       limpiarFiltros();
@@ -1285,7 +1300,6 @@ const Comisiones = () => {
     
     setAccionRapidaActiva(tipo);
     
-    // Limpiar filtros anteriores
     setFiltroEstado('todos');
     setFiltroCliente('');
     setFechaInicio('');
@@ -1293,7 +1307,6 @@ const Comisiones = () => {
     setMontoMin('');
     setMontoMax('');
     
-    // Aplicar el nuevo filtro
     if (tipo === 'todos') {
       // Ya está limpio
     } else if (tipo === 'pagadas') {
@@ -1311,8 +1324,7 @@ const Comisiones = () => {
       setFechaFin(hoy.toISOString().split('T')[0]);
     }
     
-    // Aplicar filtros después de un breve delay para que los estados se actualicen
-    setTimeout(() => cargarComisiones(), 50);
+    setTimeout(() => cargarComisiones(true), 50);
   };
 
   const formatearMonto = (valor) => {
@@ -1322,7 +1334,11 @@ const Comisiones = () => {
     }).format(valor || 0);
   };
 
-  // Determinar qué vista mostrar
+  // 🔥 FUNCIÓN PARA ACTUALIZAR DATOS MANUALMENTE
+  const actualizarDatos = () => {
+    cargarComisiones(true);
+  };
+
   const mostrarVistaTabla = viewMode === 'table';
 
   return (
@@ -1346,7 +1362,6 @@ const Comisiones = () => {
         </div>
 
         <div className="flex items-center space-x-2 flex-wrap gap-2">
-          {/* Toggle de vista - SIEMPRE VISIBLE */}
           <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
             <button
               onClick={() => setViewMode('cards')}
@@ -1382,7 +1397,7 @@ const Comisiones = () => {
             <ArrowTopRightOnSquareIcon className="h-4 w-4" />
           </button>
           <button
-            onClick={cargarComisiones}
+            onClick={actualizarDatos}
             className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
             title="Actualizar"
           >
@@ -1406,16 +1421,13 @@ const Comisiones = () => {
         )}
       </AnimatePresence>
 
-      {/* ============================================ */}
-      {/* 🔥 STATS CARDS CON OPCION DE OCULTAR/MOSTRAR */}
-      {/* ============================================ */}
+      {/* Stats Cards */}
       <StatsCardsContainer 
         title={esGarante ? "Resumen de Mis Comisiones" : "Métricas de Comisiones"}
         icon={ChartBarIcon}
         isOpen={showStatsCards}
         onToggle={() => setShowStatsCards(!showStatsCards)}
       >
-        {/* Fila 1 - Métricas Principales */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 mb-3 sm:mb-4">
           <StatCard
             icon={CurrencyDollarIcon}
@@ -1459,7 +1471,6 @@ const Comisiones = () => {
           />
         </div>
 
-        {/* Fila 2 - Métricas Adicionales */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
           <StatCard
             icon={FireIcon}
@@ -1656,7 +1667,7 @@ const Comisiones = () => {
         </div>
       </GlassCard>
 
-      {/* Acciones rápidas - CORREGIDAS CON LIMPIEZA */}
+      {/* Acciones rápidas */}
       <GlassCard>
         <div className="p-3 sm:p-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -1739,7 +1750,7 @@ const Comisiones = () => {
         </div>
       </GlassCard>
 
-      {/* Lista de comisiones - Vista responsiva */}
+      {/* Lista de comisiones */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6].map(i => (
@@ -1761,7 +1772,6 @@ const Comisiones = () => {
           )}
         </div>
       ) : mostrarVistaTabla ? (
-        // Vista de tabla
         <GlassCard>
           <ComisionesTable
             comisiones={filteredAndSortedComisiones}
@@ -1776,7 +1786,6 @@ const Comisiones = () => {
           />
         </GlassCard>
       ) : (
-        // Vista de tarjetas
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredAndSortedComisiones.map((comision) => (
             <ComisionCard
@@ -1791,7 +1800,7 @@ const Comisiones = () => {
         </div>
       )}
 
-      {/* Resumen Ejecutivo - CON NÚMEROS EXACTOS */}
+      {/* Resumen Ejecutivo */}
       {filteredAndSortedComisiones.length > 0 && (
         <GlassCard>
           <div className="p-4 sm:p-6">

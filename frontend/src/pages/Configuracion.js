@@ -698,38 +698,6 @@ const Configuracion = () => {
         </div>
       </motion.div>
 
-      {/* Estadísticas rápidas */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-        <ConfigStatCard
-          icon={DocumentTextIcon}
-          label="Secciones"
-          value={configStats.totalSecciones}
-          color="blue"
-          description="Módulos disponibles"
-        />
-        <ConfigStatCard
-          icon={CheckCircleIcon}
-          label="Configurado"
-          value={`${configStats.configurada} campos`}
-          color="green"
-          description="Datos completos"
-        />
-        <ConfigStatCard
-          icon={ClockIcon}
-          label="Estado"
-          value={hasChanges() ? 'Pendiente' : 'Actualizado'}
-          color={hasChanges() ? 'yellow' : 'green'}
-          description={hasChanges() ? 'Hay cambios sin guardar' : 'Todo al día'}
-        />
-        <ConfigStatCard
-          icon={RocketLaunchIcon}
-          label="Versión"
-          value={getVersionFormatted()}
-          color="purple"
-          description="Sistema estable"
-        />
-      </div>
-
       {/* Mensajes de éxito/error */}
       <AnimatePresence>
         {error && (

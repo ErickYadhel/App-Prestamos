@@ -19,20 +19,14 @@ export const AccessControlProvider = ({ children }) => {
   const [motivoBloqueo, setMotivoBloqueo] = useState(null);
   const [reglaBloqueo, setReglaBloqueo] = useState(null);
   const [verificando, setVerificando] = useState(true);
-  
-  // 👈 REF PARA CONTROLAR QUE SOLO SE VERIFIQUE UNA VEZ
   const yaVerificado = useRef(false);
 
-  const verificarAcceso = async () => {
-    // Si ya se verificó, no hacer nada
-    if (yaVerificado.current) {
-      console.log('⏭️ [FRONTEND] Ya verificado, saltando...');
+  const verificarAcceso = async (forzado = false) => {
+    if (!forzado && yaVerificado.current) {
       return;
     }
 
-    // Si no hay usuario, acceso permitido
     if (!user) {
-      console.log('🔓 [FRONTEND] Sin usuario - Acceso permitido');
       setAccesoPermitido(true);
       setVerificando(false);
       yaVerificado.current = true;
@@ -42,14 +36,10 @@ export const AccessControlProvider = ({ children }) => {
     try {
       setVerificando(true);
       
-      console.log('👤 [FRONTEND] Usuario:', user.email || 'Sin email');
-      console.log('🔒 [FRONTEND] Verificando acceso al sistema...');
-      
       const auth = getAuth();
       const firebaseUser = auth.currentUser;
       
       if (!firebaseUser) {
-        console.log('⚠️ [FRONTEND] No hay usuario autenticado en Firebase Auth');
         setAccesoPermitido(true);
         setVerificando(false);
         yaVerificado.current = true;
@@ -57,7 +47,6 @@ export const AccessControlProvider = ({ children }) => {
       }
       
       const token = await firebaseUser.getIdToken();
-      console.log('🔑 [FRONTEND] Token obtenido correctamente');
       
       const response = await api.get('/auth/check-access', {
         headers: {
@@ -65,25 +54,20 @@ export const AccessControlProvider = ({ children }) => {
         }
       });
 
-      console.log('📋 [FRONTEND] Respuesta:', response);
-      
       if (response && response.permitido === false) {
-        console.log('⛔ [FRONTEND] Acceso denegado:', response.mensaje);
         setAccesoPermitido(false);
         setMotivoBloqueo(response.mensaje);
         setReglaBloqueo(response.regla || 'Desconocida');
       } else {
-        console.log('✅ [FRONTEND] Acceso permitido');
         setAccesoPermitido(true);
         setMotivoBloqueo(null);
         setReglaBloqueo(null);
       }
       
-      // 👈 MARCAR COMO VERIFICADO
       yaVerificado.current = true;
       
     } catch (error) {
-      console.error('❌ [FRONTEND] Error verificando acceso:', error.message);
+      console.error('❌ [ACCESS] Error:', error.message);
       setAccesoPermitido(true);
       setMotivoBloqueo(null);
       setReglaBloqueo(null);
@@ -93,34 +77,38 @@ export const AccessControlProvider = ({ children }) => {
     }
   };
 
-  // Verificar acceso SOLO UNA VEZ cuando el usuario cambie
+  const forzarVerificacion = async () => {
+    yaVerificado.current = false;
+    await verificarAcceso(true);
+  };
+
   useEffect(() => {
-    // Si está cargando, esperar
     if (authLoading) return;
-    
-    // Si ya se verificó, no hacer nada
-    if (yaVerificado.current) return;
-    
-    // Si hay usuario, verificar
     if (user) {
       verificarAcceso();
     } else {
-      // Si no hay usuario, permitir acceso y marcar como verificado
       setAccesoPermitido(true);
       setVerificando(false);
-      yaVerificado.current = true;
     }
   }, [user, authLoading]);
 
-  // 👈 ELIMINAR EL INTERVALO QUE CAUSA EL BUCLE
-  // useEffect con interval eliminado
+  // Verificar cada 5 minutos
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (user && !authLoading) {
+        verificarAcceso();
+      }
+    }, 300000);
+
+    return () => clearInterval(interval);
+  }, [user, authLoading]);
 
   const value = {
     accesoPermitido,
     motivoBloqueo,
     reglaBloqueo,
     verificando,
-    verificarAcceso
+    verificarAcceso: forzarVerificacion
   };
 
   return (

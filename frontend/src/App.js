@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ErrorProvider } from './context/ErrorContext';
@@ -35,13 +35,9 @@ import { GoogleCalendarProvider } from './context/GoogleCalendarContext';
 // CONFIGURACIÓN DE GOOGLE (DESDE VARIABLES DE ENTORNO)
 // ============================================
 
-// 🔥 CLIENT ID DE GOOGLE - AHORA desde variable de entorno
-// Prioridad: 1. Variable de entorno REACT_APP_GOOGLE_CLIENT_ID
-//            2. Fallback con el valor actual (para desarrollo local)
 const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || 
   '768056000483-f8d266gdhd7clu67rcenc4ts340q2d9l.apps.googleusercontent.com';
 
-// Log para verificar configuración en desarrollo
 if (process.env.NODE_ENV === 'development') {
   console.log('🔑 Google Client ID configurado:', GOOGLE_CLIENT_ID ? '✅ Sí' : '❌ No');
 }
@@ -50,7 +46,7 @@ if (process.env.NODE_ENV === 'development') {
 // COMPONENTE DE CARGA MEJORADO
 // ============================================
 
-const LoadingScreen = () => (
+const LoadingScreen = memo(() => (
   <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-600 to-black">
     <div className="text-center">
       <div className="w-20 h-20 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -59,19 +55,18 @@ const LoadingScreen = () => (
       </div>
     </div>
   </div>
-);
+));
 
 // ============================================
-// COMPONENTE DE PROTECCIÓN BASADO EN PERMISOS Y ACCESO
+// COMPONENTE DE PROTECCIÓN BASADO EN PERMISOS - MEMOIZADO
 // ============================================
 
-const ProtectedRoute = ({ children, modulo, accion = 'ver' }) => {
+const ProtectedRoute = memo(({ children, modulo, accion = 'ver' }) => {
   const { user, loading } = useAuth();
   const [permisosUsuario, setPermisosUsuario] = useState({});
   const [loadingPermisos, setLoadingPermisos] = useState(true);
   const [rolReal, setRolReal] = useState(null);
 
-  // Cargar permisos del usuario desde Firestore
   useEffect(() => {
     const cargarPermisos = async () => {
       if (!user?.email) {
@@ -80,7 +75,6 @@ const ProtectedRoute = ({ children, modulo, accion = 'ver' }) => {
       }
 
       try {
-        // Buscar el rol del usuario
         const posiblesColecciones = ['Usuarios', 'usuarios', 'Users', 'users'];
         let usuarioEncontrado = null;
 
@@ -97,21 +91,19 @@ const ProtectedRoute = ({ children, modulo, accion = 'ver' }) => {
               break;
             }
           } catch (error) {
-            console.log(`⚠️ Error en colección ${nombreColeccion}:`, error.message);
+            // Ignorar errores de colecciones que no existen
           }
         }
 
         const rolId = usuarioEncontrado?.rol || user.rol || 'solicitante';
         setRolReal(rolId);
 
-        // Cargar permisos del rol
         const rolRef = doc(db, 'Roles', rolId);
         const rolSnap = await getDoc(rolRef);
         
         if (rolSnap.exists()) {
           const data = rolSnap.data();
           setPermisosUsuario(data.permisos || {});
-          console.log(`✅ Permisos cargados para rol ${rolId}:`, data.permisos);
         } else {
           setPermisosUsuario({});
         }
@@ -134,56 +126,46 @@ const ProtectedRoute = ({ children, modulo, accion = 'ver' }) => {
     return <Navigate to="/login" />;
   }
 
-  // ADMIN tiene acceso a TODO
   if (rolReal === 'admin') {
-    console.log(`🔓 ADMIN: Acceso permitido a ${modulo || 'ruta'}`);
     return children;
   }
 
-  // Si no hay módulo especificado, permitir acceso (para rutas como /perfil)
   if (!modulo) {
     return children;
   }
 
-  // Verificar si el usuario tiene permiso para este módulo
   const tienePermiso = permisosUsuario[modulo]?.includes(accion);
-  
-  console.log(`🔍 Verificando permiso para ${modulo}.${accion}:`, tienePermiso);
 
   if (!tienePermiso) {
-    console.log(`⛔ Acceso denegado a ${modulo}`);
     return <Navigate to="/" />;
   }
 
   return children;
-};
+});
 
 // ============================================
-// COMPONENTE DE PROTECCIÓN CON VERIFICACIÓN DE ACCESO
+// COMPONENTE DE PROTECCIÓN CON VERIFICACIÓN DE ACCESO - MEMOIZADO
 // ============================================
 
-const ProtectedRouteWithAccess = ({ children, modulo, accion = 'ver' }) => {
+const ProtectedRouteWithAccess = memo(({ children, modulo, accion = 'ver' }) => {
   const { accesoPermitido, motivoBloqueo, reglaBloqueo, verificando } = useAccessControl();
   
-  // Si está verificando, mostrar pantalla de carga
   if (verificando) {
     return <LoadingScreen />;
   }
   
-  // Si el acceso no está permitido, mostrar pantalla de bloqueo
   if (!accesoPermitido) {
     return <AccessBlocked motivo={motivoBloqueo} regla={reglaBloqueo} />;
   }
   
-  // Si el acceso está permitido, verificar permisos del módulo
   return <ProtectedRoute modulo={modulo} accion={accion}>{children}</ProtectedRoute>;
-};
+});
 
 // ============================================
-// COMPONENTE APP ENVUELTO CON GOOGLE PROVIDERS
+// COMPONENTE APP CONTENT - MEMOIZADO
 // ============================================
 
-function AppContent() {
+const AppContent = memo(() => {
   return (
     <ErrorBoundary>
       <ErrorProvider>
@@ -332,7 +314,7 @@ function AppContent() {
                         </ProtectedRouteWithAccess>
                       } />
                       
-                      {/* 🔥 CALENDARIO - NUEVA RUTA */}
+                      {/* Calendario */}
                       <Route path="/calendario" element={
                         <ProtectedRouteWithAccess modulo="calendario" accion="ver">
                           <Layout>
@@ -393,7 +375,7 @@ function AppContent() {
       </ErrorProvider>
     </ErrorBoundary>
   );
-}
+});
 
 // ============================================
 // APP PRINCIPAL CON GOOGLE PROVIDERS

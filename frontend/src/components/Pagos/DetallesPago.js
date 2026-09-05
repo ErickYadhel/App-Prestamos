@@ -264,7 +264,7 @@ const StatCard = ({ icon: Icon, label, value, color, subValue }) => {
 };
 
 // ============================================
-// COMPONENTE DE BOTÓN PARA WHATSAPP - CORREGIDO PARA MÓVILES
+// COMPONENTE DE BOTÓN PARA WHATSAPP - CORREGIDO CON NÚMERO DE CLIENTE
 // ============================================
 const WhatsAppShareButton = ({ pago, clienteInfo, onShare }) => {
   const { theme } = useTheme();
@@ -316,29 +316,58 @@ const WhatsAppShareButton = ({ pago, clienteInfo, onShare }) => {
       const mensaje = generarMensajeWhatsApp();
       const mensajeCodificado = encodeURIComponent(mensaje);
       
-      // Obtener número de teléfono del cliente
-      const numeroCliente = clienteInfo?.celular || clienteInfo?.telefono || '';
+      // 🔥 OBTENER NÚMERO DE TELÉFONO DEL CLIENTE DESDE FIREBASE
+      let numeroCliente = '';
+      
+      // Prioridad: celular, telefono, telefono2
+      if (clienteInfo?.celular) {
+        numeroCliente = clienteInfo.celular;
+      } else if (clienteInfo?.telefono) {
+        numeroCliente = clienteInfo.telefono;
+      } else if (clienteInfo?.telefono2) {
+        numeroCliente = clienteInfo.telefono2;
+      } else if (pago?.telefono) {
+        numeroCliente = pago.telefono;
+      } else if (pago?.celular) {
+        numeroCliente = pago.celular;
+      }
+      
+      // 🔥 LIMPIAR NÚMERO (solo dígitos)
       const numeroLimpio = numeroCliente.replace(/\D/g, '');
       
       let url;
       
+      // 🔥 SI TIENE NÚMERO VÁLIDO (10 dígitos o más), ENVIAR DIRECTAMENTE
       if (numeroLimpio && numeroLimpio.length >= 10) {
-        url = `https://wa.me/${numeroLimpio}?text=${mensajeCodificado}`;
+        let numeroParaWhatsApp = numeroLimpio;
+        
+        // Si el número tiene 10 dígitos y comienza con 8, 9, 3, etc. (sin código de país)
+        if (numeroLimpio.length === 10) {
+          // Para RD, agregar código de país 1
+          numeroParaWhatsApp = `1${numeroLimpio}`;
+        } else if (numeroLimpio.length === 11 && numeroLimpio.startsWith('1')) {
+          // Ya tiene código de país
+          numeroParaWhatsApp = numeroLimpio;
+        } else {
+          // Otro formato, intentar con el número limpio
+          numeroParaWhatsApp = numeroLimpio;
+        }
+        
+        // 🔥 USAR NÚMERO DEL CLIENTE
+        url = `https://wa.me/${numeroParaWhatsApp}?text=${mensajeCodificado}`;
       } else {
+        // 🔥 SI NO TIENE NÚMERO VÁLIDO, USAR WHATSAPP SIN NÚMERO
         url = `https://wa.me/?text=${mensajeCodificado}`;
       }
       
-      // 🔥 DETECTAR SI ES DISPOSITIVO MÓVIL
+      // 🔥 ABRIR WHATSAPP
       const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|Opera Mini|IEMobile/i.test(navigator.userAgent);
       
       if (isMobile) {
         // En móvil: intentar abrir la app de WhatsApp
-        const appUrl = `whatsapp://send?text=${mensajeCodificado}`;
-        
-        // Intentar abrir la app primero
+        const appUrl = `whatsapp://send?phone=${numeroLimpio || ''}&text=${mensajeCodificado}`;
         const appWindow = window.open(appUrl, '_blank');
         
-        // Si no se puede abrir la app, usar la web
         setTimeout(() => {
           if (!appWindow || appWindow.closed) {
             window.location.href = url;
@@ -352,7 +381,6 @@ const WhatsAppShareButton = ({ pago, clienteInfo, onShare }) => {
       if (onShare) onShare('whatsapp');
     } catch (error) {
       console.error('Error al abrir WhatsApp:', error);
-      // Fallback: abrir la URL directamente
       const mensaje = generarMensajeWhatsApp();
       const mensajeCodificado = encodeURIComponent(mensaje);
       window.open(`https://wa.me/?text=${mensajeCodificado}`, '_blank');

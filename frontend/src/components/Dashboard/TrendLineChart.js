@@ -20,10 +20,16 @@ const GlassCard = ({ children, className = '' }) => {
 const TrendLineChart = () => {
   const { theme } = useTheme();
   const [loading, setLoading] = useState(true);
-  const [chartData, setChartData] = useState({});
+  
+  // 🔥 FIX 1: Estado inicial con estructura válida (no objeto vacío)
+  const [chartData, setChartData] = useState({
+    labels: [],
+    datasets: []
+  });
+  
   const [stats, setStats] = useState({
     crecimientoMensual: 0,
-    mejorMes: { mes: '', valor: 0 },
+    mejorMes: { mes: '-', valor: 0 },
     proyeccion: 0
   });
 
@@ -68,11 +74,17 @@ const TrendLineChart = () => {
       let maxValor = 0;
       let mejorMesIndex = 0;
       
-      pagos.forEach(pago => {
-        let fecha = pago.fechaPago;
+      // 🔥 FIX 2: Validar que pagos sea un array
+      const pagosArray = Array.isArray(pagos) ? pagos : [];
+      
+      pagosArray.forEach(pago => {
+        let fecha = pago?.fechaPago;
         if (fecha?.toDate) fecha = fecha.toDate();
         else if (fecha) fecha = new Date(fecha);
         else return;
+        
+        // Validar que la fecha sea válida
+        if (isNaN(fecha.getTime())) return;
         
         const mes = fecha.getMonth();
         const monto = pago.montoTotal || pago.total || pago.monto || 0;
@@ -93,6 +105,7 @@ const TrendLineChart = () => {
       const ultimoValor = pagosPorMes[11] || pagosPorMes[10] || 50000;
       const proyeccion = ultimoValor * 1.12;
       
+      // 🔥 FIX 3: Asegurar que los datasets tengan la estructura correcta
       setChartData({
         labels: meses,
         datasets: [
@@ -116,7 +129,7 @@ const TrendLineChart = () => {
               const inicio = Math.max(0, i - 2);
               const fin = i + 1;
               const slice = arr.slice(inicio, fin);
-              return slice.reduce((a, b) => a + b, 0) / slice.length;
+              return slice.length > 0 ? slice.reduce((a, b) => a + b, 0) / slice.length : 0;
             }),
             borderColor: 'rgb(239, 68, 68)',
             backgroundColor: 'transparent',
@@ -131,7 +144,7 @@ const TrendLineChart = () => {
       
       setStats({
         crecimientoMensual: parseFloat(crecimiento.toFixed(1)),
-        mejorMes: { mes: meses[mejorMesIndex], valor: maxValor },
+        mejorMes: { mes: meses[mejorMesIndex] || '-', valor: maxValor },
         proyeccion
       });
       
@@ -168,6 +181,37 @@ const TrendLineChart = () => {
     );
   }
 
+  // 🔥 FIX 4: Verificación defensiva antes de renderizar el gráfico
+  const tieneDatosValidos = chartData && 
+                            Array.isArray(chartData.labels) && 
+                            chartData.labels.length > 0 &&
+                            Array.isArray(chartData.datasets) && 
+                            chartData.datasets.length > 0;
+
+  if (!tieneDatosValidos) {
+    return (
+      <GlassCard>
+        <div className="p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <div className="p-2 bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-lg">
+                <ArrowTrendingUpIcon className="h-4 w-4 text-white" />
+              </div>
+              <h4 className={`text-base font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                Tendencia de Ingresos
+              </h4>
+            </div>
+          </div>
+          <div className="h-80 flex items-center justify-center">
+            <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+              No hay datos disponibles para mostrar
+            </p>
+          </div>
+        </div>
+      </GlassCard>
+    );
+  }
+
   return (
     <GlassCard>
       <div className="p-4">
@@ -186,9 +230,19 @@ const TrendLineChart = () => {
         </div>
         <div className="h-80"><Line data={chartData} options={options} /></div>
         <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
-          <div className="text-center"><p className="text-[9px] text-gray-500">Mejor mes</p><p className="text-sm font-bold text-emerald-600">{stats.mejorMes.mes}</p><p className="text-[10px]">{formatearMonto(stats.mejorMes.valor)}</p></div>
-          <div className="text-center"><p className="text-[9px] text-gray-500">Crecimiento</p><p className="text-sm font-bold text-blue-600">{stats.crecimientoMensual}%</p></div>
-          <div className="text-center"><p className="text-[9px] text-gray-500">Proyección 2025</p><p className="text-sm font-bold text-purple-600">{formatearMonto(stats.proyeccion)}</p></div>
+          <div className="text-center">
+            <p className="text-[9px] text-gray-500">Mejor mes</p>
+            <p className="text-sm font-bold text-emerald-600">{stats.mejorMes.mes}</p>
+            <p className="text-[10px]">{formatearMonto(stats.mejorMes.valor)}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[9px] text-gray-500">Crecimiento</p>
+            <p className="text-sm font-bold text-blue-600">{stats.crecimientoMensual}%</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[9px] text-gray-500">Proyección 2025</p>
+            <p className="text-sm font-bold text-purple-600">{formatearMonto(stats.proyeccion)}</p>
+          </div>
         </div>
       </div>
     </GlassCard>

@@ -1126,7 +1126,7 @@ const DetallesPago = ({ pago, prestamoInfo, onBack }) => {
         )}
       </AnimatePresence>
 
-      <style jsx>{`
+      <style>{`
         @keyframes scan {
           0% { transform: translateX(-100%); }
           100% { transform: translateX(100%); }

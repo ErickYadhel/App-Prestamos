@@ -201,14 +201,12 @@ const Sidebar = ({ children }) => {
   useEffect(() => {
     const cargarRolReal = async () => {
       if (!user?.email) {
-        console.log('⚠️ No hay usuario');
         setLoadingPermisos(false);
         return;
       }
 
       try {
         setLoadingPermisos(true);
-        console.log('🔄 Buscando usuario en Firebase:', user.email);
         
         const posiblesColecciones = ['Usuarios', 'usuarios', 'Users', 'users'];
         let usuarioEncontrado = null;
@@ -226,7 +224,7 @@ const Sidebar = ({ children }) => {
               break;
             }
           } catch (error) {
-            console.log(`⚠️ Error en colección ${nombreColeccion}:`, error.message);
+            // Silencioso, continuar con la siguiente colección
           }
         }
 
@@ -275,7 +273,6 @@ const Sidebar = ({ children }) => {
 
         const rolId = usuarioEncontrado.rol || 'solicitante';
         setRolReal(rolId);
-        console.log('✅ Rol del usuario encontrado:', rolId);
 
         const rolRef = doc(db, 'Roles', rolId);
         const rolSnap = await getDoc(rolRef);
@@ -286,13 +283,11 @@ const Sidebar = ({ children }) => {
           setColorRol(data.color || getDefaultRoleColor(rolId));
           setPermisosUsuario(data.permisos || {});
           setIconoRol(getDefaultRoleIcon(rolId));
-          console.log('✅ Permisos cargados:', data.permisos);
         } else {
           setNombreRol(rolId.charAt(0).toUpperCase() + rolId.slice(1));
           setColorRol(getDefaultRoleColor(rolId));
           setPermisosUsuario({});
           setIconoRol(getDefaultRoleIcon(rolId));
-          console.log('⚠️ Rol no encontrado en Firestore, usando permisos por defecto');
         }
       } catch (error) {
         console.error('❌ Error cargando rol:', error);
@@ -365,7 +360,6 @@ const Sidebar = ({ children }) => {
             const data = userSnap.data();
             if (data.fotoPerfil || data.foto || data.photoURL) {
               setFotoPerfil(data.fotoPerfil || data.foto || data.photoURL);
-              console.log('✅ Foto de perfil cargada');
             }
           }
         } catch (error) {
@@ -396,7 +390,6 @@ const Sidebar = ({ children }) => {
   // Filtrar menú según permisos
   const filteredMenu = todosLosMenuItems.filter(item => {
     if (esAdmin) {
-      console.log(`🔓 ADMIN: ${item.name} - ACCESO TOTAL`);
       return true;
     }
     
@@ -404,12 +397,8 @@ const Sidebar = ({ children }) => {
     
     const tienePermiso = permisosUsuario[item.modulo]?.includes(item.accion);
     
-    console.log(`🔍 Verificando permiso para ${item.name} (${item.modulo}.${item.accion}):`, tienePermiso);
-    
     return tienePermiso;
   });
-
-  console.log('📋 Menú filtrado:', filteredMenu.map(m => m.name));
 
   // Sidebar para móvil y tablet (overlay con scroll invisible)
   const MobileSidebar = () => (
@@ -438,7 +427,7 @@ const Sidebar = ({ children }) => {
               backgroundColor: theme === 'dark' ? '#111827' : '#000000'
             }}
           >
-            <style jsx>{`
+            <style>{`
               div::-webkit-scrollbar {
                 display: none;
               }
@@ -513,21 +502,16 @@ const Sidebar = ({ children }) => {
 
   // 🔥 MANEJO DEL MENÚ DE USUARIO - HOVER + CLICK
   const handleMouseEnterUser = () => {
-    // Cancelar cualquier cierre programado
     if (hoverTimeout) {
       clearTimeout(hoverTimeout);
       setHoverTimeout(null);
     }
-    // Abrir el menú
     setShowUserMenu(true);
   };
 
   const handleMouseLeaveUser = () => {
-    // Programar cierre después de 300ms para permitir hover en el menú
     const timeout = setTimeout(() => {
-      // Verificar si el mouse está sobre el menú
       if (userMenuRef.current && userMenuRef.current.matches(':hover')) {
-        // El mouse está sobre el menú, no cerrar
         return;
       }
       setShowUserMenu(false);
@@ -536,7 +520,6 @@ const Sidebar = ({ children }) => {
   };
 
   const handleMouseEnterMenu = () => {
-    // Cancelar cualquier cierre programado
     if (hoverTimeout) {
       clearTimeout(hoverTimeout);
       setHoverTimeout(null);
@@ -544,7 +527,6 @@ const Sidebar = ({ children }) => {
   };
 
   const handleMouseLeaveMenu = () => {
-    // Programar cierre después de 300ms
     const timeout = setTimeout(() => {
       setShowUserMenu(false);
     }, 300);
@@ -554,7 +536,6 @@ const Sidebar = ({ children }) => {
   // 🔥 Toggle del menú de usuario (click en el botón)
   const toggleUserMenu = () => {
     setShowUserMenu(!showUserMenu);
-    // Cancelar cualquier cierre programado
     if (hoverTimeout) {
       clearTimeout(hoverTimeout);
       setHoverTimeout(null);
@@ -611,10 +592,9 @@ const Sidebar = ({ children }) => {
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => {
             setIsHovered(false);
-            // No cerrar el menú de usuario aquí, lo maneja el componente
           }}
         >
-          <style jsx>{`
+          <style>{`
             div::-webkit-scrollbar {
               display: none;
             }
@@ -1065,7 +1045,7 @@ const Sidebar = ({ children }) => {
       />
 
       {/* Estilos para animaciones */}
-      <style jsx>{`
+      <style>{`
         @keyframes scan {
           0% { transform: translateX(-100%); }
           100% { transform: translateX(100%); }

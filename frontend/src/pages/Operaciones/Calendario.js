@@ -983,7 +983,7 @@ const EventoEditorModal = ({ isOpen, onClose, evento, onSave, onDelete, tipos })
               <div className={`p-4 border-t ${theme === 'dark' ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'} text-center`}>
                 <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
                   <SparklesIcon className="h-3 w-3 inline mr-1 text-red-500" />
-                  Los eventos se sincronizan automáticamente con Google Calendar
+                  Los eventos se sincronizan manualmente con Google Calendar
                 </p>
               </div>
             </div>
@@ -1536,36 +1536,34 @@ const CalendarioMensual = ({ eventos, onEventoClick, onEventoDrag, onDiaClick })
               
               <div className="space-y-1">
                 {eventosDelDia.slice(0, 2).map((evento, i) => {
-                  const esCompletado = evento.completado || evento.estado === 'completado' || evento.estado === 'pagado';
-                  const isDraggable = !esCompletado && !evento.googleEventId && evento.id?.startsWith('personalizado-');
-                  
-                  return (
-                    <button
-                      key={i}
-                      draggable={isDraggable}
-                      onDragStart={(e) => handleDragStart(e, evento)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEventoClick(evento);
-                      }}
-                      className={`w-full text-left p-1 rounded text-xs text-white transition-all hover:opacity-90 truncate relative group ${
-                        getEventoColor(evento.tipo)
-                      } ${
-                        esCompletado ? 'opacity-60 line-through' : 'shadow-sm'
-                      }`}
-                      title={evento.titulo}
-                    >
-                      <span className="flex items-center justify-between">
-                        <span>{evento.titulo}</span>
-                        {isDraggable && (
-                          <span className="text-[8px] opacity-0 group-hover:opacity-100 transition-opacity">
-                            ↕
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  );
-                })}
+  const esCompletado = evento.completado || evento.estado === 'completado' || evento.estado === 'pagado';
+  const isDraggable = !esCompletado && !evento.googleEventId && evento.id?.startsWith('personalizado-');
+  const estaSincronizado = !!evento.googleEventId;
+  
+  return (
+    <button
+      key={i}
+      draggable={isDraggable}
+      onClick={(e) => {
+        e.stopPropagation();
+        onEventoClick(evento);
+      }}
+      className={`w-full text-left p-1 rounded text-xs text-white transition-all hover:opacity-90 truncate relative group ${
+        getEventoColor(evento.tipo)
+      } ${
+        esCompletado ? 'opacity-60 line-through' : 'shadow-sm'
+      }`}
+      title={`${evento.titulo}${estaSincronizado ? ' ✅' : ' ⏳'}`}
+    >
+      <span className="flex items-center justify-between">
+        <span>{evento.titulo}</span>
+        <span className="text-[8px]">
+          {estaSincronizado ? '✅' : '⏳'}
+        </span>
+      </span>
+    </button>
+  );
+})}
                 {eventosDelDia.length > 2 && (
                   <div className="text-xs text-gray-500 dark:text-gray-400 pl-1">
                     +{eventosDelDia.length - 2} más
@@ -1837,7 +1835,7 @@ const ProximosEventos = ({ eventos, onEventoClick, onEditarEvento, eventosSincro
 };
 
 // ============================================
-// COMPONENTE DE PERFIL DE GOOGLE (CORREGIDO - SIN CUOTA EXCESIVA)
+// COMPONENTE DE PERFIL DE GOOGLE
 // ============================================
 const PerfilGoogle = ({ user, onLogout, onSync, sincronizando }) => {
   const { theme } = useTheme();
@@ -2246,11 +2244,6 @@ const Calendario = () => {
       console.log(`✅ ${eventosValidos.length} eventos cargados`);
       console.log(`📌 ${sincronizados.size} eventos sincronizados con Google Calendar`);
       
-      // Verificar si ya se completó la sincronización
-      if (eventosValidos.length > 0 && sincronizados.size === eventosValidos.filter(e => e.source === 'personalizado' && !e.completado).length) {
-        setSincronizacionCompleta(true);
-      }
-      
     } catch (error) {
       console.error('Error cargando eventos:', error);
       setError('Error al cargar los eventos. Verifica la conexión.');
@@ -2259,6 +2252,9 @@ const Calendario = () => {
     }
   }, []);
 
+  // ============================================
+  // 🔥 GUARDAR EVENTO - SIN SINCRONIZACIÓN AUTOMÁTICA
+  // ============================================
   const guardarEvento = async (data, id) => {
     try {
       const eventosRef = collection(db, 'eventos');
@@ -2270,42 +2266,8 @@ const Calendario = () => {
         await updateDoc(docRef, data);
         eventoId = realId;
         console.log('✅ Evento actualizado en Firestore');
+        console.log('📌 NO se sincroniza automáticamente. Use "Sincronizar ahora" o espere las fechas automáticas (13-16 y 29-1)');
         
-        // Si hay googleEventId y usuario, actualizar en Google Calendar (con rate limiting)
-        const docSnap = await getDoc(docRef);
-        const docData = docSnap.data();
-        if (docData.googleEventId && user && !sincronizandoRef.current) {
-          try {
-            await rateLimiter.execute(async () => {
-              console.log('🔄 Actualizando evento en Google Calendar...');
-              const resultado = await sincronizarEventos([{
-                id: `personalizado-${realId}`,
-                titulo: data.titulo,
-                fecha: data.fecha,
-                cliente: data.cliente,
-                descripcion: data.descripcion,
-                monto: data.monto,
-                tipo: data.tipo,
-                hora: data.hora,
-                horaFin: data.horaFin
-              }]);
-              if (resultado.success && resultado.eventosActualizados) {
-                const actualizado = resultado.eventosActualizados.find(e => e.id === `personalizado-${realId}`);
-                if (actualizado && actualizado.googleEventId) {
-                  await updateDoc(docRef, { googleEventId: actualizado.googleEventId });
-                }
-                console.log('✅ Evento actualizado en Google Calendar');
-              }
-            });
-          } catch (syncError) {
-            if (syncError.code === 8 || syncError.details?.includes('Quota exceeded')) {
-              console.warn('⚠️ Cuota de Google Calendar excedida. Se intentará más tarde.');
-              mostrarAlerta('⚠️ Límite de solicitudes', 'Se ha excedido la cuota de Google Calendar. Intenta nuevamente en unos minutos.', 'warning');
-            } else {
-              console.warn('⚠️ Error actualizando en Google Calendar:', syncError);
-            }
-          }
-        }
       } else {
         const docRef = await addDoc(eventosRef, {
           ...data,
@@ -2313,52 +2275,7 @@ const Calendario = () => {
         });
         eventoId = docRef.id;
         console.log('✅ Nuevo evento creado en Firestore:', docRef.id);
-        
-        // Sincronizar con Google Calendar con rate limiting
-        if (user && !sincronizandoRef.current) {
-          try {
-            await rateLimiter.execute(async () => {
-              console.log('🔄 Sincronizando nuevo evento con Google Calendar...');
-              const eventoParaSincronizar = {
-                id: `personalizado-${docRef.id}`,
-                titulo: data.titulo,
-                fecha: data.fecha,
-                cliente: data.cliente,
-                descripcion: data.descripcion,
-                monto: data.monto,
-                tipo: data.tipo,
-                hora: data.hora,
-                horaFin: data.horaFin
-              };
-              
-              const resultado = await sincronizarEventos([eventoParaSincronizar]);
-              if (resultado.success && resultado.eventosActualizados) {
-                const actualizado = resultado.eventosActualizados.find(e => e.id === `personalizado-${docRef.id}`);
-                if (actualizado && actualizado.googleEventId) {
-                  await updateDoc(docRef, { googleEventId: actualizado.googleEventId });
-                  const nuevosSincronizados = new Set(eventosSincronizadosIds);
-                  nuevosSincronizados.add(`personalizado-${docRef.id}`);
-                  setEventosSincronizadosIds(nuevosSincronizados);
-                  eventosSincronizadosRef.current = nuevosSincronizados;
-                  setEventosSincronizadosCount(nuevosSincronizados.size);
-                  console.log('✅ Evento sincronizado con Google Calendar');
-                }
-              }
-            });
-          } catch (syncError) {
-            if (syncError.code === 8 || syncError.details?.includes('Quota exceeded')) {
-              console.warn('⚠️ Cuota de Google Calendar excedida. Se sincronizará después.');
-              // Guardar en cola para sincronización posterior
-              colaPendiente.current.push({
-                id: `personalizado-${docRef.id}`,
-                ...data
-              });
-              mostrarAlerta('⏳ Sincronización pendiente', 'El evento se sincronizará con Google Calendar cuando la cuota esté disponible.', 'warning');
-            } else {
-              console.warn('⚠️ Error sincronizando con Google Calendar:', syncError);
-            }
-          }
-        }
+        console.log('📌 NO se sincroniza automáticamente. Use "Sincronizar ahora" o espere las fechas automáticas (13-16 y 29-1)');
       }
       
       await cargarEventos();
@@ -2369,29 +2286,23 @@ const Calendario = () => {
     }
   };
 
+  // ============================================
+  // 🔥 ELIMINAR EVENTO - SIN SINCRONIZACIÓN AUTOMÁTICA
+  // ============================================
   const eliminarEvento = async (id) => {
     try {
       if (id && id.startsWith('personalizado-')) {
         const realId = id.replace('personalizado-', '');
         const docRef = doc(db, 'eventos', realId);
-        const docSnap = await getDoc(docRef);
-        const docData = docSnap.data();
         await deleteDoc(docRef);
         console.log('✅ Evento eliminado de Firestore');
         
-        if (docData.googleEventId && user) {
-          try {
-            // No eliminamos de Google Calendar para evitar cuota adicional
-            // Solo marcamos como eliminado localmente
-            const nuevosSincronizados = new Set(eventosSincronizadosIds);
-            nuevosSincronizados.delete(id);
-            setEventosSincronizadosIds(nuevosSincronizados);
-            eventosSincronizadosRef.current = nuevosSincronizados;
-            setEventosSincronizadosCount(nuevosSincronizados.size);
-          } catch (syncError) {
-            console.warn('⚠️ Error eliminando de Google Calendar:', syncError);
-          }
-        }
+        // Limpiar del set de sincronizados
+        const nuevosSincronizados = new Set(eventosSincronizadosIds);
+        nuevosSincronizados.delete(id);
+        setEventosSincronizadosIds(nuevosSincronizados);
+        eventosSincronizadosRef.current = nuevosSincronizados;
+        setEventosSincronizadosCount(nuevosSincronizados.size);
       } else {
         throw new Error('No se pueden eliminar eventos del sistema');
       }
@@ -2403,6 +2314,10 @@ const Calendario = () => {
     }
   };
 
+  // ============================================
+  // 🔥 SINCRONIZAR CON GOOGLE CALENDAR
+  // Sincroniza TODOS los eventos sin googleEventId
+  // ============================================
   const handleSincronizarGoogle = useCallback(async (forzar = false) => {
     if (!user) {
       mostrarAlerta('⚠️ Conexión requerida', 'Primero debes conectar tu cuenta de Google', 'warning');
@@ -2414,7 +2329,7 @@ const Calendario = () => {
       return;
     }
     
-    // Verificar límite de tiempo (no más de una sincronización cada 30 segundos)
+    // Verificar límite de tiempo
     if (ultimoIntentoSincronizacion && !forzar) {
       const tiempoTranscurrido = Date.now() - ultimoIntentoSincronizacion;
       if (tiempoTranscurrido < 30000) {
@@ -2424,104 +2339,149 @@ const Calendario = () => {
       }
     }
     
-    // Si ya se sincronizó y no se fuerza, no hacer nada
-    if (sincronizacionCompleta && !forzar) {
-      mostrarAlerta('✅ Todo sincronizado', 'Todos los eventos ya están sincronizados con Google Calendar', 'success');
-      return;
-    }
-    
     try {
       sincronizandoRef.current = true;
       setSincronizando(true);
       setUltimoIntentoSincronizacion(Date.now());
       
-      // Obtener eventos personalizados no sincronizados
+      // 🔥 FILTRAR TODOS LOS EVENTOS SIN googleEventId (personalizados + normales)
       const eventosNoSincronizados = eventos.filter(e => {
-        if (!e.id.startsWith('personalizado-')) return false;
-        if (e.googleEventId) return false;
+        // Excluir eventos completados
         if (e.completado) return false;
+        // 🔥 EXCLUIR SOLO LOS QUE YA TIENEN googleEventId
+        if (e.googleEventId) return false;
+        // Incluir TODOS los tipos (personalizado, pago, prestamo, vencimiento)
         return true;
       });
       
-      // También procesar eventos pendientes en cola
-      const eventosPendientes = [...eventosNoSincronizados];
+      console.log(`🔄 Total eventos a sincronizar: ${eventosNoSincronizados.length}`);
+      console.log(`📋 Desglose:`, {
+        personalizados: eventosNoSincronizados.filter(e => e.source === 'personalizado').length,
+        pagos: eventosNoSincronizados.filter(e => e.tipo === 'pago').length,
+        prestamos: eventosNoSincronizados.filter(e => e.tipo === 'prestamo').length,
+        vencimientos: eventosNoSincronizados.filter(e => e.tipo === 'vencimiento').length
+      });
       
-      if (eventosPendientes.length === 0 && colaPendiente.current.length === 0) {
+      if (eventosNoSincronizados.length === 0) {
         setSincronizacionCompleta(true);
-        mostrarAlerta('✅ Todo sincronizado', 'Todos los eventos están sincronizados con Google Calendar', 'success');
+        mostrarAlerta('✅ Todo sincronizado', 'Todos los eventos ya están sincronizados con Google Calendar', 'success');
         sincronizandoRef.current = false;
         setSincronizando(false);
         return;
       }
       
-      console.log(`🔄 Sincronizando ${eventosPendientes.length} eventos con Google Calendar...`);
+      // 🔥 SINCRONIZAR EN LOTES DE 5 PARA EVITAR EXCEDER LA CUOTA
+      const TAMANO_LOTE = 5;
+      let totalSincronizados = 0;
+      let todosLosActualizados = [];
       
-      // Limitar cantidad de eventos por lote (máximo 5 por solicitud)
-      const lote = eventosPendientes.slice(0, 5);
-      
-      try {
-        const resultado = await rateLimiter.execute(async () => {
-          return await sincronizarEventos(lote);
-        });
+      for (let i = 0; i < eventosNoSincronizados.length; i += TAMANO_LOTE) {
+        const lote = eventosNoSincronizados.slice(i, i + TAMANO_LOTE);
         
-        if (resultado.success) {
-          if (resultado.eventosActualizados) {
-            const nuevosSincronizados = new Set(eventosSincronizadosIds);
-            resultado.eventosActualizados.forEach(ev => {
-              nuevosSincronizados.add(ev.id);
-            });
-            setEventosSincronizadosIds(nuevosSincronizados);
-            eventosSincronizadosRef.current = nuevosSincronizados;
-            setEventosSincronizadosCount(nuevosSincronizados.size);
+        console.log(`📦 Procesando lote ${Math.floor(i / TAMANO_LOTE) + 1} de ${Math.ceil(eventosNoSincronizados.length / TAMANO_LOTE)}`);
+        
+        try {
+          // Preparar eventos para sincronizar (formato que espera el context)
+          const eventosParaSincronizar = lote.map(e => ({
+            id: e.id,
+            titulo: e.titulo,
+            descripcion: e.descripcion || '',
+            fecha: e.fecha,
+            hora: e.hora || '',
+            horaFin: e.horaFin || '',
+            tipo: e.tipo,
+            cliente: e.cliente,
+            monto: e.monto,
+            source: e.source
+          }));
+          
+          const resultado = await rateLimiter.execute(async () => {
+            return await sincronizarEventos(eventosParaSincronizar);
+          });
+          
+          if (resultado.success && resultado.eventosActualizados) {
+            todosLosActualizados = [...todosLosActualizados, ...resultado.eventosActualizados];
+            totalSincronizados += resultado.eventosActualizados.length;
             
-            setEventos(prev => prev.map(e => {
-              const actualizado = resultado.eventosActualizados.find(ev => ev.id === e.id);
-              if (actualizado) {
-                return { ...e, googleEventId: actualizado.googleEventId };
-              }
-              return e;
-            }));
-            
-            // Actualizar googleEventId en Firestore
+            // 🔥 ACTUALIZAR googleEventId EN FIRESTORE
             for (const ev of resultado.eventosActualizados) {
               if (ev.id && ev.id.startsWith('personalizado-')) {
+                // Eventos personalizados → colección 'eventos'
                 const realId = ev.id.replace('personalizado-', '');
                 const docRef = doc(db, 'eventos', realId);
-                await updateDoc(docRef, { googleEventId: ev.googleEventId });
+                await updateDoc(docRef, { 
+                  googleEventId: ev.googleEventId,
+                  fechaSincronizacion: new Date().toISOString()
+                });
+              } else if (ev.id && ev.id.startsWith('pago-')) {
+                // Pagos → colección 'pagos'
+                const realId = ev.id.replace('pago-', '');
+                const docRef = doc(db, 'pagos', realId);
+                await updateDoc(docRef, { 
+                  googleEventId: ev.googleEventId,
+                  fechaSincronizacion: new Date().toISOString()
+                });
+              } else if (ev.id && ev.id.startsWith('prestamo-')) {
+                // Préstamos → colección 'prestamos'
+                const realId = ev.id.replace('prestamo-', '');
+                const docRef = doc(db, 'prestamos', realId);
+                await updateDoc(docRef, { 
+                  googleEventId: ev.googleEventId,
+                  fechaSincronizacion: new Date().toISOString()
+                });
+              } else if (ev.id && ev.id.startsWith('vencimiento-')) {
+                // Vencimientos → colección 'prestamos'
+                const realId = ev.id.replace('vencimiento-', '');
+                const docRef = doc(db, 'prestamos', realId);
+                await updateDoc(docRef, { 
+                  googleEventId: ev.googleEventId,
+                  fechaSincronizacion: new Date().toISOString()
+                });
               }
             }
             
-            // Remover de la cola pendiente los que ya se sincronizaron
-            colaPendiente.current = colaPendiente.current.filter(
-              item => !resultado.eventosActualizados.some(ev => ev.id === item.id)
-            );
-          }
-          
-          setSincronizacionCompleta(true);
-          mostrarAlerta('✅ Sincronización parcial', `${resultado.creados || lote.length} eventos sincronizados con Google Calendar`, 'success');
-          sincronizacionRealizada.current = true;
-          
-          // Si hay más eventos pendientes, programar siguiente lote
-          if (eventosPendientes.length > 5 || colaPendiente.current.length > 0) {
-            setTimeout(() => {
-              handleSincronizarGoogle(true);
-            }, 2000);
-          }
-        } else {
-          if (resultado.error?.includes('Quota exceeded') || resultado.code === 8) {
+            // Esperar entre lotes para respetar la cuota
+            if (i + TAMANO_LOTE < eventosNoSincronizados.length) {
+              await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+          } else if (resultado.error?.includes('Quota exceeded') || resultado.quotaExceeded) {
+            console.warn('⚠️ Cuota excedida, deteniendo sincronización');
             mostrarAlerta('⚠️ Límite de solicitudes', 'Se ha excedido la cuota de Google Calendar. Intenta nuevamente en unos minutos.', 'warning');
-          } else {
-            mostrarAlerta('❌ Error al sincronizar', resultado.error || 'Intenta nuevamente', 'error');
+            break;
           }
-        }
-      } catch (syncError) {
-        if (syncError.code === 8 || syncError.details?.includes('Quota exceeded')) {
-          mostrarAlerta('⚠️ Límite de solicitudes', 'Se ha excedido la cuota de Google Calendar. Intenta nuevamente en unos minutos.', 'warning');
-        } else {
-          console.error('Error sincronizando:', syncError);
-          mostrarAlerta('❌ Error', 'Error al sincronizar eventos con Google Calendar', 'error');
+        } catch (syncError) {
+          console.error('Error en lote:', syncError);
         }
       }
+      
+      // Actualizar estado con los eventos sincronizados
+      if (todosLosActualizados.length > 0) {
+        const nuevosSincronizados = new Set(eventosSincronizadosIds);
+        todosLosActualizados.forEach(ev => {
+          nuevosSincronizados.add(ev.id);
+        });
+        setEventosSincronizadosIds(nuevosSincronizados);
+        eventosSincronizadosRef.current = nuevosSincronizados;
+        setEventosSincronizadosCount(nuevosSincronizados.size);
+        
+        // Actualizar eventos en el estado local
+        setEventos(prev => prev.map(e => {
+          const actualizado = todosLosActualizados.find(ev => ev.id === e.id);
+          if (actualizado) {
+            return { ...e, googleEventId: actualizado.googleEventId };
+          }
+          return e;
+        }));
+        
+        mostrarAlerta('✅ Sincronización exitosa', `${totalSincronizados} eventos sincronizados con Google Calendar`, 'success');
+        sincronizacionRealizada.current = true;
+      } else {
+        mostrarAlerta('ℹ️ Sin cambios', 'No se pudieron sincronizar nuevos eventos', 'info');
+      }
+      
+      // Verificar si ya está todo sincronizado
+      await cargarEventos();
+      
     } catch (error) {
       console.error('Error sincronizando:', error);
       mostrarAlerta('❌ Error', 'Error al sincronizar eventos con Google Calendar', 'error');
@@ -2529,8 +2489,64 @@ const Calendario = () => {
       sincronizandoRef.current = false;
       setSincronizando(false);
     }
-  }, [user, eventos, eventosSincronizadosIds, sincronizacionCompleta, ultimoIntentoSincronizacion, sincronizarEventos]);
-
+  }, [user, eventos, eventosSincronizadosIds, ultimoIntentoSincronizacion, sincronizarEventos]);
+  
+  // ============================================
+  // 🔥 SINCRONIZACIÓN AUTOMÁTICA SOLO EN FECHAS ESPECÍFICAS
+  // Días 13-16 y 29-1 de cada mes - Sincroniza TODOS los eventos
+  // ============================================
+  useEffect(() => {
+    if (!user || eventos.length === 0 || sincronizandoRef.current) return;
+    
+    const hoy = new Date();
+    const dia = hoy.getDate();
+    
+    // Días 13 al 16 y días 29, 30, 31, 1
+    const esDiaDeSincronizacion = 
+      (dia >= 13 && dia <= 16) || 
+      (dia >= 29) || 
+      (dia === 1);
+    
+    if (!esDiaDeSincronizacion) {
+      console.log(`📅 Hoy es día ${dia}. No es día de sincronización automática (solo días 13-16 y 29-1)`);
+      return;
+    }
+    
+    // Verificar si ya se sincronizó hoy
+    const ultimaSincronizacionAuto = localStorage.getItem('ultimaSincronizacionAuto');
+    const hoyStr = hoy.toDateString();
+    
+    if (ultimaSincronizacionAuto === hoyStr) {
+      console.log('✅ Ya se sincronizó automáticamente hoy');
+      return;
+    }
+    
+    // 🔥 VERIFICAR SI HAY EVENTOS PENDIENTES (CUALQUIER TIPO)
+    const eventosPendientes = eventos.filter(e => 
+      !e.completado && 
+      !e.googleEventId
+    );
+    
+    if (eventosPendientes.length === 0) {
+      console.log('✅ No hay eventos pendientes para sincronizar');
+      localStorage.setItem('ultimaSincronizacionAuto', hoyStr);
+      return;
+    }
+    
+    console.log(`🔄 Sincronización automática (día ${dia}): ${eventosPendientes.length} eventos pendientes`);
+    
+    // Esperar 10 segundos antes de sincronizar
+    const timeoutId = setTimeout(async () => {
+      try {
+        await handleSincronizarGoogle(true);
+        localStorage.setItem('ultimaSincronizacionAuto', hoyStr);
+      } catch (error) {
+        console.error('Error en sincronización automática:', error);
+      }
+    }, 10000);
+    
+    return () => clearTimeout(timeoutId);
+  }, [user, eventos, handleSincronizarGoogle]);
   const handleEventoDrag = async (evento, nuevaFecha) => {
     if (evento.completado) {
       mostrarAlerta('⚠️ No permitido', 'No se pueden mover eventos completados', 'warning');
@@ -2584,35 +2600,6 @@ const Calendario = () => {
   useEffect(() => {
     cargarEventos();
   }, [cargarEventos]);
-
-  // Sincronización automática con control de cuota
-  useEffect(() => {
-    if (user && eventos.length > 0 && !sincronizacionRealizada.current && !sincronizandoRef.current && !sincronizacionCompleta) {
-      const sincronizarAutomatico = async () => {
-        // Verificar si hay eventos pendientes
-        const eventosPendientes = eventos.filter(e => 
-          e.id.startsWith('personalizado-') &&
-          !e.completado && 
-          !e.googleEventId
-        );
-        
-        if (eventosPendientes.length === 0 && colaPendiente.current.length === 0) {
-          console.log('✅ No hay eventos pendientes para sincronizar');
-          sincronizacionRealizada.current = true;
-          setSincronizacionCompleta(true);
-          return;
-        }
-        
-        // Solo sincronizar si hay eventos pendientes y no se ha excedido la cuota
-        if (eventosPendientes.length > 0) {
-          await handleSincronizarGoogle(true);
-        }
-      };
-      
-      const timeoutId = setTimeout(sincronizarAutomatico, 5000);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [user, eventos, handleSincronizarGoogle]);
 
   useEffect(() => {
     const handleSetFecha = (e) => {
@@ -2740,17 +2727,10 @@ const Calendario = () => {
                   </span>
                 )}
 
-                {sincronizacionCompleta && eventosSincronizadosTotal > 0 && (
+                {eventosSincronizadosTotal > 0 && (
                   <span className="text-xs px-2 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full flex items-center space-x-1">
                     <CheckCircleIcon className="h-3 w-3" />
                     <span>{eventosSincronizadosTotal} sincronizados</span>
-                  </span>
-                )}
-
-                {colaPendiente.current.length > 0 && (
-                  <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 rounded-full flex items-center space-x-1">
-                    <ClockIcon className="h-3 w-3" />
-                    <span>{colaPendiente.current.length} pendientes</span>
                   </span>
                 )}
 
@@ -3096,7 +3076,7 @@ const Calendario = () => {
       </div>
 
       {/* Estilos para animaciones */}
-      <style jsx>{`
+      <style>{`
         @keyframes scan {
           0% { transform: translateX(-100%); }
           100% { transform: translateX(100%); }

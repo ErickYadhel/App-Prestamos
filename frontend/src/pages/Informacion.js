@@ -378,7 +378,7 @@ const Informacion = () => {
       </div>
 
       {/* Estilos CSS para animaciones */}
-      <style jsx>{`
+      <style>{`
         @keyframes gradient-xy {
           0%, 100% {
             background-position: 0% 0%;

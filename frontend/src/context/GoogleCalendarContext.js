@@ -107,7 +107,10 @@ export const GoogleCalendarProvider = ({ children }) => {
   // FUNCIONES DE GOOGLE CALENDAR
   // ============================================
 
-  // Crear evento en Google Calendar
+  // ============================================
+  // 🔥 CREAR EVENTO EN GOOGLE CALENDAR (VERSIÓN CORREGIDA)
+  // Maneja correctamente las horas y fechas
+  // ============================================
   const crearEventoGoogle = async (eventoData) => {
     if (!accessToken) {
       setError('No hay sesión activa con Google');
@@ -120,15 +123,41 @@ export const GoogleCalendarProvider = ({ children }) => {
     try {
       const calendarId = eventoData.calendarId || 'primary';
       
+      // 🔥 CONSTRUIR FECHA INICIO CORRECTAMENTE
+      const fechaInicio = new Date(eventoData.fecha);
+      
+      // Si el evento tiene hora específica, aplicarla
+      if (eventoData.hora) {
+        const [horas, minutos] = eventoData.hora.split(':').map(Number);
+        fechaInicio.setHours(horas, minutos, 0, 0);
+      } else if (!eventoData.fecha.includes('T')) {
+        // Si es solo una fecha sin hora, usar 09:00 por defecto
+        fechaInicio.setHours(9, 0, 0, 0);
+      }
+      
+      // 🔥 CONSTRUIR FECHA FIN CORRECTAMENTE
+      let fechaFin;
+      if (eventoData.fechaFin) {
+        fechaFin = new Date(eventoData.fechaFin);
+      } else if (eventoData.horaFin) {
+        fechaFin = new Date(fechaInicio);
+        const [horasFin, minutosFin] = eventoData.horaFin.split(':').map(Number);
+        fechaFin.setHours(horasFin, minutosFin, 0, 0);
+      } else {
+        // Por defecto, el evento dura 1 hora
+        fechaFin = new Date(fechaInicio);
+        fechaFin.setHours(fechaInicio.getHours() + 1, 0, 0, 0);
+      }
+      
       const evento = {
-        summary: eventoData.titulo,
+        summary: eventoData.titulo || 'Evento sin título',
         description: eventoData.descripcion || '',
         start: {
-          dateTime: new Date(eventoData.fecha).toISOString(),
+          dateTime: fechaInicio.toISOString(),
           timeZone: 'America/Santo_Domingo'
         },
         end: {
-          dateTime: new Date(eventoData.fechaFin || eventoData.fecha).toISOString(),
+          dateTime: fechaFin.toISOString(),
           timeZone: 'America/Santo_Domingo'
         },
         attendees: eventoData.attendees || [],
@@ -136,7 +165,7 @@ export const GoogleCalendarProvider = ({ children }) => {
           useDefault: false,
           overrides: [
             { method: 'email', minutes: 24 * 60 },
-            { method: 'popup', minutes: 10 }
+            { method: 'popup', minutes: 30 }
           ]
         }
       };
@@ -152,6 +181,7 @@ export const GoogleCalendarProvider = ({ children }) => {
         }
       );
 
+      console.log(`✅ Evento creado en Google Calendar:`, response.data.id);
       return response.data;
     } catch (error) {
       console.error('Error al crear evento en Google Calendar:', error);
@@ -176,7 +206,8 @@ export const GoogleCalendarProvider = ({ children }) => {
       const params = {
         timeZone: 'America/Santo_Domingo',
         singleEvents: true,
-        orderBy: 'startTime'
+        orderBy: 'startTime',
+        maxResults: 2500 // 🔥 Aumentado para traer más eventos
       };
 
       if (timeMin) {
@@ -222,15 +253,31 @@ export const GoogleCalendarProvider = ({ children }) => {
     setError(null);
 
     try {
+      const fechaInicio = new Date(eventoData.fecha);
+      if (eventoData.hora) {
+        const [horas, minutos] = eventoData.hora.split(':').map(Number);
+        fechaInicio.setHours(horas, minutos, 0, 0);
+      } else {
+        fechaInicio.setHours(9, 0, 0, 0);
+      }
+
+      let fechaFin = new Date(fechaInicio);
+      if (eventoData.horaFin) {
+        const [horasFin, minutosFin] = eventoData.horaFin.split(':').map(Number);
+        fechaFin.setHours(horasFin, minutosFin, 0, 0);
+      } else {
+        fechaFin.setHours(fechaInicio.getHours() + 1, 0, 0, 0);
+      }
+
       const evento = {
         summary: eventoData.titulo,
         description: eventoData.descripcion || '',
         start: {
-          dateTime: new Date(eventoData.fecha).toISOString(),
+          dateTime: fechaInicio.toISOString(),
           timeZone: 'America/Santo_Domingo'
         },
         end: {
-          dateTime: new Date(eventoData.fechaFin || eventoData.fecha).toISOString(),
+          dateTime: fechaFin.toISOString(),
           timeZone: 'America/Santo_Domingo'
         }
       };
@@ -285,7 +332,10 @@ export const GoogleCalendarProvider = ({ children }) => {
     }
   };
 
-  // Sincronizar eventos de Firebase a Google Calendar
+  // ============================================
+  // 🔥 SINCRONIZAR EVENTOS DE FIREBASE A GOOGLE CALENDAR
+  // VERSIÓN CORREGIDA - Procesa TODOS los eventos del array
+  // ============================================
   const sincronizarEventos = async (eventosFirebase, calendarId = 'primary') => {
     if (!accessToken) {
       setError('No hay sesión activa con Google');
@@ -295,40 +345,175 @@ export const GoogleCalendarProvider = ({ children }) => {
     setLoading(true);
     setError(null);
 
+    console.log(`🔄 [GoogleCalendar] Sincronizando ${eventosFirebase.length} eventos...`);
+
+    const eventosActualizados = [];
     let creados = 0;
     let errores = 0;
 
     try {
-      for (const evento of eventosFirebase) {
-        // Verificar si el evento ya existe en Google Calendar
-        const eventosGoogle = await obtenerEventosGoogle(calendarId);
-        const existe = eventosGoogle.some(e => 
-          e.summary === evento.titulo && 
-          e.start?.dateTime === new Date(evento.fecha).toISOString()
-        );
+      // 🔥 CARGAR TODOS LOS EVENTOS DE GOOGLE UNA SOLA VEZ (no dentro del loop)
+      console.log('📥 Cargando eventos existentes de Google Calendar...');
+      const eventosGoogleExistentes = await obtenerEventosGoogle(calendarId);
+      console.log(`📊 ${eventosGoogleExistentes.length} eventos existentes en Google Calendar`);
 
-        if (!existe) {
-          const resultado = await crearEventoGoogle({
-            titulo: evento.titulo,
-            descripcion: evento.descripcion || '',
-            fecha: evento.fecha,
-            fechaFin: evento.fechaFin || evento.fecha,
-            calendarId
+      // 🔥 PROCESAR CADA EVENTO DEL ARRAY
+      for (const evento of eventosFirebase) {
+        try {
+          // 🔥 SI YA TIENE googleEventId, SALTARLO (ya está sincronizado)
+          if (evento.googleEventId) {
+            console.log(`⏭️ Evento ya sincronizado (tiene googleEventId): ${evento.titulo}`);
+            continue;
+          }
+
+          // Verificar si el evento ya existe en Google Calendar (por título + fecha)
+          const fechaEventoISO = new Date(evento.fecha).toISOString();
+          const existeEnGoogle = eventosGoogleExistentes.some(e => {
+            const fechaGoogle = e.start?.dateTime || e.start?.date;
+            if (!fechaGoogle) return false;
+            const fechaGoogleISO = new Date(fechaGoogle).toISOString();
+            return e.summary === evento.titulo && fechaGoogleISO === fechaEventoISO;
           });
 
-          if (resultado) {
+          if (existeEnGoogle) {
+            console.log(`⏭️ Evento ya existe en Google Calendar: ${evento.titulo}`);
+            // Buscar el evento existente para obtener su ID
+            const eventoExistente = eventosGoogleExistentes.find(e => {
+              const fechaGoogle = e.start?.dateTime || e.start?.date;
+              if (!fechaGoogle) return false;
+              return e.summary === evento.titulo && 
+                     new Date(fechaGoogle).toISOString() === fechaEventoISO;
+            });
+            
+            if (eventoExistente) {
+              eventosActualizados.push({
+                id: evento.id,
+                googleEventId: eventoExistente.id,
+                titulo: evento.titulo,
+                fecha: evento.fecha
+              });
+            }
+            continue;
+          }
+
+          // 🔥 CREAR EVENTO EN GOOGLE CALENDAR
+          console.log(`➕ Creando evento en Google Calendar: ${evento.titulo}`);
+          
+          const fechaInicio = new Date(evento.fecha);
+          
+          // Si tiene hora, usar esa hora; si no, usar 08:00
+          if (evento.hora) {
+            const [horas, minutos] = evento.hora.split(':').map(Number);
+            fechaInicio.setHours(horas, minutos, 0, 0);
+          } else {
+            fechaInicio.setHours(8, 0, 0, 0);
+          }
+          
+          // Fecha fin
+          let fechaFin = new Date(fechaInicio);
+          if (evento.horaFin) {
+            const [horasFin, minutosFin] = evento.horaFin.split(':').map(Number);
+            fechaFin.setHours(horasFin, minutosFin, 0, 0);
+          } else {
+            fechaFin.setHours(fechaInicio.getHours() + 10, fechaInicio.getMinutes(), 0, 0);
+          }
+
+          const eventoGoogle = {
+            summary: evento.titulo || 'Evento sin título',
+            description: evento.descripcion || '',
+            start: {
+              dateTime: fechaInicio.toISOString(),
+              timeZone: 'America/Santo_Domingo'
+            },
+            end: {
+              dateTime: fechaFin.toISOString(),
+              timeZone: 'America/Santo_Domingo'
+            },
+            reminders: {
+              useDefault: false,
+              overrides: [
+                { method: 'email', minutes: 24 * 60 },
+                { method: 'popup', minutes: 30 }
+              ]
+            }
+          };
+
+          const response = await axios.post(
+            `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`,
+            eventoGoogle,
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          if (response.data && response.data.id) {
+            console.log(`✅ Evento creado en Google Calendar: ${response.data.id}`);
+            eventosActualizados.push({
+              id: evento.id,
+              googleEventId: response.data.id,
+              titulo: evento.titulo,
+              fecha: evento.fecha
+            });
             creados++;
           } else {
+            console.warn(`⚠️ Evento creado pero sin ID: ${evento.titulo}`);
             errores++;
           }
+
+          // 🔥 PEQUEÑA PAUSA ENTRE EVENTOS PARA RESPETAR LA CUOTA
+          await new Promise(resolve => setTimeout(resolve, 200));
+
+        } catch (eventoError) {
+          console.error(`❌ Error sincronizando evento "${evento.titulo}":`, eventoError.message);
+          
+          // Si es error de cuota, detener todo
+          if (eventoError.code === 8 || 
+              eventoError.response?.status === 429 ||
+              eventoError.response?.data?.error?.message?.includes('Quota exceeded')) {
+            console.warn('⚠️ Cuota de Google Calendar excedida, deteniendo sincronización');
+            throw new Error('Quota exceeded');
+          }
+          
+          errores++;
         }
       }
 
-      return { success: true, creados, errores };
+      console.log(`📊 Sincronización completada: ${creados} creados, ${errores} errores, ${eventosActualizados.length} actualizados`);
+
+      return { 
+        success: true, 
+        creados, 
+        errores, 
+        eventosActualizados,
+        total: eventosFirebase.length
+      };
+      
     } catch (error) {
-      console.error('Error al sincronizar eventos:', error);
+      console.error('❌ Error al sincronizar eventos:', error);
+      
+      // Si es error de cuota, retornar lo que se logró sincronizar
+      if (error.message === 'Quota exceeded') {
+        setError('Se ha excedido la cuota de Google Calendar');
+        return { 
+          success: true, 
+          creados, 
+          errores, 
+          eventosActualizados,
+          quotaExceeded: true
+        };
+      }
+      
       setError('Error al sincronizar eventos');
-      return { success: false, error: 'Error al sincronizar' };
+      return { 
+        success: false, 
+        error: error.message,
+        creados,
+        errores,
+        eventosActualizados
+      };
     } finally {
       setLoading(false);
     }

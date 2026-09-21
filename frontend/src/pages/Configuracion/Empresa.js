@@ -48,33 +48,33 @@ const LogoPreviewModal = ({ isOpen, onClose, logoUrl, empresaNombre }) => {
         >
           <div className="absolute inset-0 bg-gradient-to-br from-red-600/10 to-red-800/10 pointer-events-none" />
           
-          <div className="relative p-6">
+          <div className="relative p-4 sm:p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+              <h3 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">
                 Vista previa del Logo
               </h3>
               <button
                 onClick={onClose}
                 className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               >
-                <XMarkIcon className="h-6 w-6 text-gray-600 dark:text-gray-400" />
+                <XMarkIcon className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
 
-            <div className="flex flex-col items-center justify-center p-8 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-xl border-2 border-red-600/20">
+            <div className="flex flex-col items-center justify-center p-4 sm:p-8 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-xl border-2 border-red-600/20">
               {logoUrl ? (
                 <img 
                   src={logoUrl} 
                   alt="Logo de la empresa" 
-                  className="max-w-full max-h-[60vh] object-contain"
+                  className="max-w-full max-h-[50vh] sm:max-h-[60vh] object-contain"
                   onError={(e) => {
                     e.target.onerror = null;
                     e.target.src = 'https://via.placeholder.com/400?text=Error+al+cargar+imagen';
                   }}
                 />
               ) : (
-                <div className="text-center p-12">
-                  <PhotoIcon className="h-24 w-24 text-gray-400 mx-auto mb-4" />
+                <div className="text-center p-8 sm:p-12">
+                  <PhotoIcon className="h-16 w-16 sm:h-24 sm:w-24 text-gray-400 mx-auto mb-4" />
                   <p className="text-gray-500 dark:text-gray-400">No hay logo disponible</p>
                 </div>
               )}
@@ -83,7 +83,7 @@ const LogoPreviewModal = ({ isOpen, onClose, logoUrl, empresaNombre }) => {
             <div className="mt-6 flex justify-end">
               <button
                 onClick={onClose}
-                className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all"
+                className="px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all"
               >
                 Cerrar
               </button>
@@ -96,7 +96,7 @@ const LogoPreviewModal = ({ isOpen, onClose, logoUrl, empresaNombre }) => {
 };
 
 // ============================================
-// MODAL DE MAPA AMPLIADO (CORREGIDO)
+// MODAL DE MAPA AMPLIADO
 // ============================================
 const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
   const [busqueda, setBusqueda] = useState(ubicacion || '');
@@ -269,7 +269,7 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
         }
       });
       
-      const marker = L.marker([parseFloat(lugar.lat), parseFloat(lugar.lon)]).addTo(map)
+      L.marker([parseFloat(lugar.lat), parseFloat(lugar.lon)]).addTo(map)
         .bindPopup(nombreLugar)
         .openPopup();
     }
@@ -283,32 +283,32 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl"
+        className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-xl"
         onClick={onClose}
       >
         <motion.div
           initial={{ scale: 0.9, y: 20 }}
           animate={{ scale: 1, y: 0 }}
           exit={{ scale: 0.9, y: 20 }}
-          className="relative w-full max-w-5xl max-h-[90vh] overflow-hidden bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-red-600/30"
+          className="relative w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-red-600/30"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="relative p-6">
+          <div className="relative p-4 sm:p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+              <h3 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">
                 Buscar ubicación en el mapa
               </h3>
               <button
                 onClick={onClose}
                 className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
               >
-                <XMarkIcon className="h-6 w-6 text-gray-600 dark:text-gray-400" />
+                <XMarkIcon className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
 
             {error && (
-              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-lg flex items-center space-x-2">
-                <ExclamationTriangleIcon className="h-5 w-5" />
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-lg flex items-center space-x-2 text-sm">
+                <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
                 <span>{error}</span>
               </div>
             )}
@@ -326,7 +326,7 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
                     }}
                     onFocus={() => busqueda.length >= 3 && setMostrarSugerencias(true)}
                     placeholder="Buscar dirección, ciudad o lugar..."
-                    className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none transition-all dark:text-white"
+                    className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none transition-all text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                   />
                   {buscando && (
                     <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -344,9 +344,9 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
                         className="w-full text-left px-4 py-3 flex items-start space-x-3 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors border-b last:border-b-0 border-gray-100 dark:border-gray-700"
                       >
                         <MapPinIcon className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium text-gray-900 dark:text-white">{lugar.display_name.split(',')[0]}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{lugar.display_name}</p>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{lugar.display_name.split(',')[0]}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{lugar.display_name}</p>
                         </div>
                       </button>
                     ))}
@@ -355,7 +355,7 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
               </div>
 
               {loading ? (
-                <div className="h-96 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                <div className="h-64 sm:h-96 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
                   <div className="text-center">
                     <div className="animate-spin h-10 w-10 border-4 border-red-600 border-t-transparent rounded-full mx-auto mb-3"></div>
                     <p className="text-gray-600 dark:text-gray-400">Cargando mapa...</p>
@@ -364,14 +364,14 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
               ) : (
                 <div 
                   id={containerId.current} 
-                  className="h-96 rounded-xl overflow-hidden shadow-lg border-2 border-red-600/20 bg-gray-100 dark:bg-gray-800"
+                  className="h-64 sm:h-96 rounded-xl overflow-hidden shadow-lg border-2 border-red-600/20 bg-gray-100 dark:bg-gray-800"
                 ></div>
               )}
 
-              <div className="flex justify-end space-x-4">
+              <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4">
                 <button
                   onClick={onClose}
-                  className="px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  className="w-full sm:w-auto px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                 >
                   Cancelar
                 </button>
@@ -380,7 +380,7 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
                     onSeleccionar(busqueda);
                     onClose();
                   }}
-                  className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all"
+                  className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-red-600 to-red-800 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all"
                 >
                   Marcar esta ubicación
                 </button>
@@ -394,7 +394,7 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
 };
 
 // ============================================
-// COMPONENTE DE MAPA INTERACTIVO (CORREGIDO)
+// COMPONENTE DE MAPA INTERACTIVO
 // ============================================
 const MapaInteractivo = ({ ubicacion, onUbicacionChange, readOnly }) => {
   const [busqueda, setBusqueda] = useState(ubicacion || '');
@@ -477,7 +477,7 @@ const MapaInteractivo = ({ ubicacion, onUbicacionChange, readOnly }) => {
   return (
     <div className="space-y-2">
       <div className="relative">
-        <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+        <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
         <input
           type="text"
           value={busqueda}
@@ -489,18 +489,18 @@ const MapaInteractivo = ({ ubicacion, onUbicacionChange, readOnly }) => {
           }}
           placeholder="Dirección, ciudad o lugar..."
           readOnly={readOnly}
-          className={`w-full pl-10 pr-20 py-3 bg-white dark:bg-gray-900 border-2 rounded-lg transition-all dark:text-white ${
+          className={`w-full pl-10 pr-12 py-2.5 sm:py-3 border-2 rounded-lg transition-all text-sm sm:text-base ${
             readOnly 
-              ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 cursor-not-allowed text-gray-600 dark:text-gray-400'
-              : 'border-gray-200 dark:border-gray-700 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none'
+              ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 cursor-not-allowed text-gray-600 dark:text-gray-400'
+              : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none'
           }`}
         />
         <button
           onClick={() => setMapaAmpliadoAbierto(true)}
-          className="absolute right-2 p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+          className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
           title="Ampliar mapa"
         >
-          <ArrowsPointingOutIcon className="h-5 w-5" />
+          <ArrowsPointingOutIcon className="h-4 w-4 sm:h-5 sm:w-5" />
         </button>
       </div>
 
@@ -520,7 +520,7 @@ const MapaInteractivo = ({ ubicacion, onUbicacionChange, readOnly }) => {
             className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-md"
           />
         </button>
-        <span className="text-sm text-gray-700 dark:text-gray-300">
+        <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">
           {readOnly ? 'Mapa bloqueado' : 'Mostrar mapa interactivo'}
         </span>
       </div>
@@ -534,7 +534,7 @@ const MapaInteractivo = ({ ubicacion, onUbicacionChange, readOnly }) => {
         >
           <div 
             id={containerId.current} 
-            className="h-48 rounded-xl overflow-hidden shadow-lg border-2 border-red-600/20 bg-gray-100 dark:bg-gray-800"
+            className="h-40 sm:h-48 rounded-xl overflow-hidden shadow-lg border-2 border-red-600/20 bg-gray-100 dark:bg-gray-800"
           ></div>
         </motion.div>
       )}
@@ -573,7 +573,7 @@ const GlassCard = ({ children, className = '' }) => (
 );
 
 // ============================================
-// COMPONENTE DE INPUT TECNOLÓGICO (CON MODO EDICIÓN)
+// COMPONENTE DE INPUT TECNOLÓGICO (MEJORADO)
 // ============================================
 const TechInput = ({ icon: Icon, label, error, value, onChange, readOnly, ...props }) => {
   const [localValue, setLocalValue] = useState(value || '');
@@ -596,12 +596,12 @@ const TechInput = ({ icon: Icon, label, error, value, onChange, readOnly, ...pro
 
   return (
     <motion.div 
-      className="space-y-1"
-      animate={{ scale: isFocused ? 1.02 : 1 }}
+      className="space-y-1 w-full"
+      animate={{ scale: isFocused ? 1.01 : 1 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
       {label && (
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        <label className="block text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
           {label}
         </label>
       )}
@@ -609,19 +609,23 @@ const TechInput = ({ icon: Icon, label, error, value, onChange, readOnly, ...pro
         <div className="relative">
           {Icon && (
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Icon className={`h-5 w-5 transition-colors duration-300 ${
-                isFocused && !readOnly ? 'text-red-500' : 'text-gray-400'
+              <Icon className={`h-4 w-4 sm:h-5 sm:w-5 transition-colors duration-300 ${
+                isFocused && !readOnly 
+                  ? 'text-red-500' 
+                  : readOnly 
+                    ? 'text-gray-400 dark:text-gray-500' 
+                    : 'text-gray-400 dark:text-gray-500'
               }`} />
             </div>
           )}
           <input
-            className={`w-full ${Icon ? 'pl-10' : 'pl-4'} pr-4 py-2.5 border-2 rounded-lg outline-none transition-all duration-300 dark:text-white ${
+            className={`w-full ${Icon ? 'pl-9 sm:pl-10' : 'pl-3 sm:pl-4'} pr-3 sm:pr-4 py-2.5 sm:py-3 border-2 rounded-lg outline-none transition-all duration-300 text-sm sm:text-base ${
               isFocused && !readOnly
-                ? 'border-red-500 ring-2 ring-red-500/20' 
+                ? 'border-red-500 ring-2 ring-red-500/20 bg-white dark:bg-gray-900 text-gray-900 dark:text-white' 
                 : readOnly
-                  ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 cursor-not-allowed'
-                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'
-            }`}
+                  ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 cursor-not-allowed'
+                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white hover:border-gray-300 dark:hover:border-gray-600'
+            } placeholder-gray-400 dark:placeholder-gray-500`}
             value={localValue}
             onChange={handleChange}
             onFocus={() => !readOnly && setIsFocused(true)}
@@ -632,7 +636,7 @@ const TechInput = ({ icon: Icon, label, error, value, onChange, readOnly, ...pro
         </div>
       </div>
       {error && (
-        <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+        <p className="text-xs sm:text-sm text-red-600 dark:text-red-400 mt-1 font-medium">
           {error}
         </p>
       )}
@@ -641,40 +645,58 @@ const TechInput = ({ icon: Icon, label, error, value, onChange, readOnly, ...pro
 };
 
 // ============================================
-// COMPONENTE DE SELECT TECNOLÓGICO (CON MODO EDICIÓN)
+// COMPONENTE DE SELECT TECNOLÓGICO (MEJORADO)
 // ============================================
 const TechSelect = ({ icon: Icon, label, value, onChange, options, readOnly, placeholder }) => {
+  const [isFocused, setIsFocused] = useState(false);
+
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 w-full">
       {label && (
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        <label className="block text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
           {label}
         </label>
       )}
       <div className="relative">
         {Icon && (
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Icon className="h-5 w-5 text-gray-400" />
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
+            <Icon className={`h-4 w-4 sm:h-5 sm:w-5 ${
+              isFocused && !readOnly 
+                ? 'text-red-500' 
+                : 'text-gray-400 dark:text-gray-500'
+            }`} />
           </div>
         )}
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           disabled={readOnly}
-          className={`w-full ${Icon ? 'pl-10' : 'pl-4'} pr-10 py-2.5 border-2 rounded-lg outline-none transition-all appearance-none dark:text-white ${
+          className={`w-full ${Icon ? 'pl-9 sm:pl-10' : 'pl-3 sm:pl-4'} pr-8 sm:pr-10 py-2.5 sm:py-3 border-2 rounded-lg outline-none transition-all appearance-none text-sm sm:text-base ${
+            isFocused && !readOnly
+              ? 'border-red-500 ring-2 ring-red-500/20'
+              : 'border-gray-200 dark:border-gray-700'
+          } ${
             readOnly
-              ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 cursor-not-allowed'
-              : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:border-red-500 focus:ring-2 focus:ring-red-500/20'
+              ? 'bg-gray-50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 cursor-not-allowed'
+              : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:border-red-500 cursor-pointer'
           }`}
         >
-          <option value="">{placeholder || 'Seleccionar...'}</option>
+          <option value="" className="bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400">
+            {placeholder || 'Seleccionar...'}
+          </option>
           {options.map((option) => (
-            <option key={option.value} value={option.value}>
+            <option 
+              key={option.value} 
+              value={option.value}
+              className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+            >
               {option.label}
             </option>
           ))}
         </select>
-        <ChevronDownIcon className="absolute inset-y-0 right-0 pr-3 flex items-center h-5 w-5 text-gray-400 pointer-events-none" />
+        <ChevronDownIcon className="absolute inset-y-0 right-0 pr-2 sm:pr-3 flex items-center h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
       </div>
     </div>
   );
@@ -695,21 +717,21 @@ const LogoPreview = ({ logoUrl, empresaNombre, onAmpliar }) => {
       whileHover={{ scale: 1.02 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
-      <div className="relative bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-2xl p-8 border-2 border-red-600/20 hover:border-red-600/40 transition-all shadow-xl h-full flex flex-col items-center justify-center min-h-[300px]">
-        <div className="relative mb-6">
-          <div className="relative w-44 h-44 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl flex items-center justify-center overflow-hidden border-2 border-red-600/20 group-hover:border-red-600/40 transition-all">
+      <div className="relative bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-2xl p-4 sm:p-8 border-2 border-red-600/20 hover:border-red-600/40 transition-all shadow-xl h-full flex flex-col items-center justify-center min-h-[250px] sm:min-h-[300px]">
+        <div className="relative mb-4 sm:mb-6">
+          <div className="relative w-32 h-32 sm:w-44 sm:h-44 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl flex items-center justify-center overflow-hidden border-2 border-red-600/20 group-hover:border-red-600/40 transition-all">
             {logoUrl ? (
               <img 
                 src={logoUrl} 
                 alt="Logo de la empresa" 
-                className="w-full h-full object-contain p-4"
+                className="w-full h-full object-contain p-3 sm:p-4"
                 onError={(e) => {
                   e.target.onerror = null;
                   e.target.src = 'https://via.placeholder.com/150?text=Error';
                 }}
               />
             ) : (
-              <div className="text-7xl font-bold bg-gradient-to-br from-red-600 to-red-800 bg-clip-text text-transparent">
+              <div className="text-4xl sm:text-7xl font-bold bg-gradient-to-br from-red-600 to-red-800 bg-clip-text text-transparent">
                 {empresaNombre?.charAt(0) || 'E'}
               </div>
             )}
@@ -719,20 +741,20 @@ const LogoPreview = ({ logoUrl, empresaNombre, onAmpliar }) => {
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
-              className="absolute -top-2 -right-2 w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-full flex items-center justify-center text-white shadow-xl"
+              className="absolute -top-2 -right-2 w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-full flex items-center justify-center text-white shadow-xl"
             >
-              <EyeIcon className="h-5 w-5" />
+              <EyeIcon className="h-4 w-4 sm:h-5 sm:w-5" />
             </motion.div>
           )}
         </div>
 
         <div className="text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
             {logoUrl ? 'Logo personalizado' : 'Logo por defecto'}
           </p>
           {logoUrl && (
-            <div className="mt-3 text-green-600 dark:text-green-400 text-sm font-medium flex items-center justify-center">
-              <CheckCircleIcon className="h-4 w-4 mr-1" />
+            <div className="mt-2 sm:mt-3 text-green-600 dark:text-green-400 text-xs sm:text-sm font-medium flex items-center justify-center">
+              <CheckCircleIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
               Logo cargado correctamente
             </div>
           )}
@@ -796,7 +818,7 @@ const paisesData = {
 };
 
 // ============================================
-// COMPONENTE PRINCIPAL: EMPRESA (CORREGIDO CON UN SOLO BOTÓN)
+// COMPONENTE PRINCIPAL: EMPRESA
 // ============================================
 const Empresa = ({ configuracion, handleInputChange }) => {
   const { user } = useAuth();
@@ -1061,7 +1083,7 @@ const Empresa = ({ configuracion, handleInputChange }) => {
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="space-y-6"
+      className="space-y-4 sm:space-y-6"
     >
       <LogoPreviewModal
         isOpen={logoModalAbierto}
@@ -1076,10 +1098,10 @@ const Empresa = ({ configuracion, handleInputChange }) => {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="p-4 bg-red-50 dark:bg-red-900/30 border-2 border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-xl flex items-center space-x-3"
+            className="p-3 sm:p-4 bg-red-50 dark:bg-red-900/30 border-2 border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-xl flex items-center space-x-3 text-sm"
           >
             <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
-            <span>{error}</span>
+            <span className="font-medium">{error}</span>
           </motion.div>
         )}
 
@@ -1088,41 +1110,43 @@ const Empresa = ({ configuracion, handleInputChange }) => {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="p-4 bg-green-50 dark:bg-green-900/30 border-2 border-green-200 dark:border-green-700 text-green-700 dark:text-green-400 rounded-xl flex items-center space-x-3"
+            className="p-3 sm:p-4 bg-green-50 dark:bg-green-900/30 border-2 border-green-200 dark:border-green-700 text-green-700 dark:text-green-400 rounded-xl flex items-center space-x-3 text-sm"
           >
             <CheckCircleIcon className="h-5 w-5 flex-shrink-0" />
-            <span>{exito}</span>
+            <span className="font-medium">{exito}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
       <GlassCard>
-        <div className="p-6">
-          {/* Header con botones */}
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-            <div className="flex items-center space-x-3">
-              <div className="p-3 bg-gradient-to-br from-red-600 to-red-800 rounded-xl shadow-lg">
-                <BuildingStorefrontIcon className="h-6 w-6 text-white" />
+        <div className="p-4 sm:p-6">
+          {/* Header con botones - Responsive */}
+          <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center space-x-3 w-full sm:w-auto">
+              <div className="p-2 sm:p-3 bg-gradient-to-br from-red-600 to-red-800 rounded-xl shadow-lg flex-shrink-0">
+                <BuildingStorefrontIcon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Información de la Empresa</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+              <div className="min-w-0">
+                <h3 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white truncate">
+                  Información de la Empresa
+                </h3>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                   {modoEdicion ? '✏️ Editando los datos de tu negocio' : '🔒 Datos principales de tu negocio'}
                 </p>
               </div>
             </div>
             
             {/* Botones de acción */}
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
               {modoEdicion && (
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={cancelarEdicion}
                   disabled={guardando}
-                  className="px-5 py-2.5 bg-gray-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center space-x-2 disabled:opacity-50"
+                  className="flex-1 sm:flex-none px-3 sm:px-5 py-2 sm:py-2.5 bg-gray-600 hover:bg-gray-700 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center space-x-1.5 sm:space-x-2 disabled:opacity-50 text-xs sm:text-sm"
                 >
-                  <XMarkIcon className="h-5 w-5" />
+                  <XMarkIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   <span>Cancelar</span>
                 </motion.button>
               )}
@@ -1132,7 +1156,7 @@ const Empresa = ({ configuracion, handleInputChange }) => {
                 whileTap={{ scale: 0.95 }}
                 onClick={modoEdicion ? guardarEnFirebase : activarEdicion}
                 disabled={guardando}
-                className={`px-6 py-2.5 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center space-x-2 ${
+                className={`flex-1 sm:flex-none px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center space-x-1.5 sm:space-x-2 text-xs sm:text-sm ${
                   modoEdicion
                     ? 'bg-gradient-to-r from-green-600 to-green-800 text-white'
                     : 'bg-gradient-to-r from-red-600 to-red-800 text-white'
@@ -1140,17 +1164,17 @@ const Empresa = ({ configuracion, handleInputChange }) => {
               >
                 {guardando ? (
                   <>
-                    <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                    <ArrowPathIcon className="h-4 w-4 sm:h-5 sm:w-5 animate-spin" />
                     <span>Guardando...</span>
                   </>
                 ) : modoEdicion ? (
                   <>
-                    <CheckCircleIcon className="h-5 w-5" />
-                    <span>Guardar Cambios</span>
+                    <CheckCircleIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+                    <span>Guardar</span>
                   </>
                 ) : (
                   <>
-                    <PencilIcon className="h-5 w-5" />
+                    <PencilIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                     <span>Editar</span>
                   </>
                 )}
@@ -1158,7 +1182,8 @@ const Empresa = ({ configuracion, handleInputChange }) => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Grid de campos - Responsive */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 lg:gap-6">
             {/* Fila 1 */}
             <TechInput
               icon={BuildingStorefrontIcon}
@@ -1189,14 +1214,16 @@ const Empresa = ({ configuracion, handleInputChange }) => {
             />
 
             <TechInput
-              icon={UserIcon}
-              label="Nombre Completo"
-              value={campos.dueno || ''}
-              onChange={() => {}}
-              readOnly={true}
+              icon={EnvelopeIcon}
+              label="Correo Electrónico"
+              type="email"
+              value={campos.correo || ''}
+              onChange={(value) => handleCampoChange('correo', value)}
+              placeholder="info@empresa.com"
+              readOnly={!modoEdicion}
             />
 
-            {/* Fila 3 */}
+            {/* Fila 3: Nombre y Apellido del propietario */}
             <TechInput
               icon={UserIcon}
               label="Nombre del Propietario"
@@ -1221,56 +1248,40 @@ const Empresa = ({ configuracion, handleInputChange }) => {
               readOnly={!modoEdicion}
             />
 
-            {/* Fila 4 */}
-            <div className="space-y-1">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                País
-              </label>
-              <TechSelect
-                icon={GlobeAltIcon}
-                value={paisSeleccionado}
-                onChange={(value) => setPaisSeleccionado(value)}
-                options={paisesOptions}
-                readOnly={!modoEdicion}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Provincia / Ciudad
-              </label>
-              <TechSelect
-                icon={MapPinIcon}
-                value={provinciaSeleccionada}
-                onChange={(value) => setProvinciaSeleccionada(value)}
-                options={provinciasOptions}
-                readOnly={!modoEdicion}
-                placeholder="Seleccionar provincia"
-              />
-            </div>
-
-            {/* Fila 5 */}
-            <TechInput
-              icon={EnvelopeIcon}
-              label="Correo Electrónico"
-              type="email"
-              value={campos.correo || ''}
-              onChange={(value) => handleCampoChange('correo', value)}
-              placeholder="info@empresa.com"
-              readOnly={!modoEdicion}
-            />
-
-            <TechInput
+            {/* Fila 4: País y Provincia */}
+            <TechSelect
               icon={GlobeAltIcon}
-              label="Sitio Web"
-              value={campos.sitioWeb || ''}
-              onChange={(value) => handleCampoChange('sitioWeb', value)}
-              placeholder="https://www.eysinversiones.com"
+              label="País"
+              value={paisSeleccionado}
+              onChange={(value) => setPaisSeleccionado(value)}
+              options={paisesOptions}
               readOnly={!modoEdicion}
             />
 
-            {/* Fila 6: Logo y Mapa */}
-            <div className="md:col-span-1">
+            <TechSelect
+              icon={MapPinIcon}
+              label="Provincia / Ciudad"
+              value={provinciaSeleccionada}
+              onChange={(value) => setProvinciaSeleccionada(value)}
+              options={provinciasOptions}
+              readOnly={!modoEdicion}
+              placeholder="Seleccionar provincia"
+            />
+
+            {/* Fila 5: Sitio Web */}
+            <div className="md:col-span-2">
+              <TechInput
+                icon={GlobeAltIcon}
+                label="Sitio Web"
+                value={campos.sitioWeb || ''}
+                onChange={(value) => handleCampoChange('sitioWeb', value)}
+                placeholder="https://www.eysinversiones.com"
+                readOnly={!modoEdicion}
+              />
+            </div>
+
+            {/* Fila 6: Logo y Mapa - Responsive */}
+            <div className="space-y-4">
               <TechInput
                 icon={PhotoIcon}
                 label="URL del Logo"
@@ -1281,7 +1292,7 @@ const Empresa = ({ configuracion, handleInputChange }) => {
               />
               
               {campos.logoUrl && (
-                <div className="mt-4 h-[320px]">
+                <div className="w-full">
                   <LogoPreview 
                     logoUrl={campos.logoUrl} 
                     empresaNombre={campos.empresaNombre}
@@ -1291,30 +1302,36 @@ const Empresa = ({ configuracion, handleInputChange }) => {
               )}
             </div>
 
-            <div className="md:col-span-1">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Ubicación
-              </label>
-              <MapaInteractivo 
-                ubicacion={campos.ubicacion}
-                onUbicacionChange={(value) => handleCampoChange('ubicacion', value)}
-                readOnly={!modoEdicion}
-              />
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
+                  Ubicación
+                </label>
+                <MapaInteractivo 
+                  ubicacion={campos.ubicacion}
+                  onUbicacionChange={(value) => handleCampoChange('ubicacion', value)}
+                  readOnly={!modoEdicion}
+                />
+              </div>
             </div>
           </div>
 
           {/* Indicador de cambios pendientes */}
           {modoEdicion && cambiosPendientes && (
-            <div className="mt-6 flex items-center justify-end space-x-2 text-sm text-yellow-600 dark:text-yellow-400">
-              <ClockIcon className="h-4 w-4 animate-pulse" />
-              <span>Hay cambios sin guardar</span>
-            </div>
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-6 flex items-center justify-end space-x-2 text-xs sm:text-sm text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800"
+            >
+              <ClockIcon className="h-4 w-4 animate-pulse flex-shrink-0" />
+              <span className="font-medium">Hay cambios sin guardar</span>
+            </motion.div>
           )}
 
           {!modoEdicion && (
-            <div className="mt-6 flex items-center justify-end space-x-2 text-sm text-gray-500 dark:text-gray-400">
-              <span>🔒 Modo de solo lectura</span>
-              <span className="text-xs">Haz clic en "Editar" para modificar</span>
+            <div className="mt-6 flex flex-wrap items-center justify-end gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+              <span className="font-medium">🔒 Modo de solo lectura</span>
+              <span className="text-xs">· Haz clic en "Editar" para modificar</span>
             </div>
           )}
         </div>

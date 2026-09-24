@@ -216,68 +216,69 @@ const CambiosIndicador = ({ hasChanges, onSave, onCancel, saving }) => {
   if (!hasChanges) return null;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 20, scale: 0.95 }}
-      transition={{ type: "spring", stiffness: 300, damping: 30 }}
-      className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 w-[95%] sm:w-auto"
-    >
-      <div className={`flex flex-wrap items-center justify-center gap-3 px-4 py-3 rounded-2xl shadow-2xl border-2 ${
-        theme === 'dark'
-          ? 'bg-gray-900/95 backdrop-blur-xl border-yellow-700/50'
-          : 'bg-white/95 backdrop-blur-xl border-yellow-500/30'
-      }`}>
-        {/* Efecto de brillo */}
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-yellow-500/10 via-yellow-400/5 to-yellow-500/10 pointer-events-none" />
-        
-        <div className="relative flex items-center space-x-2 text-yellow-600 dark:text-yellow-400">
-          <div className="relative">
-            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500 animate-ping absolute" />
-            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500 relative" />
-          </div>
-          <span className="text-sm font-semibold">Cambios pendientes</span>
-        </div>
-
-        <div className="hidden sm:block w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
-
-        <button
-          onClick={onCancel}
-          disabled={saving}
-          className={`relative px-3 py-1.5 rounded-xl font-medium transition-all flex items-center space-x-1.5 text-sm ${
-            theme === 'dark'
-              ? 'bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          } disabled:opacity-50`}
-        >
-          <XMarkIcon className="h-4 w-4" />
-          <span>Descartar</span>
-        </button>
-
-        <motion.button
-          whileHover={{ scale: 1.02, boxShadow: "0 20px 40px -10px rgba(239, 68, 68, 0.4)" }}
-          whileTap={{ scale: 0.98 }}
-          onClick={onSave}
-          disabled={saving}
-          className="relative px-5 py-1.5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl font-medium shadow-xl hover:shadow-2xl transition-all flex items-center space-x-1.5 disabled:opacity-50 text-sm overflow-hidden group"
-        >
-          <div className="absolute inset-0 bg-gradient-to-r from-red-500 to-red-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.95 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        className="fixed bottom-4 left-0 right-0 z-50 flex justify-center px-3 sm:px-4 pointer-events-none"
+      >
+        <div className={`relative flex items-center justify-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl shadow-2xl border-2 pointer-events-auto max-w-full ${
+          theme === 'dark'
+            ? 'bg-gray-900/95 backdrop-blur-xl border-yellow-700/50'
+            : 'bg-white/95 backdrop-blur-xl border-yellow-500/40 shadow-yellow-500/20'
+        }`}>
+          {/* Efecto de brillo */}
+          <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-yellow-500/10 via-yellow-400/5 to-yellow-500/10 pointer-events-none" />
           
-          {saving ? (
-            <>
-              <ArrowPathIcon className="h-4 w-4 animate-spin relative z-10" />
-              <span className="relative z-10">Guardando...</span>
-            </>
-          ) : (
-            <>
-              <ArrowDownTrayIcon className="h-4 w-4 relative z-10" />
-              <span className="relative z-10">Guardar</span>
-            </>
-          )}
-        </motion.button>
-      </div>
-    </motion.div>
+          <div className="relative flex items-center space-x-2 text-yellow-600 dark:text-yellow-400 flex-shrink-0">
+            <div className="relative">
+              <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-yellow-500 animate-ping absolute" />
+              <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-yellow-500 relative" />
+            </div>
+            <span className="text-xs sm:text-sm font-semibold whitespace-nowrap">Cambios pendientes</span>
+          </div>
+
+          <div className="hidden sm:block w-px h-5 bg-gray-300 dark:bg-gray-600 flex-shrink-0"></div>
+
+          <button
+            onClick={onCancel}
+            disabled={saving}
+            className={`relative px-2.5 sm:px-3 py-1.5 rounded-xl font-medium transition-all flex items-center space-x-1 text-xs sm:text-sm flex-shrink-0 ${
+              theme === 'dark'
+                ? 'bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            } disabled:opacity-50`}
+          >
+            <XMarkIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span className="whitespace-nowrap">Descartar</span>
+          </button>
+
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={onSave}
+            disabled={saving}
+            className="relative px-3 sm:px-5 py-1.5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center space-x-1 disabled:opacity-50 text-xs sm:text-sm overflow-hidden group flex-shrink-0"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-red-500 to-red-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            
+            {saving ? (
+              <>
+                <ArrowPathIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin relative z-10" />
+                <span className="relative z-10 whitespace-nowrap">Guardando...</span>
+              </>
+            ) : (
+              <>
+                <ArrowDownTrayIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 relative z-10" />
+                <span className="relative z-10 whitespace-nowrap">Guardar</span>
+              </>
+            )}
+          </motion.button>
+        </div>
+      </motion.div>
+    </AnimatePresence>
   );
 };
 

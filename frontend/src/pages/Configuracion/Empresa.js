@@ -23,11 +23,14 @@ import {
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 
 // ============================================
 // MODAL DE VISTA PREVIA DEL LOGO
 // ============================================
 const LogoPreviewModal = ({ isOpen, onClose, logoUrl, empresaNombre }) => {
+  const { theme } = useTheme();
+  
   if (!isOpen) return null;
 
   return (
@@ -43,25 +46,43 @@ const LogoPreviewModal = ({ isOpen, onClose, logoUrl, empresaNombre }) => {
           initial={{ scale: 0.9, y: 20 }}
           animate={{ scale: 1, y: 0 }}
           exit={{ scale: 0.9, y: 20 }}
-          className="relative w-full max-w-3xl max-h-[90vh] overflow-hidden bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-red-600/30"
+          className={`relative w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-2xl shadow-2xl border-2 ${
+            theme === 'dark' 
+              ? 'bg-gray-900 border-red-600/30' 
+              : 'bg-white border-red-600/30'
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-red-600/10 to-red-800/10 pointer-events-none" />
+          <div className={`absolute inset-0 pointer-events-none ${
+            theme === 'dark'
+              ? 'bg-gradient-to-br from-red-600/10 to-red-800/10'
+              : 'bg-gradient-to-br from-red-600/5 to-red-800/5'
+          }`} />
           
           <div className="relative p-4 sm:p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">
+              <h3 className={`text-lg sm:text-2xl font-bold ${
+                theme === 'dark' ? 'text-white' : 'text-gray-900'
+              }`}>
                 Vista previa del Logo
               </h3>
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                className={`p-2 rounded-lg transition-colors ${
+                  theme === 'dark'
+                    ? 'hover:bg-red-900/30 text-gray-400'
+                    : 'hover:bg-red-100 text-gray-600'
+                }`}
               >
-                <XMarkIcon className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600 dark:text-gray-400" />
+                <XMarkIcon className="h-5 w-5 sm:h-6 sm:w-6" />
               </button>
             </div>
 
-            <div className="flex flex-col items-center justify-center p-4 sm:p-8 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-xl border-2 border-red-600/20">
+            <div className={`flex flex-col items-center justify-center p-4 sm:p-8 rounded-xl border-2 border-red-600/20 ${
+              theme === 'dark' 
+                ? 'bg-gray-800' 
+                : 'bg-gray-50'
+            }`}>
               {logoUrl ? (
                 <img 
                   src={logoUrl} 
@@ -74,8 +95,12 @@ const LogoPreviewModal = ({ isOpen, onClose, logoUrl, empresaNombre }) => {
                 />
               ) : (
                 <div className="text-center p-8 sm:p-12">
-                  <PhotoIcon className="h-16 w-16 sm:h-24 sm:w-24 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500 dark:text-gray-400">No hay logo disponible</p>
+                  <PhotoIcon className={`h-16 w-16 sm:h-24 sm:w-24 mx-auto mb-4 ${
+                    theme === 'dark' ? 'text-gray-600' : 'text-gray-400'
+                  }`} />
+                  <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                    No hay logo disponible
+                  </p>
                 </div>
               )}
             </div>
@@ -99,6 +124,7 @@ const LogoPreviewModal = ({ isOpen, onClose, logoUrl, empresaNombre }) => {
 // MODAL DE MAPA AMPLIADO
 // ============================================
 const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
+  const { theme } = useTheme();
   const [busqueda, setBusqueda] = useState(ubicacion || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -290,24 +316,38 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
           initial={{ scale: 0.9, y: 20 }}
           animate={{ scale: 1, y: 0 }}
           exit={{ scale: 0.9, y: 20 }}
-          className="relative w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-red-600/30"
+          className={`relative w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden rounded-2xl shadow-2xl border-2 ${
+            theme === 'dark' 
+              ? 'bg-gray-900 border-red-600/30' 
+              : 'bg-white border-red-600/30'
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="relative p-4 sm:p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">
+              <h3 className={`text-lg sm:text-2xl font-bold ${
+                theme === 'dark' ? 'text-white' : 'text-gray-900'
+              }`}>
                 Buscar ubicación en el mapa
               </h3>
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                className={`p-2 rounded-lg transition-colors ${
+                  theme === 'dark'
+                    ? 'hover:bg-red-900/30 text-gray-400'
+                    : 'hover:bg-red-100 text-gray-600'
+                }`}
               >
-                <XMarkIcon className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600 dark:text-gray-400" />
+                <XMarkIcon className="h-5 w-5 sm:h-6 sm:w-6" />
               </button>
             </div>
 
             {error && (
-              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-lg flex items-center space-x-2 text-sm">
+              <div className={`mb-4 p-3 rounded-lg flex items-center space-x-2 text-sm border ${
+                theme === 'dark'
+                  ? 'bg-red-900/30 border-red-700 text-red-400'
+                  : 'bg-red-50 border-red-200 text-red-700'
+              }`}>
                 <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
                 <span>{error}</span>
               </div>
@@ -316,7 +356,9 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
             <div className="space-y-4">
               <div className="relative">
                 <div className="relative">
-                  <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <MapPinIcon className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 ${
+                    theme === 'dark' ? 'text-gray-500' : 'text-gray-400'
+                  }`} />
                   <input
                     type="text"
                     value={busqueda}
@@ -326,7 +368,11 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
                     }}
                     onFocus={() => busqueda.length >= 3 && setMostrarSugerencias(true)}
                     placeholder="Buscar dirección, ciudad o lugar..."
-                    className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none transition-all text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-lg outline-none transition-all ${
+                      theme === 'dark'
+                        ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20'
+                        : 'bg-white border-gray-200 text-gray-900 placeholder-gray-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20'
+                    }`}
                   />
                   {buscando && (
                     <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -336,17 +382,33 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
                 </div>
 
                 {mostrarSugerencias && sugerencias.length > 0 && (
-                  <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-red-600/20 max-h-60 overflow-y-auto">
+                  <div className={`absolute z-50 w-full mt-1 rounded-lg shadow-xl border max-h-60 overflow-y-auto ${
+                    theme === 'dark'
+                      ? 'bg-gray-800 border-red-600/20'
+                      : 'bg-white border-red-600/20'
+                  }`}>
                     {sugerencias.map((lugar, index) => (
                       <button
                         key={index}
                         onClick={() => seleccionarLugar(lugar)}
-                        className="w-full text-left px-4 py-3 flex items-start space-x-3 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors border-b last:border-b-0 border-gray-100 dark:border-gray-700"
+                        className={`w-full text-left px-4 py-3 flex items-start space-x-3 transition-colors border-b last:border-b-0 ${
+                          theme === 'dark'
+                            ? 'hover:bg-red-900/20 border-gray-700'
+                            : 'hover:bg-red-50 border-gray-100'
+                        }`}
                       >
                         <MapPinIcon className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{lugar.display_name.split(',')[0]}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{lugar.display_name}</p>
+                          <p className={`text-sm font-medium truncate ${
+                            theme === 'dark' ? 'text-white' : 'text-gray-900'
+                          }`}>
+                            {lugar.display_name.split(',')[0]}
+                          </p>
+                          <p className={`text-xs truncate ${
+                            theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                          }`}>
+                            {lugar.display_name}
+                          </p>
                         </div>
                       </button>
                     ))}
@@ -355,23 +417,33 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
               </div>
 
               {loading ? (
-                <div className="h-64 sm:h-96 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                <div className={`h-64 sm:h-96 rounded-xl flex items-center justify-center ${
+                  theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
+                }`}>
                   <div className="text-center">
                     <div className="animate-spin h-10 w-10 border-4 border-red-600 border-t-transparent rounded-full mx-auto mb-3"></div>
-                    <p className="text-gray-600 dark:text-gray-400">Cargando mapa...</p>
+                    <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Cargando mapa...
+                    </p>
                   </div>
                 </div>
               ) : (
                 <div 
                   id={containerId.current} 
-                  className="h-64 sm:h-96 rounded-xl overflow-hidden shadow-lg border-2 border-red-600/20 bg-gray-100 dark:bg-gray-800"
+                  className={`h-64 sm:h-96 rounded-xl overflow-hidden shadow-lg border-2 border-red-600/20 ${
+                    theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
+                  }`}
                 ></div>
               )}
 
               <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4">
                 <button
                   onClick={onClose}
-                  className="w-full sm:w-auto px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  className={`w-full sm:w-auto px-6 py-3 rounded-lg font-medium transition-colors ${
+                    theme === 'dark'
+                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
                 >
                   Cancelar
                 </button>
@@ -397,6 +469,7 @@ const MapaAmpliadoModal = ({ isOpen, onClose, ubicacion, onSeleccionar }) => {
 // COMPONENTE DE MAPA INTERACTIVO
 // ============================================
 const MapaInteractivo = ({ ubicacion, onUbicacionChange, readOnly }) => {
+  const { theme } = useTheme();
   const [busqueda, setBusqueda] = useState(ubicacion || '');
   const [mapaAmpliadoAbierto, setMapaAmpliadoAbierto] = useState(false);
   const [mapaVisible, setMapaVisible] = useState(false);
@@ -477,7 +550,9 @@ const MapaInteractivo = ({ ubicacion, onUbicacionChange, readOnly }) => {
   return (
     <div className="space-y-2">
       <div className="relative">
-        <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
+        <MapPinIcon className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 ${
+          theme === 'dark' ? 'text-gray-500' : 'text-gray-400'
+        }`} />
         <input
           type="text"
           value={busqueda}
@@ -489,15 +564,23 @@ const MapaInteractivo = ({ ubicacion, onUbicacionChange, readOnly }) => {
           }}
           placeholder="Dirección, ciudad o lugar..."
           readOnly={readOnly}
-          className={`w-full pl-10 pr-12 py-2.5 sm:py-3 border-2 rounded-lg transition-all text-sm sm:text-base ${
+          className={`w-full pl-10 pr-12 py-2.5 sm:py-3 border-2 rounded-lg transition-all text-sm sm:text-base outline-none ${
             readOnly 
-              ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 cursor-not-allowed text-gray-600 dark:text-gray-400'
-              : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none'
+              ? theme === 'dark'
+                ? 'border-gray-700 bg-gray-800/50 text-gray-400 cursor-not-allowed'
+                : 'border-gray-200 bg-gray-50 text-gray-600 cursor-not-allowed'
+              : theme === 'dark'
+                ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20'
+                : 'bg-white border-gray-200 text-gray-900 placeholder-gray-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20'
           }`}
         />
         <button
           onClick={() => setMapaAmpliadoAbierto(true)}
-          className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+          className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-lg transition-colors ${
+            theme === 'dark'
+              ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/30'
+              : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
+          }`}
           title="Ampliar mapa"
         >
           <ArrowsPointingOutIcon className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -511,7 +594,7 @@ const MapaInteractivo = ({ ubicacion, onUbicacionChange, readOnly }) => {
           className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${
             readOnly ? 'opacity-50 cursor-not-allowed' : ''
           } ${
-            mapaVisible ? 'bg-red-600' : 'bg-gray-300 dark:bg-gray-600'
+            mapaVisible ? 'bg-red-600' : theme === 'dark' ? 'bg-gray-600' : 'bg-gray-300'
           }`}
         >
           <motion.div
@@ -520,7 +603,9 @@ const MapaInteractivo = ({ ubicacion, onUbicacionChange, readOnly }) => {
             className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-md"
           />
         </button>
-        <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">
+        <span className={`text-xs sm:text-sm ${
+          theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+        }`}>
           {readOnly ? 'Mapa bloqueado' : 'Mostrar mapa interactivo'}
         </span>
       </div>
@@ -534,7 +619,9 @@ const MapaInteractivo = ({ ubicacion, onUbicacionChange, readOnly }) => {
         >
           <div 
             id={containerId.current} 
-            className="h-40 sm:h-48 rounded-xl overflow-hidden shadow-lg border-2 border-red-600/20 bg-gray-100 dark:bg-gray-800"
+            className={`h-40 sm:h-48 rounded-xl overflow-hidden shadow-lg border-2 border-red-600/20 ${
+              theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
+            }`}
           ></div>
         </motion.div>
       )}
@@ -561,21 +648,30 @@ const MapaInteractivo = ({ ubicacion, onUbicacionChange, readOnly }) => {
 // ============================================
 // COMPONENTE DE TARJETA CON EFECTO GLASSMORPHISM
 // ============================================
-const GlassCard = ({ children, className = '' }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.3 }}
-    className={`bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-xl shadow-xl border border-red-600/20 hover:border-red-600/40 transition-all duration-300 ${className}`}
-  >
-    {children}
-  </motion.div>
-);
+const GlassCard = ({ children, className = '' }) => {
+  const { theme } = useTheme();
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className={`backdrop-blur-lg rounded-xl shadow-xl border transition-all duration-300 ${
+        theme === 'dark'
+          ? 'bg-gray-800/80 border-gray-700/50 hover:border-red-600/40'
+          : 'bg-white/95 border-gray-200/80 hover:border-red-600/40 shadow-gray-200/50'
+      } ${className}`}
+    >
+      {children}
+    </motion.div>
+  );
+};
 
 // ============================================
-// COMPONENTE DE INPUT TECNOLÓGICO (MEJORADO)
+// COMPONENTE DE INPUT TECNOLÓGICO - CORREGIDO PARA MODO CLARO/OSCURO
 // ============================================
 const TechInput = ({ icon: Icon, label, error, value, onChange, readOnly, ...props }) => {
+  const { theme } = useTheme();
   const [localValue, setLocalValue] = useState(value || '');
   const [isFocused, setIsFocused] = useState(false);
 
@@ -601,7 +697,9 @@ const TechInput = ({ icon: Icon, label, error, value, onChange, readOnly, ...pro
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
       {label && (
-        <label className="block text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
+        <label className={`block text-xs sm:text-sm font-semibold mb-1.5 ${
+          theme === 'dark' ? 'text-gray-200' : 'text-gray-700'
+        }`}>
           {label}
         </label>
       )}
@@ -612,20 +710,26 @@ const TechInput = ({ icon: Icon, label, error, value, onChange, readOnly, ...pro
               <Icon className={`h-4 w-4 sm:h-5 sm:w-5 transition-colors duration-300 ${
                 isFocused && !readOnly 
                   ? 'text-red-500' 
-                  : readOnly 
-                    ? 'text-gray-400 dark:text-gray-500' 
-                    : 'text-gray-400 dark:text-gray-500'
+                  : theme === 'dark'
+                    ? 'text-gray-500'
+                    : 'text-gray-400'
               }`} />
             </div>
           )}
           <input
             className={`w-full ${Icon ? 'pl-9 sm:pl-10' : 'pl-3 sm:pl-4'} pr-3 sm:pr-4 py-2.5 sm:py-3 border-2 rounded-lg outline-none transition-all duration-300 text-sm sm:text-base ${
               isFocused && !readOnly
-                ? 'border-red-500 ring-2 ring-red-500/20 bg-white dark:bg-gray-900 text-gray-900 dark:text-white' 
+                ? theme === 'dark'
+                  ? 'border-red-500 ring-2 ring-red-500/20 bg-gray-800 text-white'
+                  : 'border-red-500 ring-2 ring-red-500/20 bg-white text-gray-900'
                 : readOnly
-                  ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 cursor-not-allowed'
-                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white hover:border-gray-300 dark:hover:border-gray-600'
-            } placeholder-gray-400 dark:placeholder-gray-500`}
+                  ? theme === 'dark'
+                    ? 'border-gray-700 bg-gray-800/50 text-gray-400 cursor-not-allowed'
+                    : 'border-gray-200 bg-gray-50 text-gray-600 cursor-not-allowed'
+                  : theme === 'dark'
+                    ? 'border-gray-700 bg-gray-800 text-white hover:border-gray-600 placeholder-gray-500'
+                    : 'border-gray-200 bg-white text-gray-900 hover:border-gray-300 placeholder-gray-400'
+            }`}
             value={localValue}
             onChange={handleChange}
             onFocus={() => !readOnly && setIsFocused(true)}
@@ -636,7 +740,9 @@ const TechInput = ({ icon: Icon, label, error, value, onChange, readOnly, ...pro
         </div>
       </div>
       {error && (
-        <p className="text-xs sm:text-sm text-red-600 dark:text-red-400 mt-1 font-medium">
+        <p className={`text-xs sm:text-sm mt-1 font-medium ${
+          theme === 'dark' ? 'text-red-400' : 'text-red-600'
+        }`}>
           {error}
         </p>
       )}
@@ -645,15 +751,18 @@ const TechInput = ({ icon: Icon, label, error, value, onChange, readOnly, ...pro
 };
 
 // ============================================
-// COMPONENTE DE SELECT TECNOLÓGICO (MEJORADO)
+// COMPONENTE DE SELECT TECNOLÓGICO - CORREGIDO PARA MODO CLARO/OSCURO
 // ============================================
 const TechSelect = ({ icon: Icon, label, value, onChange, options, readOnly, placeholder }) => {
+  const { theme } = useTheme();
   const [isFocused, setIsFocused] = useState(false);
 
   return (
     <div className="space-y-1 w-full">
       {label && (
-        <label className="block text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
+        <label className={`block text-xs sm:text-sm font-semibold mb-1.5 ${
+          theme === 'dark' ? 'text-gray-200' : 'text-gray-700'
+        }`}>
           {label}
         </label>
       )}
@@ -663,7 +772,9 @@ const TechSelect = ({ icon: Icon, label, value, onChange, options, readOnly, pla
             <Icon className={`h-4 w-4 sm:h-5 sm:w-5 ${
               isFocused && !readOnly 
                 ? 'text-red-500' 
-                : 'text-gray-400 dark:text-gray-500'
+                : theme === 'dark'
+                  ? 'text-gray-500'
+                  : 'text-gray-400'
             }`} />
           </div>
         )}
@@ -675,28 +786,34 @@ const TechSelect = ({ icon: Icon, label, value, onChange, options, readOnly, pla
           disabled={readOnly}
           className={`w-full ${Icon ? 'pl-9 sm:pl-10' : 'pl-3 sm:pl-4'} pr-8 sm:pr-10 py-2.5 sm:py-3 border-2 rounded-lg outline-none transition-all appearance-none text-sm sm:text-base ${
             isFocused && !readOnly
-              ? 'border-red-500 ring-2 ring-red-500/20'
-              : 'border-gray-200 dark:border-gray-700'
-          } ${
-            readOnly
-              ? 'bg-gray-50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 cursor-not-allowed'
-              : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:border-red-500 cursor-pointer'
+              ? theme === 'dark'
+                ? 'border-red-500 ring-2 ring-red-500/20 bg-gray-800 text-white'
+                : 'border-red-500 ring-2 ring-red-500/20 bg-white text-gray-900'
+              : readOnly
+                ? theme === 'dark'
+                  ? 'border-gray-700 bg-gray-800/50 text-gray-400 cursor-not-allowed'
+                  : 'border-gray-200 bg-gray-50 text-gray-600 cursor-not-allowed'
+                : theme === 'dark'
+                  ? 'border-gray-700 bg-gray-800 text-white hover:border-gray-600 cursor-pointer'
+                  : 'border-gray-200 bg-white text-gray-900 hover:border-gray-300 cursor-pointer'
           }`}
         >
-          <option value="" className="bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400">
+          <option value="" className={theme === 'dark' ? 'bg-gray-800 text-gray-500' : 'bg-white text-gray-500'}>
             {placeholder || 'Seleccionar...'}
           </option>
           {options.map((option) => (
             <option 
               key={option.value} 
               value={option.value}
-              className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+              className={theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'}
             >
               {option.label}
             </option>
           ))}
         </select>
-        <ChevronDownIcon className="absolute inset-y-0 right-0 pr-2 sm:pr-3 flex items-center h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
+        <ChevronDownIcon className={`absolute inset-y-0 right-0 pr-2 sm:pr-3 flex items-center h-4 w-4 sm:h-5 sm:w-5 pointer-events-none ${
+          theme === 'dark' ? 'text-gray-500' : 'text-gray-400'
+        }`} />
       </div>
     </div>
   );
@@ -706,6 +823,7 @@ const TechSelect = ({ icon: Icon, label, value, onChange, options, readOnly, pla
 // COMPONENTE DE LOGO PREVIEW
 // ============================================
 const LogoPreview = ({ logoUrl, empresaNombre, onAmpliar }) => {
+  const { theme } = useTheme();
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -717,9 +835,15 @@ const LogoPreview = ({ logoUrl, empresaNombre, onAmpliar }) => {
       whileHover={{ scale: 1.02 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
-      <div className="relative bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-2xl p-4 sm:p-8 border-2 border-red-600/20 hover:border-red-600/40 transition-all shadow-xl h-full flex flex-col items-center justify-center min-h-[250px] sm:min-h-[300px]">
+      <div className={`relative rounded-2xl p-4 sm:p-8 border-2 border-red-600/20 hover:border-red-600/40 transition-all shadow-xl h-full flex flex-col items-center justify-center min-h-[250px] sm:min-h-[300px] ${
+        theme === 'dark'
+          ? 'bg-gradient-to-br from-gray-800 to-gray-900'
+          : 'bg-gradient-to-br from-gray-50 to-gray-100'
+      }`}>
         <div className="relative mb-4 sm:mb-6">
-          <div className="relative w-32 h-32 sm:w-44 sm:h-44 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl flex items-center justify-center overflow-hidden border-2 border-red-600/20 group-hover:border-red-600/40 transition-all">
+          <div className={`relative w-32 h-32 sm:w-44 sm:h-44 rounded-2xl shadow-2xl flex items-center justify-center overflow-hidden border-2 border-red-600/20 group-hover:border-red-600/40 transition-all ${
+            theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+          }`}>
             {logoUrl ? (
               <img 
                 src={logoUrl} 
@@ -749,11 +873,15 @@ const LogoPreview = ({ logoUrl, empresaNombre, onAmpliar }) => {
         </div>
 
         <div className="text-center">
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+          <p className={`text-xs sm:text-sm ${
+            theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+          }`}>
             {logoUrl ? 'Logo personalizado' : 'Logo por defecto'}
           </p>
           {logoUrl && (
-            <div className="mt-2 sm:mt-3 text-green-600 dark:text-green-400 text-xs sm:text-sm font-medium flex items-center justify-center">
+            <div className={`mt-2 sm:mt-3 text-xs sm:text-sm font-medium flex items-center justify-center ${
+              theme === 'dark' ? 'text-green-400' : 'text-green-600'
+            }`}>
               <CheckCircleIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
               Logo cargado correctamente
             </div>
@@ -821,6 +949,7 @@ const paisesData = {
 // COMPONENTE PRINCIPAL: EMPRESA
 // ============================================
 const Empresa = ({ configuracion, handleInputChange }) => {
+  const { theme } = useTheme();
   const { user } = useAuth();
   const [paisSeleccionado, setPaisSeleccionado] = useState('República Dominicana');
   const [provinciaSeleccionada, setProvinciaSeleccionada] = useState('');
@@ -1071,7 +1200,9 @@ const Empresa = ({ configuracion, handleInputChange }) => {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="animate-spin h-10 w-10 border-4 border-red-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Cargando configuración...</p>
+          <p className={theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}>
+            Cargando configuración...
+          </p>
         </div>
       </div>
     );
@@ -1098,7 +1229,11 @@ const Empresa = ({ configuracion, handleInputChange }) => {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="p-3 sm:p-4 bg-red-50 dark:bg-red-900/30 border-2 border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-xl flex items-center space-x-3 text-sm"
+            className={`p-3 sm:p-4 border-2 rounded-xl flex items-center space-x-3 text-sm ${
+              theme === 'dark'
+                ? 'bg-red-900/30 border-red-700 text-red-400'
+                : 'bg-red-50 border-red-200 text-red-700'
+            }`}
           >
             <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
             <span className="font-medium">{error}</span>
@@ -1110,7 +1245,11 @@ const Empresa = ({ configuracion, handleInputChange }) => {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="p-3 sm:p-4 bg-green-50 dark:bg-green-900/30 border-2 border-green-200 dark:border-green-700 text-green-700 dark:text-green-400 rounded-xl flex items-center space-x-3 text-sm"
+            className={`p-3 sm:p-4 border-2 rounded-xl flex items-center space-x-3 text-sm ${
+              theme === 'dark'
+                ? 'bg-green-900/30 border-green-700 text-green-400'
+                : 'bg-green-50 border-green-200 text-green-700'
+            }`}
           >
             <CheckCircleIcon className="h-5 w-5 flex-shrink-0" />
             <span className="font-medium">{exito}</span>
@@ -1120,17 +1259,21 @@ const Empresa = ({ configuracion, handleInputChange }) => {
 
       <GlassCard>
         <div className="p-4 sm:p-6">
-          {/* Header con botones - Responsive */}
+          {/* Header con botones */}
           <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center justify-between gap-4 mb-6">
             <div className="flex items-center space-x-3 w-full sm:w-auto">
               <div className="p-2 sm:p-3 bg-gradient-to-br from-red-600 to-red-800 rounded-xl shadow-lg flex-shrink-0">
                 <BuildingStorefrontIcon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
               <div className="min-w-0">
-                <h3 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white truncate">
+                <h3 className={`text-base sm:text-xl font-bold truncate ${
+                  theme === 'dark' ? 'text-white' : 'text-gray-900'
+                }`}>
                   Información de la Empresa
                 </h3>
-                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                <p className={`text-xs sm:text-sm ${
+                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                }`}>
                   {modoEdicion ? '✏️ Editando los datos de tu negocio' : '🔒 Datos principales de tu negocio'}
                 </p>
               </div>
@@ -1144,7 +1287,11 @@ const Empresa = ({ configuracion, handleInputChange }) => {
                   whileTap={{ scale: 0.95 }}
                   onClick={cancelarEdicion}
                   disabled={guardando}
-                  className="flex-1 sm:flex-none px-3 sm:px-5 py-2 sm:py-2.5 bg-gray-600 hover:bg-gray-700 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center space-x-1.5 sm:space-x-2 disabled:opacity-50 text-xs sm:text-sm"
+                  className={`flex-1 sm:flex-none px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center space-x-1.5 sm:space-x-2 disabled:opacity-50 text-xs sm:text-sm ${
+                    theme === 'dark'
+                      ? 'bg-gray-600 hover:bg-gray-700 text-white'
+                      : 'bg-gray-500 hover:bg-gray-600 text-white'
+                  }`}
                 >
                   <XMarkIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   <span>Cancelar</span>
@@ -1182,9 +1329,8 @@ const Empresa = ({ configuracion, handleInputChange }) => {
             </div>
           </div>
 
-          {/* Grid de campos - Responsive */}
+          {/* Grid de campos */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 lg:gap-6">
-            {/* Fila 1 */}
             <TechInput
               icon={BuildingStorefrontIcon}
               label="Nombre de la Empresa *"
@@ -1203,7 +1349,6 @@ const Empresa = ({ configuracion, handleInputChange }) => {
               readOnly={!modoEdicion}
             />
 
-            {/* Fila 2 */}
             <TechInput
               icon={PhoneIcon}
               label="Teléfono"
@@ -1223,7 +1368,6 @@ const Empresa = ({ configuracion, handleInputChange }) => {
               readOnly={!modoEdicion}
             />
 
-            {/* Fila 3: Nombre y Apellido del propietario */}
             <TechInput
               icon={UserIcon}
               label="Nombre del Propietario"
@@ -1248,7 +1392,6 @@ const Empresa = ({ configuracion, handleInputChange }) => {
               readOnly={!modoEdicion}
             />
 
-            {/* Fila 4: País y Provincia */}
             <TechSelect
               icon={GlobeAltIcon}
               label="País"
@@ -1268,7 +1411,6 @@ const Empresa = ({ configuracion, handleInputChange }) => {
               placeholder="Seleccionar provincia"
             />
 
-            {/* Fila 5: Sitio Web */}
             <div className="md:col-span-2">
               <TechInput
                 icon={GlobeAltIcon}
@@ -1280,7 +1422,6 @@ const Empresa = ({ configuracion, handleInputChange }) => {
               />
             </div>
 
-            {/* Fila 6: Logo y Mapa - Responsive */}
             <div className="space-y-4">
               <TechInput
                 icon={PhotoIcon}
@@ -1304,7 +1445,9 @@ const Empresa = ({ configuracion, handleInputChange }) => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
+                <label className={`block text-xs sm:text-sm font-semibold mb-1.5 ${
+                  theme === 'dark' ? 'text-gray-200' : 'text-gray-700'
+                }`}>
                   Ubicación
                 </label>
                 <MapaInteractivo 
@@ -1321,7 +1464,11 @@ const Empresa = ({ configuracion, handleInputChange }) => {
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-6 flex items-center justify-end space-x-2 text-xs sm:text-sm text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800"
+              className={`mt-6 flex items-center justify-end space-x-2 text-xs sm:text-sm p-3 rounded-lg border ${
+                theme === 'dark'
+                  ? 'text-yellow-400 bg-yellow-900/20 border-yellow-800'
+                  : 'text-yellow-600 bg-yellow-50 border-yellow-200'
+              }`}
             >
               <ClockIcon className="h-4 w-4 animate-pulse flex-shrink-0" />
               <span className="font-medium">Hay cambios sin guardar</span>
@@ -1329,7 +1476,11 @@ const Empresa = ({ configuracion, handleInputChange }) => {
           )}
 
           {!modoEdicion && (
-            <div className="mt-6 flex flex-wrap items-center justify-end gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className={`mt-6 flex flex-wrap items-center justify-end gap-2 text-xs sm:text-sm p-3 rounded-lg border ${
+              theme === 'dark'
+                ? 'text-gray-400 bg-gray-800/50 border-gray-700'
+                : 'text-gray-500 bg-gray-50 border-gray-200'
+            }`}>
               <span className="font-medium">🔒 Modo de solo lectura</span>
               <span className="text-xs">· Haz clic en "Editar" para modificar</span>
             </div>

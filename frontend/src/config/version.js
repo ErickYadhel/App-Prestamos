@@ -10,10 +10,10 @@
 
 const VERSION_CONFIG = {
   // Versión actual del sistema (Ej: 1.0.0, 1.1.5, 2.0.0)
-  version: '1.0.12',
+  version: '1.0.13',
   
   // Fecha de la versión en formato DD-MM-YYYY
-  fecha: '12/09/2026'
+  fecha: '24/09/2026'
 };
 // ============================================
 // DATOS DE VERSION DEL SISTEMA

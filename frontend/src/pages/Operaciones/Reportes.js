@@ -1,455 +1,98 @@
-import React, { useState, useEffect } from 'react';
+// ============================================
+// ARCHIVO: Reportes.js
+// PROPÓSITO: Componente principal de Reportes
+// ============================================
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../../context/ThemeContext';
 import {
   ChartBarIcon,
-  DocumentTextIcon,
-  CalendarIcon,
+  ChartBarSquareIcon,
   CurrencyDollarIcon,
   UserGroupIcon,
-  XMarkIcon,
-  ArrowDownTrayIcon,
-  EyeIcon,
-  PrinterIcon,
-  ClockIcon,
-  MagnifyingGlassIcon,
-  FunnelIcon,
-  ArrowPathIcon,
+  BanknotesIcon,
+  CalendarIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
-  HomeIcon,
-  BuildingOfficeIcon,
-  CreditCardIcon
+  TrophyIcon,
+  ArrowTrendingUpIcon,
+  ChartPieIcon,
+  DocumentChartBarIcon,
+  ClipboardDocumentListIcon,
+  ReceiptPercentIcon,
+  ClockIcon,
+  PresentationChartLineIcon,
+  GiftIcon,
+  PercentBadgeIcon,
+  UserPlusIcon,
+  ScaleIcon
 } from '@heroicons/react/24/outline';
-import { collection, getDocs, query, orderBy, limit, where } from 'firebase/firestore';
+import { collection, getDocs, query, limit } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 
-// ============================================
-// MODAL PARA REPORTES
-// ============================================
-const ReporteModal = ({ isOpen, onClose, titulo, children }) => {
-  const { theme } = useTheme();
+// Importar generadores y utilidades
+import generadores from '../../components/Reportes/ReportesGeneradores';
 
-  if (!isOpen) return null;
+// Importar componentes UI
+import {
+  FiltrosPanel,
+  ReporteCard,
+  VistaPreviaModal,
+  HeaderReportes,
+  CategoriasSelector,
+  ReportesSkeleton,
+  MensajeVacio,
+  MensajeError,
+  FiltrosActivos,
+  BarraBusqueda
+} from '../../components/Reportes/ReportesComponentes';
 
-  return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ scale: 0.9, y: 20, opacity: 0 }}
-          animate={{ scale: 1, y: 0, opacity: 1 }}
-          exit={{ scale: 0.9, y: 20, opacity: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="relative w-full max-w-6xl max-h-[90vh] overflow-hidden mx-4"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="absolute -inset-0.5 bg-gradient-to-r from-green-600 via-green-500 to-green-600 rounded-2xl blur-xl opacity-75" />
-          
-          <div className={`relative rounded-2xl shadow-2xl overflow-hidden border border-green-600/30 ${
-            theme === 'dark' ? 'bg-gray-900' : 'bg-white'
-          }`}>
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-green-500 to-transparent" />
-            
-            <div className={`p-4 sm:p-6 border-b ${theme === 'dark' ? 'border-green-600/20' : 'border-gray-200'} flex justify-between items-center`}>
-              <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                {titulo}
-              </h3>
-              <button
-                onClick={onClose}
-                className={`p-2 rounded-lg transition-colors ${
-                  theme === 'dark' 
-                    ? 'bg-white/10 hover:bg-white/20 text-white' 
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                }`}
-              >
-                <XMarkIcon className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="p-4 sm:p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-              {children}
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
-};
-
-// ============================================
-// MODAL PARA VISTA PREVIA DE REPORTE
-// ============================================
-const VistaPreviaReporteModal = ({ isOpen, onClose, reporte, datos }) => {
-  const { theme } = useTheme();
-
-  if (!isOpen) return null;
-
-  const formatearMonto = (monto) => {
-    return new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP' }).format(monto || 0);
-  };
-
-  const formatearFecha = (fecha) => {
-    return new Date(fecha).toLocaleDateString('es-DO', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ scale: 0.9, y: 20, opacity: 0 }}
-          animate={{ scale: 1, y: 0, opacity: 1 }}
-          exit={{ scale: 0.9, y: 20, opacity: 0 }}
-          className="relative w-full max-w-5xl mx-4"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="absolute -inset-0.5 bg-gradient-to-r from-green-600 via-green-500 to-green-600 rounded-2xl blur-xl opacity-75" />
-          
-          <div className={`relative rounded-2xl shadow-2xl overflow-hidden border border-green-600/30 ${
-            theme === 'dark' ? 'bg-gray-900' : 'bg-white'
-          }`}>
-            <div className={`p-4 sm:p-6 border-b ${theme === 'dark' ? 'border-green-600/20' : 'border-gray-200'} flex justify-between items-center`}>
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-gradient-to-br from-green-600 to-green-800 rounded-lg">
-                  <ChartBarIcon className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                    {reporte?.nombre}
-                  </h3>
-                  <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Generado el {formatearFecha(new Date())}
-                  </p>
-                </div>
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => window.print()}
-                  className="p-2 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors"
-                  title="Imprimir"
-                >
-                  <PrinterIcon className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={() => {
-                    const dataStr = JSON.stringify(datos, null, 2);
-                    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-                    const exportFileDefaultName = `reporte-${reporte?.tipo}-${new Date().toISOString()}.json`;
-                    const linkElement = document.createElement('a');
-                    linkElement.setAttribute('href', dataUri);
-                    linkElement.setAttribute('download', exportFileDefaultName);
-                    linkElement.click();
-                  }}
-                  className="p-2 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-                  title="Exportar JSON"
-                >
-                  <ArrowDownTrayIcon className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={onClose}
-                  className="p-2 text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                >
-                  <XMarkIcon className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 max-h-[70vh] overflow-y-auto">
-              {/* Contenido del reporte según el tipo */}
-              {reporte?.tipo === 'diario' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                      <p className="text-sm text-green-600 dark:text-green-400">Total Operaciones</p>
-                      <p className="text-2xl font-bold text-green-700 dark:text-green-300">{datos?.totalOperaciones || 0}</p>
-                    </div>
-                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <p className="text-sm text-blue-600 dark:text-blue-400">Monto Total</p>
-                      <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{formatearMonto(datos?.montoTotal)}</p>
-                    </div>
-                    <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                      <p className="text-sm text-yellow-600 dark:text-yellow-400">Pendientes</p>
-                      <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">{datos?.pendientes || 0}</p>
-                    </div>
-                    <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
-                      <p className="text-sm text-purple-600 dark:text-purple-400">Completados</p>
-                      <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">{datos?.completados || 0}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <h4 className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Operaciones del día</h4>
-                    {datos?.operaciones?.map((op, i) => (
-                      <div key={i} className={`p-3 rounded-lg border ${
-                        theme === 'dark' ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'
-                      } flex justify-between items-center`}>
-                        <div>
-                          <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{op.cliente}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{op.tipo} • {formatearFecha(op.fecha)}</p>
-                        </div>
-                        <span className={`font-bold ${
-                          op.estado === 'completado' ? 'text-green-600' : 'text-yellow-600'
-                        }`}>{formatearMonto(op.monto)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {reporte?.tipo === 'cartera' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
-                      <p className="text-sm text-emerald-600 dark:text-emerald-400">Total Cartera</p>
-                      <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{formatearMonto(datos?.totalCartera)}</p>
-                    </div>
-                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                      <p className="text-sm text-green-600 dark:text-green-400">Préstamos Activos</p>
-                      <p className="text-2xl font-bold text-green-700 dark:text-green-300">{datos?.prestamosActivos || 0}</p>
-                    </div>
-                    <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-                      <p className="text-sm text-red-600 dark:text-red-400">Morosos</p>
-                      <p className="text-2xl font-bold text-red-700 dark:text-red-300">{datos?.morosos || 0}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <h4 className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Distribución de Cartera</h4>
-                    <div className={`p-4 rounded-lg border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                      <div className="space-y-3">
-                        <div>
-                          <div className="flex justify-between mb-1">
-                            <span className="text-sm">Préstamos al día</span>
-                            <span className="text-sm font-medium text-green-600">{datos?.porcentajeAlDia || 0}%</span>
-                          </div>
-                          <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                            <div className="h-full bg-green-500 rounded-full" style={{ width: `${datos?.porcentajeAlDia || 0}%` }} />
-                          </div>
-                        </div>
-                        <div>
-                          <div className="flex justify-between mb-1">
-                            <span className="text-sm">Préstamos en mora</span>
-                            <span className="text-sm font-medium text-red-600">{datos?.porcentajeMora || 0}%</span>
-                          </div>
-                          <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                            <div className="h-full bg-red-500 rounded-full" style={{ width: `${datos?.porcentajeMora || 0}%` }} />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <h4 className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Préstamos por rango</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className={`p-3 rounded-lg border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Menos de RD$100k</p>
-                        <p className={`text-lg font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{datos?.rango1 || 0}</p>
-                      </div>
-                      <div className={`p-3 rounded-lg border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">RD$100k - RD$500k</p>
-                        <p className={`text-lg font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{datos?.rango2 || 0}</p>
-                      </div>
-                      <div className={`p-3 rounded-lg border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">RD$500k - RD$1M</p>
-                        <p className={`text-lg font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{datos?.rango3 || 0}</p>
-                      </div>
-                      <div className={`p-3 rounded-lg border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Más de RD$1M</p>
-                        <p className={`text-lg font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{datos?.rango4 || 0}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {reporte?.tipo === 'pagos' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="p-4 bg-teal-50 dark:bg-teal-900/20 rounded-lg border border-teal-200 dark:border-teal-800">
-                      <p className="text-sm text-teal-600 dark:text-teal-400">Pagos Recibidos</p>
-                      <p className="text-2xl font-bold text-teal-700 dark:text-teal-300">{datos?.pagosRecibidos || 0}</p>
-                    </div>
-                    <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                      <p className="text-sm text-yellow-600 dark:text-yellow-400">Pendientes</p>
-                      <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">{datos?.pagosPendientes || 0}</p>
-                    </div>
-                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                      <p className="text-sm text-green-600 dark:text-green-400">Monto Total</p>
-                      <p className="text-2xl font-bold text-green-700 dark:text-green-300">{formatearMonto(datos?.montoTotalPagos)}</p>
-                    </div>
-                  </div>
-
-                  <div className="h-64 bg-gradient-to-br from-teal-50 to-teal-100 dark:from-teal-900/20 dark:to-teal-800/20 rounded-lg flex items-center justify-center">
-                    <div className="text-center">
-                      <ChartBarIcon className="h-12 w-12 text-teal-400 mx-auto mb-2" />
-                      <p className="text-gray-500 dark:text-gray-400">Gráfico de pagos por período</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <h4 className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Últimos pagos</h4>
-                    {datos?.ultimosPagos?.map((pago, i) => (
-                      <div key={i} className={`p-3 rounded-lg border ${
-                        theme === 'dark' ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'
-                      } flex justify-between items-center`}>
-                        <div>
-                          <p className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{pago.cliente}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{pago.concepto} • {formatearFecha(pago.fecha)}</p>
-                        </div>
-                        <span className="font-bold text-green-600">{formatearMonto(pago.monto)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {reporte?.tipo === 'clientes' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="p-4 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800">
-                      <p className="text-sm text-cyan-600 dark:text-cyan-400">Total Clientes</p>
-                      <p className="text-2xl font-bold text-cyan-700 dark:text-cyan-300">{datos?.totalClientes || 0}</p>
-                    </div>
-                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                      <p className="text-sm text-green-600 dark:text-green-400">Activos</p>
-                      <p className="text-2xl font-bold text-green-700 dark:text-green-300">{datos?.clientesActivos || 0}</p>
-                    </div>
-                    <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                      <p className="text-sm text-yellow-600 dark:text-yellow-400">Nuevos (7 días)</p>
-                      <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">{datos?.nuevosClientes || 0}</p>
-                    </div>
-                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Inactivos</p>
-                      <p className="text-2xl font-bold text-gray-700 dark:text-gray-300">{datos?.clientesInactivos || 0}</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className={`p-4 rounded-lg border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                      <h4 className={`font-medium mb-3 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Por tipo de cliente</h4>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span>Persona Física</span>
-                          <span className="font-medium">{datos?.personaFisica || 0}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Persona Jurídica</span>
-                          <span className="font-medium">{datos?.personaJuridica || 0}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className={`p-4 rounded-lg border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                      <h4 className={`font-medium mb-3 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Por ubicación</h4>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span>Santo Domingo</span>
-                          <span className="font-medium">{datos?.santoDomingo || 0}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Santiago</span>
-                          <span className="font-medium">{datos?.santiago || 0}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Otras provincias</span>
-                          <span className="font-medium">{datos?.otrasProvincias || 0}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
-};
-
-// ============================================
-// TARJETA DE REPORTE
-// ============================================
-const ReporteCard = ({ reporte, onVer, onGenerar }) => {
-  const { theme } = useTheme();
-  const Icon = reporte.icon;
-
-  return (
-    <motion.div
-      whileHover={{ scale: 1.02 }}
-      className={`relative overflow-hidden rounded-xl border ${
-        theme === 'dark' ? 'bg-gray-800/90 border-gray-700' : 'bg-white border-gray-200'
-      } shadow-lg cursor-pointer`}
-      onClick={() => onVer(reporte)}
-    >
-      <div className={`absolute top-0 left-0 w-1 h-full bg-gradient-to-b ${reporte.color}`} />
-      
-      <div className="p-5">
-        <div className="flex items-start justify-between mb-3">
-          <div className={`p-2.5 rounded-lg bg-gradient-to-br ${reporte.color}`}>
-            <Icon className="h-5 w-5 text-white" />
-          </div>
-          {reporte.ultimo && (
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              {reporte.ultimo}
-            </span>
-          )}
-        </div>
-
-        <h4 className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-          {reporte.nombre}
-        </h4>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-3">
-          {reporte.descripcion}
-        </p>
-
-        <div className="grid grid-cols-2 gap-2 mt-2">
-          {Object.entries(reporte.estadisticas).map(([key, value], i) => (
-            <div key={i} className="text-center p-1">
-              <p className={`text-sm font-bold ${
-                key.includes('monto') || key === 'total' 
-                  ? 'text-green-600' 
-                  : key.includes('pendientes') || key.includes('morosos')
-                  ? 'text-red-600'
-                  : theme === 'dark' ? 'text-white' : 'text-gray-900'
-              }`}>
-                {value}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-                {key.replace(/([A-Z])/g, ' $1').trim()}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onGenerar(reporte);
-          }}
-          className={`mt-4 w-full py-2 px-3 rounded-lg bg-gradient-to-r ${reporte.color} text-white text-sm font-medium hover:shadow-lg transition-all`}
-        >
-          Generar Reporte
-        </button>
-      </div>
-    </motion.div>
-  );
-};
+// Desestructurar utilidades y generadores
+const {
+  // Utilidades
+  formatearMonto,
+  formatearMontoCorto,
+  obtenerRangoQuincena,
+  obtenerRangoMes,
+  obtenerRangoSemana,
+  obtenerRango3Meses,
+  obtenerRango6Meses,
+  obtenerRangoAño,
+  // Exportaciones
+  exportarPDF,
+  exportarExcel,
+  exportarCSV,
+  exportarJSON,
+  // Generadores de Préstamos
+  generarPrestamosPorPeriodo,
+  generarPrestamosActivos,
+  generarPrestamosCompletados,
+  generarPrestamosPorCliente,
+  generarPrestamosPorVencer,
+  generarPrestamosPorRango,
+  // Generadores de Pagos
+  generarPagosDelDia,
+  generarDistribucionCapitalInteres,
+  generarPagosPorTipo,
+  generarPagosPorMes,
+  generarPagosPorCliente,
+  // Generadores de Clientes
+  generarEstadoCuentaCliente,
+  generarClientesMorosos,
+  generarTopPuntualidad,
+  generarClientesNuevos,
+  // Generadores Financieros
+  generarProyeccionGanancias,
+  generarTasaRecuperacion,
+  generarTiempoPromedioPago,
+  generarReporteDiario,
+  generarComparativoMensual,
+  generarTopClientes,
+  generarComisionesPorGarante,
+  generarFlujoCaja,
+  generarRentabilidad
+} = generadores;
 
 // ============================================
 // COMPONENTE PRINCIPAL
@@ -458,67 +101,95 @@ const Reportes = () => {
   const { theme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [exito, setExito] = useState('');
-  const [modalAbierto, setModalAbierto] = useState(null);
+  const [categoriaActiva, setCategoriaActiva] = useState('todos');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [showFiltros, setShowFiltros] = useState(false);
   const [vistaPreviaAbierta, setVistaPreviaAbierta] = useState(false);
-  const [reporteSeleccionado, setReporteSeleccionado] = useState(null);
-  const [datosReporte, setDatosReporte] = useState(null);
-  const [datosGenerales, setDatosGenerales] = useState({
-    prestamos: [],
-    pagos: [],
-    clientes: [],
-    formularios: []
-  });
+  const [reporteActivo, setReporteActivo] = useState(null);
+  const [datosReporte, setDatosReporte] = useState({ columnas: [], filas: [], resumen: {} });
+  
+  // Datos desde Firebase
+  const [prestamos, setPrestamos] = useState([]);
+  const [pagos, setPagos] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const [garantes, setGarantes] = useState([]);
+  const [comisiones, setComisiones] = useState([]);
+  const [formularios, setFormularios] = useState([]);
 
-  // Cargar datos desde Firebase
+  // Filtros
+  const [filtros, setFiltros] = useState({
+    fechaInicio: '',
+    fechaFin: '',
+    clienteID: '',
+    garanteID: '',
+    estado: '',
+    montoMin: '',
+    montoMax: ''
+  });
+  const [filtrosAplicados, setFiltrosAplicados] = useState([]);
+
+  // ============================================
+  // CARGAR DATOS DESDE FIREBASE
+  // ============================================
   const cargarDatos = async () => {
     try {
       setLoading(true);
-      
-      // Cargar préstamos
-      const prestamosRef = collection(db, 'prestamos');
-      const prestamosQuery = query(prestamosRef, orderBy('fechaCreacion', 'desc'), limit(100));
-      const prestamosSnap = await getDocs(prestamosQuery);
-      const prestamosList = [];
-      prestamosSnap.forEach((doc) => {
-        prestamosList.push({ id: doc.id, ...doc.data() });
+      setError('');
+      console.log('📊 Cargando datos para reportes...');
+
+      const [
+        prestamosSnap,
+        pagosSnap,
+        clientesSnap,
+        garantesSnap,
+        comisionesSnap,
+        formulariosSnap
+      ] = await Promise.all([
+        getDocs(query(collection(db, 'prestamos'), limit(1000))),
+        getDocs(query(collection(db, 'pagos'), limit(1000))),
+        getDocs(collection(db, 'clientes')),
+        getDocs(collection(db, 'garantes')).catch(() => ({ forEach: () => {} })),
+        getDocs(collection(db, 'comisiones')).catch(() => ({ forEach: () => {} })),
+        getDocs(collection(db, 'formularios')).catch(() => ({ forEach: () => {} }))
+      ]);
+
+      const listPrestamos = [];
+      prestamosSnap.forEach(d => listPrestamos.push({ id: d.id, ...d.data() }));
+
+      const listPagos = [];
+      pagosSnap.forEach(d => listPagos.push({ id: d.id, ...d.data() }));
+
+      const listClientes = [];
+      clientesSnap.forEach(d => listClientes.push({ id: d.id, ...d.data() }));
+
+      const listGarantes = [];
+      garantesSnap.forEach(d => listGarantes.push({ id: d.id, ...d.data() }));
+
+      const listComisiones = [];
+      comisionesSnap.forEach(d => listComisiones.push({ id: d.id, ...d.data() }));
+
+      const listFormularios = [];
+      formulariosSnap.forEach(d => listFormularios.push({ id: d.id, ...d.data() }));
+
+      console.log('✅ Datos cargados:', {
+        prestamos: listPrestamos.length,
+        pagos: listPagos.length,
+        clientes: listClientes.length,
+        garantes: listGarantes.length,
+        comisiones: listComisiones.length,
+        formularios: listFormularios.length
       });
 
-      // Cargar pagos
-      const pagosRef = collection(db, 'pagos');
-      const pagosQuery = query(pagosRef, orderBy('fecha', 'desc'), limit(100));
-      const pagosSnap = await getDocs(pagosQuery);
-      const pagosList = [];
-      pagosSnap.forEach((doc) => {
-        pagosList.push({ id: doc.id, ...doc.data() });
-      });
-
-      // Cargar clientes
-      const clientesRef = collection(db, 'clientes');
-      const clientesSnap = await getDocs(clientesRef);
-      const clientesList = [];
-      clientesSnap.forEach((doc) => {
-        clientesList.push({ id: doc.id, ...doc.data() });
-      });
-
-      // Cargar formularios
-      const formulariosRef = collection(db, 'formularios');
-      const formulariosSnap = await getDocs(formulariosRef);
-      const formulariosList = [];
-      formulariosSnap.forEach((doc) => {
-        formulariosList.push({ id: doc.id, ...doc.data() });
-      });
-
-      setDatosGenerales({
-        prestamos: prestamosList,
-        pagos: pagosList,
-        clientes: clientesList,
-        formularios: formulariosList
-      });
-
-    } catch (error) {
-      console.error('Error cargando datos:', error);
-      setError('Error al cargar los datos');
+      setPrestamos(listPrestamos);
+      setPagos(listPagos);
+      setClientes(listClientes);
+      setGarantes(listGarantes);
+      setComisiones(listComisiones);
+      setFormularios(listFormularios);
+    } catch (err) {
+      console.error('❌ Error cargando datos:', err);
+      setError('Error al cargar los datos: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -528,384 +199,553 @@ const Reportes = () => {
     cargarDatos();
   }, []);
 
-  // Generar datos para reporte diario
-  const generarReporteDiario = () => {
-    const hoy = new Date().toISOString().split('T')[0];
-    const operacionesHoy = datosGenerales.formularios.filter(f => 
-      f.fechaCreacion?.startsWith(hoy) && f.tipo === 'solicitud'
-    );
-
-    const totalMonto = operacionesHoy.reduce((sum, op) => sum + (Number(op.monto) || 0), 0);
-    const pendientes = operacionesHoy.filter(op => op.estado === 'pendiente').length;
-    const completados = operacionesHoy.filter(op => op.estado === 'completado' || op.estado === 'aprobado').length;
-
-    return {
-      totalOperaciones: operacionesHoy.length,
-      montoTotal: totalMonto,
-      pendientes,
-      completados,
-      operaciones: operacionesHoy.slice(0, 5).map(op => ({
-        cliente: op.cliente,
-        tipo: 'Solicitud',
-        fecha: op.fechaCreacion,
-        estado: op.estado,
-        monto: op.monto
-      }))
-    };
+  // ============================================
+  // MANEJO DE FILTROS
+  // ============================================
+  const aplicarFiltros = () => {
+    const activos = [];
+    if (filtros.fechaInicio || filtros.fechaFin) activos.push('Rango de fechas');
+    if (filtros.clienteID) activos.push('Cliente');
+    if (filtros.garanteID) activos.push('Garante');
+    if (filtros.estado) activos.push('Estado');
+    if (filtros.montoMin || filtros.montoMax) activos.push('Rango de monto');
+    setFiltrosAplicados(activos);
+    setShowFiltros(false);
   };
 
-  // Generar datos para reporte de cartera
-  const generarReporteCartera = () => {
-    const prestamos = datosGenerales.prestamos;
-    const totalCartera = prestamos.reduce((sum, p) => sum + (Number(p.monto) || 0), 0);
-    const prestamosActivos = prestamos.filter(p => p.estado === 'activo').length;
-    const morosos = prestamos.filter(p => p.estado === 'mora').length;
-    
-    const total = prestamos.length;
-    const alDia = prestamos.filter(p => p.estado === 'activo').length;
-    const porcentajeAlDia = total > 0 ? Math.round((alDia / total) * 100) : 0;
-    const porcentajeMora = total > 0 ? Math.round((morosos / total) * 100) : 0;
-
-    const rangos = {
-      rango1: prestamos.filter(p => p.monto < 100000).length,
-      rango2: prestamos.filter(p => p.monto >= 100000 && p.monto < 500000).length,
-      rango3: prestamos.filter(p => p.monto >= 500000 && p.monto < 1000000).length,
-      rango4: prestamos.filter(p => p.monto >= 1000000).length
-    };
-
-    return {
-      totalCartera,
-      prestamosActivos,
-      morosos,
-      porcentajeAlDia,
-      porcentajeMora,
-      ...rangos
-    };
+  const limpiarFiltros = () => {
+    setFiltros({
+      fechaInicio: '',
+      fechaFin: '',
+      clienteID: '',
+      garanteID: '',
+      estado: '',
+      montoMin: '',
+      montoMax: ''
+    });
+    setFiltrosAplicados([]);
   };
 
-  // Generar datos para reporte de pagos
-  const generarReportePagos = () => {
-    const pagos = datosGenerales.pagos;
-    const hoy = new Date().toISOString().split('T')[0];
-    
-    const pagosRecibidos = pagos.filter(p => p.estado === 'completado').length;
-    const pagosPendientes = pagos.filter(p => p.estado === 'pendiente').length;
-    const montoTotalPagos = pagos.reduce((sum, p) => sum + (Number(p.monto) || 0), 0);
-    
-    const ultimosPagos = pagos
-      .filter(p => p.estado === 'completado')
-      .slice(0, 5)
-      .map(p => ({
-        cliente: p.cliente || 'Cliente',
-        concepto: p.concepto || 'Pago de préstamo',
-        fecha: p.fecha,
-        monto: p.monto
-      }));
-
-    return {
-      pagosRecibidos,
-      pagosPendientes,
-      montoTotalPagos,
-      ultimosPagos
-    };
-  };
-
-  // Generar datos para reporte de clientes
-  const generarReporteClientes = () => {
-    const clientes = datosGenerales.clientes;
-    const hoy = new Date();
-    const hace7Dias = new Date();
-    hace7Dias.setDate(hace7Dias.getDate() - 7);
-
-    const totalClientes = clientes.length;
-    const clientesActivos = clientes.filter(c => c.activo !== false).length;
-    const clientesInactivos = clientes.filter(c => c.activo === false).length;
-    const nuevosClientes = clientes.filter(c => {
-      const fecha = new Date(c.fechaCreacion);
-      return fecha > hace7Dias;
-    }).length;
-
-    const personaFisica = clientes.filter(c => c.tipo === 'fisica').length;
-    const personaJuridica = clientes.filter(c => c.tipo === 'juridica').length;
-
-    const santoDomingo = clientes.filter(c => c.ciudad?.toLowerCase().includes('santo domingo')).length;
-    const santiago = clientes.filter(c => c.ciudad?.toLowerCase().includes('santiago')).length;
-    const otrasProvincias = totalClientes - santoDomingo - santiago;
-
-    return {
-      totalClientes,
-      clientesActivos,
-      clientesInactivos,
-      nuevosClientes,
-      personaFisica,
-      personaJuridica,
-      santoDomingo,
-      santiago,
-      otrasProvincias
-    };
-  };
-
-  const tiposReporte = [
+  // ============================================
+  // DEFINICIÓN DE REPORTES (16 TOTAL)
+  // ============================================
+  const reportes = useMemo(() => [
+    // ═══════════════════════════════════════════
+    // 📌 PRÉSTAMOS (6 reportes)
+    // ═══════════════════════════════════════════
     {
-      id: 'diario',
-      tipo: 'diario',
-      nombre: 'Reporte Diario',
-      descripcion: 'Resumen de operaciones del día',
+      id: 'prestamosPeriodo',
+      categoria: 'prestamos',
+      nombre: 'Préstamos por Período',
+      descripcion: 'Préstamos otorgados con filtro de fechas',
       icon: CalendarIcon,
+      color: 'from-blue-500 to-blue-700',
+      badge: { text: 'FILTROS', color: 'bg-blue-600' },
+      estadisticas: {
+        Total: prestamos.length,
+        Activos: prestamos.filter(p => (p.estado || '').toLowerCase() === 'activo').length
+      },
+      generar: () => generarPrestamosPorPeriodo(prestamos, filtros)
+    },
+    {
+      id: 'prestamosActivos',
+      categoria: 'prestamos',
+      nombre: 'Préstamos Activos',
+      descripcion: 'Detalle de préstamos vigentes con progreso',
+      icon: CurrencyDollarIcon,
       color: 'from-green-500 to-green-700',
       estadisticas: {
-        operaciones: datosGenerales.formularios.filter(f => {
-          const hoy = new Date().toISOString().split('T')[0];
-          return f.fechaCreacion?.startsWith(hoy);
-        }).length,
-        monto: 'RD$' + datosGenerales.formularios
-          .filter(f => {
-            const hoy = new Date().toISOString().split('T')[0];
-            return f.fechaCreacion?.startsWith(hoy);
-          })
-          .reduce((sum, f) => sum + (Number(f.monto) || 0), 0)
-          .toLocaleString(),
-        pendientes: datosGenerales.formularios.filter(f => {
-          const hoy = new Date().toISOString().split('T')[0];
-          return f.fechaCreacion?.startsWith(hoy) && f.estado === 'pendiente';
-        }).length
+        Activos: prestamos.filter(p => (p.estado || '').toLowerCase() === 'activo').length,
+        Monto: formatearMontoCorto(prestamos.filter(p => (p.estado || '').toLowerCase() === 'activo').reduce((s, p) => s + Number(p.monto || 0), 0))
       },
-      ultimo: new Date().toLocaleDateString(),
-      generar: generarReporteDiario
+      generar: () => generarPrestamosActivos(prestamos)
     },
     {
-      id: 'cartera',
-      tipo: 'cartera',
-      nombre: 'Análisis de Cartera',
-      descripcion: 'Estado de la cartera de préstamos',
-      icon: CurrencyDollarIcon,
+      id: 'prestamosCompletados',
+      categoria: 'prestamos',
+      nombre: 'Préstamos Completados',
+      descripcion: 'Historial de préstamos finalizados',
+      icon: CheckCircleIcon,
       color: 'from-emerald-500 to-emerald-700',
       estadisticas: {
-        total: 'RD$' + datosGenerales.prestamos.reduce((sum, p) => sum + (Number(p.monto) || 0), 0).toLocaleString(),
-        activos: datosGenerales.prestamos.filter(p => p.estado === 'activo').length,
-        morosos: datosGenerales.prestamos.filter(p => p.estado === 'mora').length
+        Completados: prestamos.filter(p => (p.estado || '').toLowerCase() === 'completado').length
       },
-      generar: generarReporteCartera
+      generar: () => generarPrestamosCompletados(prestamos)
     },
     {
-      id: 'pagos',
-      tipo: 'pagos',
-      nombre: 'Estadísticas de Pagos',
-      descripcion: 'Análisis de pagos recibidos',
-      icon: CreditCardIcon,
-      color: 'from-teal-500 to-teal-700',
-      estadisticas: {
-        recibidos: datosGenerales.pagos.filter(p => p.estado === 'completado').length,
-        pendientes: datosGenerales.pagos.filter(p => p.estado === 'pendiente').length,
-        monto: 'RD$' + datosGenerales.pagos.reduce((sum, p) => sum + (Number(p.monto) || 0), 0).toLocaleString()
-      },
-      generar: generarReportePagos
-    },
-    {
-      id: 'clientes',
-      tipo: 'clientes',
-      nombre: 'Reporte de Clientes',
-      descripcion: 'Estadísticas de clientes',
+      id: 'prestamosPorCliente',
+      categoria: 'prestamos',
+      nombre: 'Préstamos por Cliente',
+      descripcion: 'Agrupado por cliente con estados',
       icon: UserGroupIcon,
+      color: 'from-purple-500 to-purple-700',
+      estadisticas: {
+        Clientes: new Set(prestamos.map(p => p.clienteID)).size,
+        Total: prestamos.length
+      },
+      generar: () => generarPrestamosPorCliente(prestamos)
+    },
+    {
+      id: 'prestamosPorVencer',
+      categoria: 'prestamos',
+      nombre: 'Préstamos por Vencer',
+      descripcion: 'Próximos 7 días de vencimiento',
+      icon: ClockIcon,
+      color: 'from-orange-500 to-orange-700',
+      badge: { text: 'URGENTE', color: 'bg-orange-600' },
+      estadisticas: {
+        'Por Vencer': 'Ver reporte'
+      },
+      generar: () => generarPrestamosPorVencer(prestamos)
+    },
+    {
+      id: 'prestamosPorRango',
+      categoria: 'prestamos',
+      nombre: 'Préstamos por Rango',
+      descripcion: 'Distribución por montos',
+      icon: ChartBarSquareIcon,
       color: 'from-cyan-500 to-cyan-700',
       estadisticas: {
-        total: datosGenerales.clientes.length,
-        activos: datosGenerales.clientes.filter(c => c.activo !== false).length,
-        nuevos: datosGenerales.clientes.filter(c => {
-          const hace7Dias = new Date();
-          hace7Dias.setDate(hace7Dias.getDate() - 7);
-          return new Date(c.fechaCreacion) > hace7Dias;
+        Rangos: 5
+      },
+      generar: () => generarPrestamosPorRango(prestamos)
+    },
+
+    // ═══════════════════════════════════════════
+    // 💰 PAGOS (5 reportes)
+    // ═══════════════════════════════════════════
+    {
+      id: 'pagosDelDia',
+      categoria: 'pagos',
+      nombre: 'Pagos del Día',
+      descripcion: 'Cierre de caja del día actual',
+      icon: BanknotesIcon,
+      color: 'from-teal-500 to-teal-700',
+      badge: { text: 'HOY', color: 'bg-teal-600' },
+      estadisticas: {
+        Pagos: pagos.filter(p => {
+          const f = p.fecha || p.fechaPago;
+          if (!f) return false;
+          const fecha = new Date(f);
+          const hoy = new Date();
+          hoy.setHours(0, 0, 0, 0);
+          return fecha >= hoy;
         }).length
       },
-      generar: generarReporteClientes
+      generar: () => generarPagosDelDia(pagos)
     },
     {
-      id: 'historico',
-      tipo: 'historico',
-      nombre: 'Reporte Histórico',
-      descripcion: 'Análisis histórico de operaciones',
+      id: 'distribucionCapital',
+      categoria: 'pagos',
+      nombre: 'Capital vs Interés',
+      descripcion: 'Distribución detallada de pagos',
+      icon: ChartPieIcon,
+      color: 'from-cyan-500 to-cyan-700',
+      estadisticas: {
+        Pagos: pagos.length
+      },
+      generar: () => generarDistribucionCapitalInteres(pagos, filtros)
+    },
+    {
+      id: 'pagosPorTipo',
+      categoria: 'pagos',
+      nombre: 'Pagos por Tipo',
+      descripcion: 'Normal, adelantado, mora, abono',
+      icon: ReceiptPercentIcon,
+      color: 'from-indigo-500 to-indigo-700',
+      estadisticas: {
+        Tipos: new Set(pagos.map(p => p.tipoPago || 'normal')).size
+      },
+      generar: () => generarPagosPorTipo(pagos)
+    },
+    {
+      id: 'pagosPorMes',
+      categoria: 'pagos',
+      nombre: 'Pagos por Mes',
+      descripcion: 'Histórico mensual de pagos',
+      icon: CalendarIcon,
+      color: 'from-violet-500 to-violet-700',
+      estadisticas: {
+        Meses: 'Ver reporte'
+      },
+      generar: () => generarPagosPorMes(pagos)
+    },
+    {
+      id: 'pagosPorCliente',
+      categoria: 'pagos',
+      nombre: 'Pagos por Cliente',
+      descripcion: 'Ranking de pagos por cliente',
+      icon: UserGroupIcon,
+      color: 'from-pink-500 to-pink-700',
+      estadisticas: {
+        Clientes: new Set(pagos.map(p => p.clienteID)).size
+      },
+      generar: () => generarPagosPorCliente(pagos)
+    },
+
+    // ═══════════════════════════════════════════
+    // 👥 CLIENTES (4 reportes)
+    // ═══════════════════════════════════════════
+    {
+      id: 'estadoCuenta',
+      categoria: 'clientes',
+      nombre: 'Estado de Cuenta',
+      descripcion: 'Extracto tipo banco por cliente',
+      icon: ClipboardDocumentListIcon,
+      color: 'from-amber-500 to-amber-700',
+      badge: { text: 'FILTRAR', color: 'bg-amber-600' },
+      estadisticas: {
+        Clientes: clientes.length
+      },
+      generar: () => generarEstadoCuentaCliente(filtros.clienteID, prestamos, pagos, clientes)
+    },
+    {
+      id: 'clientesMorosos',
+      categoria: 'clientes',
+      nombre: 'Clientes Morosos',
+      descripcion: 'Listado detallado con días de mora',
+      icon: ExclamationTriangleIcon,
+      color: 'from-red-500 to-red-700',
+      badge: { text: 'CRÍTICO', color: 'bg-red-600' },
+      estadisticas: {
+        Morosos: prestamos.filter(p => (p.estado || '').toLowerCase() === 'mora').length
+      },
+      generar: () => generarClientesMorosos(prestamos, clientes)
+    },
+    {
+      id: 'topPuntualidad',
+      categoria: 'clientes',
+      nombre: 'Top Puntualidad',
+      descripcion: 'Clientes más puntuales',
+      icon: TrophyIcon,
+      color: 'from-yellow-500 to-amber-700',
+      estadisticas: {
+        Clientes: new Set(pagos.map(p => p.clienteID)).size
+      },
+      generar: () => generarTopPuntualidad(pagos)
+    },
+    {
+      id: 'clientesNuevos',
+      categoria: 'clientes',
+      nombre: 'Clientes Nuevos',
+      descripcion: 'Registrados en los últimos 30 días',
+      icon: UserPlusIcon,
+      color: 'from-lime-500 to-lime-700',
+      badge: { text: 'NUEVOS', color: 'bg-lime-600' },
+      estadisticas: {
+        Total: clientes.length
+      },
+      generar: () => generarClientesNuevos(clientes)
+    },
+
+    // ═══════════════════════════════════════════
+    // 📊 FINANCIEROS (7 reportes)
+    // ═══════════════════════════════════════════
+    {
+      id: 'proyeccionGanancias',
+      categoria: 'finanzas',
+      nombre: 'Proyección de Ganancias',
+      descripcion: 'Proyección a 6 meses',
+      icon: ArrowTrendingUpIcon,
+      color: 'from-emerald-500 to-teal-700',
+      badge: { text: 'PROYECCIÓN', color: 'bg-emerald-600' },
+      estadisticas: {
+        Meses: 6
+      },
+      generar: () => generarProyeccionGanancias(prestamos)
+    },
+    {
+      id: 'tasaRecuperacion',
+      categoria: 'finanzas',
+      nombre: 'Tasa de Recuperación',
+      descripcion: 'Análisis de recuperación de capital',
+      icon: PercentBadgeIcon,
+      color: 'from-green-500 to-green-700',
+      estadisticas: {
+        Préstamos: prestamos.length
+      },
+      generar: () => generarTasaRecuperacion(prestamos, pagos)
+    },
+    {
+      id: 'tiempoPromedioPago',
+      categoria: 'finanzas',
+      nombre: 'Tiempo Promedio de Pago',
+      descripcion: 'Días promedio para completar',
       icon: ClockIcon,
       color: 'from-blue-500 to-blue-700',
       estadisticas: {
-        total: 'RD$' + datosGenerales.prestamos.reduce((sum, p) => sum + (Number(p.monto) || 0), 0).toLocaleString(),
-        operaciones: datosGenerales.prestamos.length + datosGenerales.pagos.length,
-        promedio: 'RD$' + Math.round(
-          datosGenerales.prestamos.reduce((sum, p) => sum + (Number(p.monto) || 0), 0) / 
-          (datosGenerales.prestamos.length || 1)
-        ).toLocaleString()
+        Completados: prestamos.filter(p => (p.estado || '').toLowerCase() === 'completado').length
       },
-      generar: () => ({
-        ...generarReporteCartera(),
-        ...generarReportePagos(),
-        totalOperaciones: datosGenerales.prestamos.length + datosGenerales.pagos.length
-      })
+      generar: () => generarTiempoPromedioPago(prestamos)
     },
     {
-      id: 'detallado',
-      tipo: 'detallado',
-      nombre: 'Reporte Detallado',
-      descripcion: 'Informe completo de operaciones',
-      icon: DocumentTextIcon,
-      color: 'from-indigo-500 to-indigo-700',
+      id: 'reporteDiario',
+      categoria: 'finanzas',
+      nombre: 'Reporte Diario',
+      descripcion: 'Cierre del día completo',
+      icon: DocumentChartBarIcon,
+      color: 'from-red-500 to-red-700',
+      badge: { text: 'HOY', color: 'bg-red-600' },
       estadisticas: {
-        paginas: 24,
-        secciones: 8,
-        actualizado: 'Hoy'
+        'Balance': 'En vivo'
       },
-      generar: () => ({
-        prestamos: datosGenerales.prestamos.slice(0, 10),
-        pagos: datosGenerales.pagos.slice(0, 10),
-        clientes: datosGenerales.clientes.slice(0, 10),
-        formularios: datosGenerales.formularios.slice(0, 10)
-      })
+      generar: () => generarReporteDiario(prestamos, pagos, comisiones)
+    },
+    {
+      id: 'comparativoMensual',
+      categoria: 'finanzas',
+      nombre: 'Comparativo Mensual',
+      descripcion: 'Mes actual vs anterior con variación',
+      icon: PresentationChartLineIcon,
+      color: 'from-purple-500 to-purple-700',
+      estadisticas: {
+        Meses: 2
+      },
+      generar: () => generarComparativoMensual(prestamos, pagos)
+    },
+    {
+      id: 'flujoCaja',
+      categoria: 'finanzas',
+      nombre: 'Flujo de Caja',
+      descripcion: 'Ingresos y egresos detallados',
+      icon: ScaleIcon,
+      color: 'from-indigo-500 to-blue-700',
+      badge: { text: 'NUEVO', color: 'bg-indigo-600' },
+      estadisticas: {
+        Pagos: pagos.length,
+        Comisiones: comisiones.length
+      },
+      generar: () => generarFlujoCaja(pagos, comisiones)
+    },
+    {
+      id: 'rentabilidad',
+      categoria: 'finanzas',
+      nombre: 'Rentabilidad',
+      descripcion: 'ROI y análisis de rentabilidad',
+      icon: ChartBarIcon,
+      color: 'from-cyan-500 to-blue-700',
+      badge: { text: 'ROI', color: 'bg-cyan-600' },
+      estadisticas: {
+        Préstamos: prestamos.length
+      },
+      generar: () => generarRentabilidad(prestamos, pagos)
+    },
+    {
+      id: 'topClientes',
+      categoria: 'clientes',
+      nombre: 'Top Clientes',
+      descripcion: 'Top 20 por volumen de préstamos',
+      icon: TrophyIcon,
+      color: 'from-yellow-500 to-orange-700',
+      estadisticas: {
+        Clientes: new Set(prestamos.map(p => p.clienteID)).size
+      },
+      generar: () => generarTopClientes(prestamos)
+    },
+    {
+      id: 'comisionesGarante',
+      categoria: 'finanzas',
+      nombre: 'Comisiones por Garante',
+      descripcion: 'Detalle de comisiones por garante',
+      icon: GiftIcon,
+      color: 'from-purple-500 to-pink-700',
+      badge: { text: 'NUEVO', color: 'bg-purple-600' },
+      estadisticas: {
+        Comisiones: comisiones.length
+      },
+      generar: () => generarComisionesPorGarante(comisiones)
     }
+  ], [prestamos, pagos, clientes, garantes, comisiones, filtros]);
+
+  // ============================================
+  // FILTRAR REPORTES
+  // ============================================
+  const reportesFiltrados = reportes.filter(r => {
+    const cumpleCategoria = categoriaActiva === 'todos' || r.categoria === categoriaActiva;
+    const cumpleBusqueda = !searchTerm ||
+      r.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.descripcion.toLowerCase().includes(searchTerm.toLowerCase());
+    return cumpleCategoria && cumpleBusqueda;
+  });
+
+  const categorias = [
+    { id: 'todos', nombre: 'Todos', icon: ChartBarSquareIcon },
+    { id: 'prestamos', nombre: 'Préstamos', icon: CurrencyDollarIcon },
+    { id: 'pagos', nombre: 'Pagos', icon: BanknotesIcon },
+    { id: 'clientes', nombre: 'Clientes', icon: UserGroupIcon },
+    { id: 'finanzas', nombre: 'Financieros', icon: ChartBarIcon },
   ];
 
+  // ============================================
+  // HANDLERS
+  // ============================================
   const handleVerReporte = (reporte) => {
-    setReporteSeleccionado(reporte);
-    setModalAbierto(reporte.id);
+    try {
+      const datos = reporte.generar();
+      setReporteActivo(reporte);
+      setDatosReporte(datos);
+      setVistaPreviaAbierta(true);
+    } catch (err) {
+      console.error('Error generando reporte:', err);
+      setError('Error al generar el reporte: ' + err.message);
+    }
   };
 
-  const handleGenerarReporte = (reporte) => {
-    const datos = reporte.generar();
-    setReporteSeleccionado(reporte);
-    setDatosReporte(datos);
-    setVistaPreviaAbierta(true);
+  const handleExportar = (tipo) => {
+    if (!reporteActivo || !datosReporte) return;
+    
+    const { columnas, filas } = datosReporte;
+    const titulo = reporteActivo.nombre;
+    const headers = columnas.map(c => c.label);
+    const rows = filas.map(f => columnas.map(c => {
+      const val = c.render ? c.render(f) : f[c.key];
+      return String(val ?? '-');
+    }));
+    
+    try {
+      switch (tipo) {
+        case 'pdf':
+          exportarPDF(titulo, headers, rows, `Filtros: ${filtrosAplicados.join(', ') || 'Ninguno'}`);
+          break;
+        case 'excel':
+          exportarExcel(titulo, headers, rows);
+          break;
+        case 'csv':
+          exportarCSV(titulo, headers, rows);
+          break;
+        case 'json':
+          exportarJSON(titulo, { titulo, filtros: filtrosAplicados, columnas: headers, datos: filas });
+          break;
+        case 'print':
+          window.print();
+          break;
+        default:
+          break;
+      }
+    } catch (err) {
+      console.error('Error exportando:', err);
+      setError('Error al exportar: ' + err.message);
+    }
   };
 
+  // ============================================
+  // RENDER
+  // ============================================
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="p-3 bg-gradient-to-br from-green-600 to-green-800 rounded-xl shadow-lg">
-            <ChartBarIcon className="h-6 w-6 text-white" />
-          </div>
-          <div>
-            <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-              Reportes y Análisis
-            </h3>
-            <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-              Genera y visualiza reportes operativos en tiempo real
-            </p>
-          </div>
-        </div>
+    <div className="space-y-6 p-4 sm:p-6">
+      {/* Header con botón de filtros y recargar */}
+      <HeaderReportes
+        theme={theme}
+        totalReportes={reportes.length}
+        totalPrestamos={prestamos.length}
+        totalPagos={pagos.length}
+        loading={loading}
+        showFiltros={showFiltros}
+        setShowFiltros={setShowFiltros}
+        filtrosAplicados={filtrosAplicados}
+        showSearch={showSearch}
+        setShowSearch={setShowSearch}
+        onRecargar={cargarDatos}
+      />
 
-        <button
-          onClick={cargarDatos}
-          className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-          title="Actualizar datos"
-        >
-          <ArrowPathIcon className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-        </button>
-      </div>
-
-      {/* Mensajes */}
+      {/* Panel de filtros desplegable */}
       <AnimatePresence>
-        {error && (
+        {showFiltros && (
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="p-4 bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/30 dark:to-red-800/30 border-2 border-red-200 dark:border-red-700 text-red-700 dark:text-red-400 rounded-xl shadow-lg flex items-center space-x-3"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
           >
-            <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
-            <span>{error}</span>
-          </motion.div>
-        )}
-
-        {exito && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="p-4 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 border-2 border-green-200 dark:border-green-700 text-green-700 dark:text-green-400 rounded-xl shadow-lg flex items-center space-x-3"
-          >
-            <CheckCircleIcon className="h-5 w-5 flex-shrink-0" />
-            <span>{exito}</span>
+            <FiltrosPanel
+              filtros={filtros}
+              setFiltros={setFiltros}
+              clientes={clientes}
+              garantes={garantes}
+              theme={theme}
+              onAplicar={aplicarFiltros}
+              onLimpiar={limpiarFiltros}
+              obtenerRangoQuincena={obtenerRangoQuincena}
+              obtenerRangoMes={obtenerRangoMes}
+              obtenerRangoSemana={obtenerRangoSemana}
+              obtenerRango3Meses={obtenerRango3Meses}
+              obtenerRango6Meses={obtenerRango6Meses}
+              obtenerRangoAño={obtenerRangoAño}
+            />
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* Barra de búsqueda */}
+      <AnimatePresence>
+        {showSearch && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <BarraBusqueda
+              showSearch={showSearch}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              theme={theme}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Filtros activos */}
+      <FiltrosActivos
+        filtrosAplicados={filtrosAplicados}
+        limpiarFiltros={limpiarFiltros}
+        theme={theme}
+      />
+
+      {/* Mensaje de error */}
+      <MensajeError error={error} setError={setError} theme={theme} />
+
+      {/* Selector de categorías */}
+      <CategoriasSelector
+        categorias={categorias}
+        categoriaActiva={categoriaActiva}
+        setCategoriaActiva={setCategoriaActiva}
+        theme={theme}
+      />
+
       {/* Grid de reportes */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1, 2, 3, 4, 5, 6].map(i => (
-            <div key={i} className="h-64 bg-gray-200 dark:bg-gray-700 rounded-xl animate-pulse" />
-          ))}
-        </div>
+        <ReportesSkeleton theme={theme} />
+      ) : reportesFiltrados.length === 0 ? (
+        <MensajeVacio theme={theme} mensaje="No se encontraron reportes" />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {tiposReporte.map((reporte) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {reportesFiltrados.map((reporte) => (
             <ReporteCard
               key={reporte.id}
               reporte={reporte}
               onVer={handleVerReporte}
-              onGenerar={handleGenerarReporte}
+              theme={theme}
             />
           ))}
         </div>
       )}
 
-      {/* Modal de información del reporte */}
-      <ReporteModal
-        isOpen={modalAbierto !== null}
-        onClose={() => setModalAbierto(null)}
-        titulo={reporteSeleccionado?.nombre || 'Reporte'}
-      >
-        <div className="space-y-4">
-          <h4 className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-            {reporteSeleccionado?.descripcion}
-          </h4>
-          
-          <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'} border border-green-600/20`}>
-            <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-              Este reporte te permite visualizar {reporteSeleccionado?.descripcion.toLowerCase()}.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <h5 className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-              Características:
-            </h5>
-            <ul className="list-disc list-inside space-y-1">
-              <li className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                Datos en tiempo real desde Firebase
-              </li>
-              <li className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                Exportación a JSON
-              </li>
-              <li className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                Vista previa interactiva
-              </li>
-              <li className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                Estadísticas actualizadas automáticamente
-              </li>
-            </ul>
-          </div>
-
-          <button
-            onClick={() => {
-              setModalAbierto(null);
-              handleGenerarReporte(reporteSeleccionado);
-            }}
-            className="w-full mt-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg font-medium hover:shadow-lg transition-all"
-          >
-            Generar Reporte
-          </button>
-        </div>
-      </ReporteModal>
-
       {/* Modal de vista previa */}
-      <VistaPreviaReporteModal
+      <VistaPreviaModal
         isOpen={vistaPreviaAbierta}
         onClose={() => {
           setVistaPreviaAbierta(false);
-          setReporteSeleccionado(null);
-          setDatosReporte(null);
+          setReporteActivo(null);
+          setDatosReporte({ columnas: [], filas: [], resumen: {} });
         }}
-        reporte={reporteSeleccionado}
-        datos={datosReporte}
+        titulo={reporteActivo?.nombre || 'Reporte'}
+        columnas={datosReporte.columnas || []}
+        filas={datosReporte.filas || []}
+        resumen={datosReporte.resumen || {}}
+        theme={theme}
+        onExportar={handleExportar}
+        filtrosAplicados={filtrosAplicados}
       />
     </div>
   );

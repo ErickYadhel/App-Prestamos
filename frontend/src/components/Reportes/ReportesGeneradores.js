@@ -1,8 +1,3 @@
-// ============================================
-// ARCHIVO: ReportesGeneradores.js
-// PROPÓSITO: Utilidades + Generadores de reportes
-// ============================================
-
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
